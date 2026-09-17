@@ -14,7 +14,7 @@ export async function askQuestion(
   const stdout = options.stdout ?? process.stdout;
 
   try {
-    if (typeof (stdin as any).read === 'function') {
+    if (stdin === process.stdin && typeof (stdin as any).read === 'function') {
       while ((stdin as any).read() !== null) {}
     }
   } catch {

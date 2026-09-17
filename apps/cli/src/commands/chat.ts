@@ -74,9 +74,19 @@ export async function handleChatSession(
 
   // 3. Enter Chat Terminal (REPL like OpenCode / Cline)
   const displayModel = currentModel ?? 'Auto (Free-First)';
-  process.stdout.write(`\n\x1b[1mModerado ${version}\x1b[0m | Workspace: \x1b[36m${canonicalWorkspace}\x1b[0m\n`);
-  process.stdout.write(`Model: \x1b[35m${displayModel}\x1b[0m | Commands: \x1b[90m/exit, /model, /clear, /help\x1b[0m\n`);
-  process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n\n');
+  const shortWs = canonicalWorkspace.length > 40
+    ? '...' + canonicalWorkspace.slice(-37)
+    : canonicalWorkspace;
+
+  process.stdout.write(
+    `\n\x1b[1;36m╭─────────────────────────────────────────────────────────────╮\x1b[0m\n` +
+    `\x1b[1;36m│\x1b[0m  \x1b[1;37m◆ MODERADO CLI\x1b[0m                                    \x1b[90m${version.padEnd(8)}\x1b[0m \x1b[1;36m│\x1b[0m\n` +
+    `\x1b[1;36m│\x1b[0m  \x1b[90mWorkspace:\x1b[0m \x1b[36m${shortWs.padEnd(46)}\x1b[0m \x1b[1;36m│\x1b[0m\n` +
+    `\x1b[1;36m│\x1b[0m  \x1b[90mModel:    \x1b[0m \x1b[35m${displayModel.slice(0, 36).padEnd(36)}\x1b[0m \x1b[32m● Active\x1b[0m   \x1b[1;36m│\x1b[0m\n` +
+    `\x1b[1;36m│\x1b[0m                                                             \x1b[1;36m│\x1b[0m\n` +
+    `\x1b[1;36m│\x1b[0m  \x1b[90mShortcuts:\x1b[0m \x1b[1;33m/exit\x1b[0m · \x1b[1;33m/model\x1b[0m · \x1b[1;33m/clear\x1b[0m · \x1b[1;33m/help\x1b[0m                  \x1b[1;36m│\x1b[0m\n` +
+    `\x1b[1;36m╰─────────────────────────────────────────────────────────────╯\x1b[0m\n\n`
+  );
 
   const provider = new NvidiaAdapter({ apiKey });
   const tools = createDefaultToolRegistry();
@@ -95,7 +105,9 @@ export async function handleChatSession(
 
   // 4. Continuous interactive loop - stay until /exit
   while (!signal?.aborted) {
-    const promptLine = await askQuestion('\x1b[1;36mmoderado>\x1b[0m ', { signal });
+    const modelBadge = currentModel ? currentModel.split('/').pop() : 'auto';
+    process.stdout.write(`\x1b[90m╭─ (\x1b[35m${modelBadge}\x1b[90m) \x1b[36m${path.basename(canonicalWorkspace)}\x1b[0m\n`);
+    const promptLine = await askQuestion('\x1b[90m╰─\x1b[1;36m❯\x1b[0m ', { signal });
     const trimmed = promptLine.trim();
 
     if (!trimmed) {
@@ -104,22 +116,25 @@ export async function handleChatSession(
 
     // Handle slash commands
     if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
-      process.stdout.write('Goodbye!\n');
+      process.stdout.write('\n\x1b[32m✔ Session terminated. Goodbye!\x1b[0m\n\n');
       return 0;
     }
 
     if (trimmed === '/help') {
-      process.stdout.write('\n\x1b[1mAvailable Commands:\x1b[0m\n');
-      process.stdout.write('  \x1b[36m/exit\x1b[0m, \x1b[36m/quit\x1b[0m   Exit the chat session\n');
-      process.stdout.write('  \x1b[36m/model\x1b[0m         Switch model (Free or Paid)\n');
-      process.stdout.write('  \x1b[36m/clear\x1b[0m         Reset conversation context history\n');
-      process.stdout.write('  \x1b[36m/help\x1b[0m          Show this help screen\n\n');
+      process.stdout.write(
+        `\n\x1b[1;36m╭── ⌨ Moderado Command Palette ───────────────────────────────╮\x1b[0m\n` +
+        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/exit\x1b[0m, \x1b[1;33m/quit\x1b[0m    Terminate the session and return to shell  \x1b[1;36m│\x1b[0m\n` +
+        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/model\x1b[0m          Switch AI model (Free Trial or Paid NIM)   \x1b[1;36m│\x1b[0m\n` +
+        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/clear\x1b[0m          Clear conversation memory & start fresh    \x1b[1;36m│\x1b[0m\n` +
+        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/help\x1b[0m           Display this command reference             \x1b[1;36m│\x1b[0m\n` +
+        `\x1b[1;36m╰─────────────────────────────────────────────────────────────╯\x1b[0m\n\n`
+      );
       continue;
     }
 
     if (trimmed === '/clear') {
       conversationHistory = [];
-      process.stdout.write('\x1b[32m✔ Conversation history cleared.\x1b[0m\n\n');
+      process.stdout.write('\n\x1b[32m✔ Conversation history cleared.\x1b[0m\n\n');
       continue;
     }
 
