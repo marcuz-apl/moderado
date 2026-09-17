@@ -6,6 +6,7 @@ import { ChatMessage } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
+import { renderBox } from '../ui/box.js';
 import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
@@ -28,23 +29,11 @@ export async function handleChatSession(
   let apiKey = resolveApiKey();
 
   if (!isLocal && !apiKey) {
-    if (args.nonInteractive) {
-      process.stderr.write(
-        '\x1b[1;31mAuthentication Error:\x1b[0m NVIDIA_API_KEY environment variable is not set.\n\n' +
-        'Please set your API key to run tasks against NVIDIA NIM:\n' +
-        '  PowerShell: $env:NVIDIA_API_KEY = "nvapi-..."\n' +
-        '  POSIX:      export NVIDIA_API_KEY="nvapi-..."\n\n' +
-        'Get a free API trial key at: https://build.nvidia.com\n'
-      );
-      return 1;
-    }
-
-    process.stdout.write('\n\x1b[1;36m[Moderado Setup]\x1b[0m Step 1/2: NVIDIA NIM API Key not detected.\n');
-    process.stdout.write('Get a free trial key with 1,000 credits at: \x1b[4mhttps://build.nvidia.com\x1b[0m\n\n');
-
-    const entered = await askSecret('Enter NVIDIA API Key (nvapi-...): ', { signal });
-    if (!entered) {
-      process.stderr.write('\x1b[1;31mError:\x1b[0m No API key entered. Aborting session.\n');
+    process.stdout.write('\n\x1b[1;36m[Moderado Setup]\x1b[0m Step 1/2: Configure your NVIDIA NIM API Key.\n');
+    process.stdout.write('Get a free API key with 1,000 free inference credits at https://build.nvidia.com\n\n');
+    const entered = await askSecret('Enter NVIDIA_API_KEY: ', { signal });
+    if (!entered.trim()) {
+      process.stderr.write('\x1b[1;31mError: API key cannot be empty.\x1b[0m\n');
       return 1;
     }
     apiKey = entered;
@@ -74,24 +63,33 @@ export async function handleChatSession(
 
   // 3. Enter Chat Terminal (REPL like OpenCode / Cline)
   const displayModel = currentModel ?? 'Auto (Free-First)';
-  const shortWs = canonicalWorkspace.length > 40
-    ? '...' + canonicalWorkspace.slice(-37)
+  const shortWs = canonicalWorkspace.length > 42
+    ? '...' + canonicalWorkspace.slice(-39)
     : canonicalWorkspace;
 
   process.stdout.write(
-    `\n\x1b[1;36m╭─────────────────────────────────────────────────────────────╮\x1b[0m\n` +
-    `\x1b[1;36m│\x1b[0m  \x1b[1;37m◆ MODERADO CLI\x1b[0m                                    \x1b[90m${version.padEnd(8)}\x1b[0m \x1b[1;36m│\x1b[0m\n` +
-    `\x1b[1;36m│\x1b[0m  \x1b[90mWorkspace:\x1b[0m \x1b[36m${shortWs.padEnd(46)}\x1b[0m \x1b[1;36m│\x1b[0m\n` +
-    `\x1b[1;36m│\x1b[0m  \x1b[90mModel:    \x1b[0m \x1b[35m${displayModel.slice(0, 36).padEnd(36)}\x1b[0m \x1b[32m● Active\x1b[0m   \x1b[1;36m│\x1b[0m\n` +
-    `\x1b[1;36m│\x1b[0m                                                             \x1b[1;36m│\x1b[0m\n` +
-    `\x1b[1;36m│\x1b[0m  \x1b[90mShortcuts:\x1b[0m \x1b[1;33m/exit\x1b[0m · \x1b[1;33m/model\x1b[0m · \x1b[1;33m/clear\x1b[0m · \x1b[1;33m/help\x1b[0m                  \x1b[1;36m│\x1b[0m\n` +
-    `\x1b[1;36m╰─────────────────────────────────────────────────────────────╯\x1b[0m\n\n`
+    '\n' +
+      renderBox(
+        [
+          `\x1b[38;5;245mDirectory\x1b[0m   \x1b[38;5;253m${shortWs}\x1b[0m`,
+          `\x1b[38;5;245mModel\x1b[0m       \x1b[38;5;141m${displayModel}\x1b[0m \x1b[38;5;114m● ready\x1b[0m`,
+          '---',
+          `\x1b[38;5;245mCommands\x1b[0m    \x1b[38;5;222m/help\x1b[0m · \x1b[38;5;222m/model\x1b[0m · \x1b[38;5;222m/clear\x1b[0m · \x1b[38;5;222m/exit\x1b[0m`,
+        ],
+        {
+          title: `MODERADO CLI ${version}`,
+          minWidth: 62,
+          borderColor: '\x1b[38;5;240m',
+          titleColor: '\x1b[1;38;5;75m',
+        }
+      ) +
+      '\n'
   );
 
   const provider = new NvidiaAdapter({ apiKey });
   const tools = createDefaultToolRegistry();
   const approvalHandler = new TerminalApprovalHandler();
-  const renderer = new TerminalRenderer({ verbose: args.verbose });
+  const renderer = new TerminalRenderer({ verbose: args.verbose, isChatMode: true });
   const policy = new PolicyManager({
     maxSteps: args.maxSteps,
     readOnly: args.readOnly,
@@ -106,8 +104,10 @@ export async function handleChatSession(
   // 4. Continuous interactive loop - stay until /exit
   while (!signal?.aborted) {
     const modelBadge = currentModel ? currentModel.split('/').pop() : 'auto';
-    process.stdout.write(`\x1b[90m╭─ (\x1b[35m${modelBadge}\x1b[90m) \x1b[36m${path.basename(canonicalWorkspace)}\x1b[0m\n`);
-    const promptLine = await askQuestion('\x1b[90m╰─\x1b[1;36m❯\x1b[0m ', { signal });
+    process.stdout.write(
+      `\x1b[38;5;240m╭─\x1b[0m \x1b[1;38;5;75mmoderado\x1b[0m \x1b[38;5;240m(\x1b[38;5;141m${modelBadge}\x1b[38;5;240m)\x1b[0m \x1b[38;5;243m${path.basename(canonicalWorkspace)}\x1b[0m\n`
+    );
+    const promptLine = await askQuestion('\x1b[38;5;240m╰─\x1b[1;38;5;75m❯\x1b[0m ', { signal });
     const trimmed = promptLine.trim();
 
     if (!trimmed) {
@@ -122,12 +122,22 @@ export async function handleChatSession(
 
     if (trimmed === '/help') {
       process.stdout.write(
-        `\n\x1b[1;36m╭── ⌨ Moderado Command Palette ───────────────────────────────╮\x1b[0m\n` +
-        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/exit\x1b[0m, \x1b[1;33m/quit\x1b[0m    Terminate the session and return to shell  \x1b[1;36m│\x1b[0m\n` +
-        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/model\x1b[0m          Switch AI model (Free Trial or Paid NIM)   \x1b[1;36m│\x1b[0m\n` +
-        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/clear\x1b[0m          Clear conversation memory & start fresh    \x1b[1;36m│\x1b[0m\n` +
-        `\x1b[1;36m│\x1b[0m  \x1b[1;33m/help\x1b[0m           Display this command reference             \x1b[1;36m│\x1b[0m\n` +
-        `\x1b[1;36m╰─────────────────────────────────────────────────────────────╯\x1b[0m\n\n`
+        '\n' +
+          renderBox(
+            [
+              `\x1b[38;5;222m/model\x1b[0m    Switch AI model (Free Trial or Paid NIM)`,
+              `\x1b[38;5;222m/clear\x1b[0m    Reset conversation memory & start fresh`,
+              `\x1b[38;5;222m/help\x1b[0m     Display this command reference`,
+              `\x1b[38;5;222m/exit\x1b[0m     Terminate session & return to shell`,
+            ],
+            {
+              title: 'Commands',
+              minWidth: 55,
+              borderColor: '\x1b[38;5;240m',
+              titleColor: '\x1b[1;38;5;75m',
+            }
+          ) +
+          '\n'
       );
       continue;
     }

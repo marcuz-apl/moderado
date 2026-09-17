@@ -54,13 +54,11 @@ describe('TerminalRenderer', () => {
       timestamp: Date.now(),
     });
 
-    expect(captured).toContain('[Model]');
+    expect(captured).toContain('Model:');
     expect(captured).toContain('meta/llama-3.3-70b-instruct');
     expect(captured).toContain('Inspecting files...');
-    expect(captured).toContain('[Tool Call]');
     expect(captured).toContain('read_file');
-    expect(captured).toContain('[Tool Result]');
-    expect(captured).toContain('SUCCESS');
+    expect(captured).toContain('success');
     expect(captured).toContain('=== Session Finished: COMPLETED');
   });
 
@@ -98,10 +96,49 @@ describe('TerminalRenderer', () => {
       timestamp: Date.now(),
     });
 
-    expect(captured).toContain('Inferring with z-ai/glm-5.3-flash');
     expect(captured).toContain('Thinking...');
+    expect(captured).toContain('Thought');
     expect(captured).toContain('Analyzing user inquiry...');
-    expect(captured).toContain('Moderado:');
+    expect(captured).toContain('Moderado');
     expect(captured).toContain('Here is the answer.');
+  });
+
+  it('suppresses redundant model badges and completion boxes in chat mode', () => {
+    let captured = '';
+    const stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        captured += chunk.toString('utf8');
+        callback();
+      },
+    });
+
+    const renderer = new TerminalRenderer({ stdout, isChatMode: true });
+
+    // Initial selection should be suppressed in chat mode (shown in prompt instead)
+    renderer.handleEvent({
+      type: 'model_change',
+      newModelId: 'z-ai/glm-5.3-flash',
+      reason: 'user_pinned',
+      accessClass: 'free_trial',
+      timestamp: Date.now(),
+    });
+
+    renderer.handleEvent({
+      type: 'assistant_delta',
+      delta: 'Hello from Moderado!',
+      timestamp: Date.now(),
+    });
+
+    renderer.handleEvent({
+      type: 'completion',
+      status: 'completed',
+      totalSteps: 1,
+      timestamp: Date.now(),
+    });
+
+    expect(captured).not.toContain('● Model:');
+    expect(captured).not.toContain('=== Session Finished');
+    expect(captured).toContain('Moderado');
+    expect(captured).toContain('Hello from Moderado!');
   });
 });

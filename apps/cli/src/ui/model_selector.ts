@@ -1,6 +1,7 @@
 import { NvidiaAdapter } from '@moderado/providers';
 import { Router } from '@moderado/core';
 import { askQuestion, askSelect, SelectOption } from './prompt.js';
+import { renderBox } from './box.js';
 import { loadConfig, saveConfig, resolveApiKey } from '../config.js';
 
 export interface ModelSelectionResult {
@@ -91,17 +92,28 @@ export async function selectModelInteractive(
     return scoreB - scoreA;
   });
 
-  process.stdout.write('\n\x1b[1mSelect Model (Free or Paid)\x1b[0m\n');
-  process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
-  process.stdout.write('  \x1b[1m[1]\x1b[0m Search by name or keyword \x1b[36m[Search]\x1b[0m (e.g. "glm", "flash", "deepseek")\n');
-  process.stdout.write(`  \x1b[1m[2]\x1b[0m Free Trial Models \x1b[32m[Free]\x1b[0m (${freeModels.length} models available)\n`);
-  process.stdout.write(`  \x1b[1m[3]\x1b[0m Paid & Frontier Models \x1b[33m[Paid]\x1b[0m (${paidModels.length} models available)\n`);
-  process.stdout.write(`  \x1b[1m[4]\x1b[0m All Models \x1b[36m[Catalog]\x1b[0m (${discoveredEntries.length} total models)\n`);
-  process.stdout.write('  \x1b[1m[5]\x1b[0m Auto Routing \x1b[35m[Auto]\x1b[0m (Free-first recommended)\n');
+  const menuLines = [
+    `\x1b[1;38;5;75m[1]\x1b[0m Search by keyword       \x1b[38;5;244m(e.g. "glm", "flash", "llama")\x1b[0m`,
+    `\x1b[1;38;5;114m[2]\x1b[0m Free Trial Models        \x1b[38;5;244m(${freeModels.length} models ready)\x1b[0m`,
+    `\x1b[1;38;5;222m[3]\x1b[0m Paid & Frontier Models   \x1b[38;5;244m(${paidModels.length} models)\x1b[0m`,
+    `\x1b[1;38;5;141m[4]\x1b[0m Complete Catalog         \x1b[38;5;244m(${discoveredEntries.length} models)\x1b[0m`,
+    `\x1b[1;38;5;250m[5]\x1b[0m Auto Routing             \x1b[38;5;244m(Free-first recommended)\x1b[0m`,
+  ];
   if (activeModel) {
-    process.stdout.write(`  \x1b[1m[6]\x1b[0m Keep Current \x1b[36m[Configured]\x1b[0m (${activeModel})\n`);
+    menuLines.push('---');
+    menuLines.push(`\x1b[1;38;5;39m[6]\x1b[0m Keep Current             \x1b[38;5;141m${activeModel}\x1b[0m`);
   }
-  process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
+
+  process.stdout.write(
+    '\n' +
+      renderBox(menuLines, {
+        title: 'Model Selection',
+        minWidth: 58,
+        borderColor: '\x1b[38;5;240m',
+        titleColor: '\x1b[1;38;5;75m',
+      }) +
+      '\n'
+  );
 
   const maxOption = activeModel ? 6 : 5;
   const input = await askQuestion(

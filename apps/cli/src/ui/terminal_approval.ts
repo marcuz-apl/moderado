@@ -4,6 +4,7 @@ import {
   ApprovalRequest,
   IApprovalHandler,
 } from '@moderado/contracts';
+import { renderBox } from './box.js';
 
 export interface TerminalApprovalOptions {
   stdin?: NodeJS.ReadableStream;
@@ -27,35 +28,46 @@ export class TerminalApprovalHandler implements IApprovalHandler {
       return { requestId: request.requestId, status: 'aborted', reason: 'Aborted' };
     }
 
-    this.stdout.write('\n\x1b[1;33m╭── ⚠ [APPROVAL REQUIRED] \x1b[1;37m' + request.toolName + '\x1b[1;33m ──────────────────────────╮\x1b[0m\n');
+    const lines: string[] = [];
 
     if (request.exactPayload.targetFile) {
-      this.stdout.write(`\x1b[1;33m│\x1b[0m  \x1b[1;36mTarget File:\x1b[0m ${request.exactPayload.targetFile}\n`);
+      lines.push(`\x1b[38;5;245mTarget File\x1b[0m   \x1b[38;5;253m${request.exactPayload.targetFile}\x1b[0m`);
     }
 
     if (request.exactPayload.command) {
-      this.stdout.write(`\x1b[1;33m│\x1b[0m  \x1b[1;36mCommand:\x1b[0m     ${request.exactPayload.command.join(' ')}\n`);
+      lines.push(`\x1b[38;5;245mCommand\x1b[0m       \x1b[1;38;5;75m${request.exactPayload.command.join(' ')}\x1b[0m`);
       if (request.exactPayload.cwd) {
-        this.stdout.write(`\x1b[1;33m│\x1b[0m  \x1b[90mWorking Dir:\x1b[0m ${request.exactPayload.cwd}\n`);
+        lines.push(`\x1b[38;5;245mWorking Dir\x1b[0m   \x1b[38;5;242m${request.exactPayload.cwd}\x1b[0m`);
       }
     }
 
     if (request.exactPayload.diffPreview) {
-      this.stdout.write('\x1b[1;33m│\x1b[0m\n\x1b[1;33m│\x1b[0m  \x1b[1mDiff Preview:\x1b[0m\n');
-      for (const line of request.exactPayload.diffPreview.split('\n')) {
+      lines.push('---');
+      lines.push('\x1b[1;38;5;250mDiff Preview\x1b[0m');
+      for (const line of request.exactPayload.diffPreview.split('\n').slice(0, 15)) {
         if (line.startsWith('+')) {
-          this.stdout.write(`\x1b[1;33m│\x1b[0m    \x1b[32m${line}\x1b[0m\n`);
+          lines.push(`  \x1b[38;5;114m${line}\x1b[0m`);
         } else if (line.startsWith('-')) {
-          this.stdout.write(`\x1b[1;33m│\x1b[0m    \x1b[31m${line}\x1b[0m\n`);
+          lines.push(`  \x1b[38;5;203m${line}\x1b[0m`);
         } else {
-          this.stdout.write(`\x1b[1;33m│\x1b[0m    \x1b[90m${line}\x1b[0m\n`);
+          lines.push(`  \x1b[38;5;244m${line}\x1b[0m`);
         }
       }
     }
 
-    this.stdout.write('\x1b[1;33m│\x1b[0m\n');
-    this.stdout.write('\x1b[1;33m│\x1b[0m  \x1b[32m[Y] Approve\x1b[0m   \x1b[33m[N] Deny\x1b[0m   \x1b[31m[Q] Quit session\x1b[0m\n');
-    this.stdout.write('\x1b[1;33m╰─────────────────────────────────────────────────────────────╯\x1b[0m\n');
+    lines.push('---');
+    lines.push(`\x1b[38;5;114m[Y] Approve\x1b[0m   \x1b[38;5;222m[N] Deny\x1b[0m   \x1b[38;5;203m[Q] Quit session\x1b[0m`);
+
+    this.stdout.write(
+      '\n' +
+        renderBox(lines, {
+          title: `⚠️ Permission Required: ${request.toolName}`,
+          minWidth: 58,
+          borderColor: '\x1b[38;5;214m',
+          titleColor: '\x1b[1;38;5;222m',
+        }) +
+        '\n'
+    );
 
     const answer = await this.prompt('\x1b[1mApprove this action? [y/N/q]: \x1b[0m', signal);
     const normalized = answer.trim().toLowerCase();

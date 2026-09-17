@@ -3,11 +3,13 @@ import { AgentEvent } from '@moderado/contracts';
 export interface TerminalRendererOptions {
   stdout?: NodeJS.WritableStream;
   verbose?: boolean;
+  isChatMode?: boolean;
 }
 
 export class TerminalRenderer {
   private readonly stdout: NodeJS.WritableStream;
   private readonly verbose: boolean;
+  private readonly isChatMode: boolean;
   private lastEventType?: string;
   private isStreamingAssistant = false;
   private isStreamingReasoning = false;
@@ -16,6 +18,7 @@ export class TerminalRenderer {
   constructor(options: TerminalRendererOptions = {}) {
     this.stdout = options.stdout ?? process.stdout;
     this.verbose = options.verbose ?? false;
+    this.isChatMode = options.isChatMode ?? false;
   }
 
   handleEvent(event: AgentEvent): void {
@@ -23,6 +26,17 @@ export class TerminalRenderer {
       case 'model_change': {
         this.finishAssistantStream();
         this.clearTransientProgress();
+
+        // In interactive chat mode, model is already visible in the prompt.
+        // Only print if there is an unexpected fallback.
+        if (
+          this.isChatMode &&
+          (event.reason === 'initial_selection' || event.reason === 'user_pinned')
+        ) {
+          this.lastEventType = 'model_change';
+          break;
+        }
+
         const reasonText =
           event.reason === 'initial_selection'
             ? 'Selected'
@@ -30,7 +44,7 @@ export class TerminalRenderer {
             ? 'Pinned'
             : `Fallback (${event.reason})`;
         this.stdout.write(
-          `\x1b[35m[Model]\x1b[0m ${reasonText} \x1b[1;36m${event.newModelId}\x1b[0m (\x1b[32m${event.accessClass}\x1b[0m)\n`
+          `\x1b[38;5;141m● Model:\x1b[0m ${reasonText} \x1b[1;38;5;75m${event.newModelId}\x1b[0m \x1b[38;5;244m(${event.accessClass})\x1b[0m\n`
         );
         this.lastEventType = 'model_change';
         break;
@@ -40,10 +54,10 @@ export class TerminalRenderer {
         if (this.verbose) {
           this.finishAssistantStream();
           this.clearTransientProgress();
-          this.stdout.write(`\x1b[90m◇ ${event.status}\x1b[0m\n`);
+          this.stdout.write(`\x1b[38;5;244m◇ ${event.status}\x1b[0m\n`);
           this.lastEventType = 'progress';
         } else {
-          this.stdout.write(`\r\x1b[K\x1b[90m◇ ${event.status}\x1b[0m`);
+          this.stdout.write(`\r\x1b[K\x1b[38;5;245m⠋ Thinking...\x1b[0m`);
           this.hasTransientProgress = true;
         }
         break;
@@ -55,7 +69,7 @@ export class TerminalRenderer {
           if (this.lastEventType && this.lastEventType !== 'reasoning_delta') {
             this.stdout.write('\n');
           }
-          this.stdout.write('\x1b[90m╭─ 💭 Thinking...\x1b[0m\n\x1b[2;37m');
+          this.stdout.write('\x1b[38;5;240m╭─ 💭 \x1b[1;38;5;250mThought\x1b[0m\n\x1b[38;5;244m');
           this.isStreamingReasoning = true;
         }
         this.stdout.write(event.delta);
@@ -72,7 +86,7 @@ export class TerminalRenderer {
           if (this.lastEventType && this.lastEventType !== 'assistant_delta') {
             this.stdout.write('\n');
           }
-          this.stdout.write('\x1b[1;35m◆ Moderado:\x1b[0m\n');
+          this.stdout.write('\x1b[1;38;5;75m● Moderado\x1b[0m\n\n');
           this.isStreamingAssistant = true;
         }
         this.stdout.write(event.delta);
@@ -85,10 +99,10 @@ export class TerminalRenderer {
         this.clearTransientProgress();
         const icon = this.getToolIcon(event.toolName);
         const argsStr = JSON.stringify(event.parameters);
-        const truncatedArgs = argsStr.length > 70 ? argsStr.slice(0, 67) + '...' : argsStr;
+        const truncatedArgs = argsStr.length > 65 ? argsStr.slice(0, 62) + '...' : argsStr;
 
         this.stdout.write(
-          `\n\x1b[90m╭─\x1b[0m \x1b[1;34m[Tool Call]\x1b[0m ${icon} \x1b[1m${event.toolName}\x1b[0m \x1b[90m${truncatedArgs}\x1b[0m\n`
+          `\n\x1b[38;5;240m╭─ ${icon} \x1b[1;38;5;75m${event.toolName}\x1b[0m \x1b[38;5;245m${truncatedArgs}\x1b[0m\n`
         );
         this.lastEventType = 'tool_call_initiated';
         break;
@@ -99,17 +113,17 @@ export class TerminalRenderer {
         this.clearTransientProgress();
         const isSuccess = event.result.status === 'success';
         const statusColor = isSuccess
-          ? '\x1b[32m'
+          ? '\x1b[38;5;114m'
           : event.result.status === 'denied'
-          ? '\x1b[33m'
-          : '\x1b[31m';
+          ? '\x1b[38;5;222m'
+          : '\x1b[38;5;203m';
         const statusIcon = isSuccess ? '✔' : event.result.status === 'denied' ? '⚠' : '✖';
 
         const lines = event.result.output.trim().split('\n');
         const preview = lines[0] + (lines.length > 1 ? ` ... (+${lines.length - 1} lines)` : '');
 
         this.stdout.write(
-          `\x1b[90m╰─\x1b[0m \x1b[34m[Tool Result]\x1b[0m ${statusIcon} ${statusColor}${event.result.status.toUpperCase()}\x1b[0m: \x1b[90m${preview}\x1b[0m\n\n`
+          `\x1b[38;5;240m╰─\x1b[0m ${statusColor}${statusIcon} ${event.result.status}\x1b[0m \x1b[38;5;245m${preview.slice(0, 75)}\x1b[0m\n\n`
         );
         this.lastEventType = 'tool_result';
         break;
@@ -118,6 +132,14 @@ export class TerminalRenderer {
       case 'completion': {
         this.finishAssistantStream();
         this.clearTransientProgress();
+
+        if (this.isChatMode) {
+          // Clean finish without large batch completion card
+          this.stdout.write('\n');
+          this.lastEventType = 'completion';
+          break;
+        }
+
         const bannerColor =
           event.status === 'completed'
             ? '\x1b[1;32m'
@@ -169,7 +191,7 @@ export class TerminalRenderer {
 
   private finishReasoningStream(): void {
     if (this.isStreamingReasoning) {
-      this.stdout.write('\x1b[0m\n\x1b[90m╰──────────────────────────────────\x1b[0m\n\n');
+      this.stdout.write('\x1b[0m\n\x1b[38;5;240m╰──────────────────────────────────────────────\x1b[0m\n\n');
       this.isStreamingReasoning = false;
     }
   }
