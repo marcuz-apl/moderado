@@ -204,9 +204,16 @@ export class NvidiaAdapter implements IProviderAdapter {
       );
     }
 
-    if (response.status === 503 || response.status === 500 || response.status === 502 || response.status === 504) {
+    if (
+      response.status === 404 ||
+      response.status === 410 ||
+      response.status === 503 ||
+      response.status === 500 ||
+      response.status === 502 ||
+      response.status === 504
+    ) {
       throw new ModelUnavailableError(
-        `NVIDIA NIM service unavailable (${response.status}) during ${action}: ${errorText}`,
+        `NVIDIA NIM service or model unavailable (${response.status}) during ${action}: ${errorText}`,
         response.status
       );
     }

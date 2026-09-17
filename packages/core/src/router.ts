@@ -30,6 +30,8 @@ const BUILTIN_MODEL_CLASSIFICATIONS: Record<string, Partial<ModelClassification>
   'mock/paid-tool-model': { accessTier: 'paid', toolSupport: 'supported' },
   'mock/text-only-model': { accessTier: 'free_trial', toolSupport: 'unsupported' },
   'meta/llama-3.3-70b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
+  'meta/llama-3.2-11b-vision-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
+  'meta/llama-3.2-90b-vision-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'meta/llama-3.1-70b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'meta/llama-3.1-8b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'nvidia/llama-3.1-nemotron-70b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
