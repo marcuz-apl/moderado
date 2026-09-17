@@ -1,8 +1,31 @@
 #!/usr/bin/env node
 
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { parseCliArgs, getHelpText } from './args.js';
 import { handleModelsCommand } from './commands/models.js';
 import { handleRunCommand } from './commands/run.js';
+
+function getVersion(): string {
+  try {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    // Check root VERSION (3 levels up from apps/cli/dist)
+    const rootVersion = path.resolve(__dirname, '../../../VERSION');
+    if (fs.existsSync(rootVersion)) {
+      return fs.readFileSync(rootVersion, 'utf8').trim();
+    }
+    // Check package.json
+    const pkgJson = path.resolve(__dirname, '../package.json');
+    if (fs.existsSync(pkgJson)) {
+      const parsed = JSON.parse(fs.readFileSync(pkgJson, 'utf8'));
+      return `v${parsed.version}`;
+    }
+  } catch {
+    // ignore
+  }
+  return 'v0.1.0';
+}
 
 async function main(): Promise<void> {
   const args = parseCliArgs();
@@ -13,7 +36,7 @@ async function main(): Promise<void> {
   }
 
   if (args.version) {
-    process.stdout.write('v0.1.0+2609165\n');
+    process.stdout.write(`${getVersion()}\n`);
     process.exit(0);
   }
 
