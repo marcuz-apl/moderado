@@ -32,9 +32,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const displayInput =
     options.input && options.input.length > 0
       ? options.input
-      : '\x1b[38;5;242mWhat can I service for you, bro/sis?\x1b[0m';
+      : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m';
 
-  const textBox = `\x1b[1;38;5;75m>\x1b[0m ${displayInput}`;
+  const textBox = `\x1b[1;38;5;75m❯\x1b[0m ${displayInput}`;
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
   const left4Raw = `${options.model}  ${options.tokens} tokens / ${options.cost}`;
@@ -130,7 +130,7 @@ export async function promptInteractiveTurn(options: {
     const readlineModule = await import('node:readline');
     return new Promise((resolve) => {
       const rl = readlineModule.createInterface({ input: stdin, output: stdout });
-      rl.question('> ', (answer) => {
+      rl.question('\x1b[1;38;5;75m❯\x1b[0m ', (answer) => {
         rl.close();
         resolve({ text: answer.trim(), mode: currentMode, autoApprove: currentAutoApprove });
       });
@@ -142,19 +142,31 @@ export async function promptInteractiveTurn(options: {
   readlineModule.emitKeypressEvents(stdin);
   stdin.setRawMode(true);
 
+  // Position cursor on Line 2 with flashing block
+  const positionCursorOnInput = () => {
+    const cursorCol = 2 + input.length;
+    // \x1b[1 q = flashing block cursor, \x1b[?25h = show cursor
+    // Line 2 is 4 lines above the bottom of the card
+    stdout.write(`\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${cursorCol}C`);
+  };
+
   if (options.isFirstTurn) {
     stdout.write(renderFullWelcomeScreen(getOptions()));
   } else {
     stdout.write(renderWelcomeCard(getOptions()) + '\n');
   }
+  positionCursorOnInput();
 
   const redrawCard = () => {
-    stdout.write('\x1b[5A\r\x1b[J' + renderWelcomeCard(getOptions()) + '\n');
+    // From Line 2, move up 1 line to Line 1, clear down, reprint card, reposition cursor
+    stdout.write('\x1b[1A\r\x1b[J' + renderWelcomeCard(getOptions()) + '\n');
+    positionCursorOnInput();
   };
 
   return new Promise((resolve) => {
     const cleanup = () => {
       stdin.removeListener('keypress', onKeypress);
+      stdout.write('\x1b[0 q');
       if (stdin.isTTY) {
         try {
           stdin.setRawMode(false);
@@ -166,6 +178,7 @@ export async function promptInteractiveTurn(options: {
 
     const onAbort = () => {
       cleanup();
+      stdout.write('\x1b[4B\r\n\x1b[0 q');
       resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
     };
 
@@ -176,6 +189,7 @@ export async function promptInteractiveTurn(options: {
     const onKeypress = (str: string, key: any) => {
       if (options.signal?.aborted) {
         cleanup();
+        stdout.write('\x1b[4B\r\n\x1b[0 q');
         resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
         return;
       }
@@ -191,7 +205,7 @@ export async function promptInteractiveTurn(options: {
       // Ctrl+C
       if (key.ctrl && key.name === 'c') {
         cleanup();
-        stdout.write('\n\x1b[33mSession cancelled.\x1b[0m\n\n');
+        stdout.write('\x1b[4B\r\n\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n');
         process.exit(0);
       }
 
@@ -215,7 +229,8 @@ export async function promptInteractiveTurn(options: {
         if (options.signal) {
           options.signal.removeEventListener('abort', onAbort);
         }
-        stdout.write('\n');
+        // Move from Line 2 down 4 lines to bottom, reset cursor to default
+        stdout.write('\x1b[4B\r\n\x1b[0 q');
         resolve({ text: input.trim(), mode: currentMode, autoApprove: currentAutoApprove });
         return;
       }

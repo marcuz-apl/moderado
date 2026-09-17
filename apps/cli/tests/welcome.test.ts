@@ -34,7 +34,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(stripAnsi(lines[0])).toBe('─'.repeat(80));
 
     // Line 2: command taking text box with placeholder
-    expect(stripAnsi(lines[1])).toBe('> What can I service for you, bro/sis?');
+    expect(stripAnsi(lines[1])).toBe('❯ Ask anything, I am all ears...');
 
     // Line 3: bottom dash line (OpenCode box-drawing style)
     expect(stripAnsi(lines[2])).toBe('─'.repeat(80));
@@ -64,7 +64,7 @@ describe('OpenCode-style Welcome TUI', () => {
     });
 
     const lines = output.split('\n');
-    expect(stripAnsi(lines[1])).toBe('> refactor database layer');
+    expect(stripAnsi(lines[1])).toBe('❯ refactor database layer');
     expect(stripAnsi(lines[3])).toContain('[Plan] / Execute (Tab)');
     expect(stripAnsi(lines[4])).toContain('Auto-approve all enabled (Shift+Tab)');
   });
@@ -82,7 +82,7 @@ describe('OpenCode-style Welcome TUI', () => {
     const plain = stripAnsi(full);
     expect(plain).toContain(stripAnsi(MODERADO_ASCII_LOGO[0]));
     expect(plain).toContain('Use / for slash commands');
-    expect(plain).toContain('> What can I service for you, bro/sis?');
+    expect(plain).toContain('❯ Ask anything, I am all ears...');
     expect(plain).toContain('z-ai/glm-5.3-flash');
   });
 });
