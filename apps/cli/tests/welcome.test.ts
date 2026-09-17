@@ -3,6 +3,8 @@ import {
   renderModeradoHeader,
   renderFullWelcomeScreen,
   renderWelcomeCard,
+  renderHelpPopupBox,
+  renderModelPopupBox,
   MODERADO_ASCII_LOGO,
   COMMAND_HINT,
   stripAnsi,
@@ -126,5 +128,39 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/model');
     expect(plain).not.toContain('/clear');
     expect(plain).not.toContain('/help');
+  });
+
+  it('renders help popup box on top with commands, shortcuts, version and workspace', () => {
+    const lines = renderHelpPopupBox('v0.1.14', 'd:\\projects\\moderado', 80);
+    expect(lines.length).toBeGreaterThan(10);
+
+    const full = stripAnsi(lines.join('\n'));
+    expect(full).toContain('Moderado Help & Shortcuts');
+    expect(full).toContain('/model');
+    expect(full).toContain('/clear');
+    expect(full).toContain('/help');
+    expect(full).toContain('/exit');
+    expect(full).toContain('Tab');
+    expect(full).toContain('Shift+Tab');
+    expect(full).toContain('Ctrl+C');
+    expect(full).toContain('Workspace:');
+    expect(full).toContain('d:\\projects\\moderado');
+    expect(full).toContain('Version:');
+    expect(full).toContain('v0.1.14');
+    expect(full).toContain('Press [Esc] or [Enter] to close');
+  });
+
+  it('renders model popup box on top with choices and active model indicator', () => {
+    const lines = renderModelPopupBox('Auto (Free-First)', 80);
+    expect(lines.length).toBeGreaterThan(10);
+
+    const full = stripAnsi(lines.join('\n'));
+    expect(full).toContain('Select Active AI Model');
+    expect(full).toContain('[1] Auto (Free-First) (Active)');
+    expect(full).toContain('[2] meta/llama-3.3-70b-instruct');
+    expect(full).toContain('[3] meta/llama-3.1-405b-instruct');
+    expect(full).toContain('[4] deepseek-ai/deepseek-r1');
+    expect(full).toContain('[5] qwen/qwen2.5-coder-32b-instruct');
+    expect(full).toContain('Press [1-5] to select, or [Esc / Enter] to cancel');
   });
 });

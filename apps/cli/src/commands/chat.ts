@@ -93,26 +93,30 @@ export async function handleChatSession(
 
     let trimmed: string;
 
-    if (isFirst) {
-      const turn = await promptInteractiveTurn({
-        model: displayModel,
-        tokens: Math.round(sessionTokens),
-        cost: costDisplay,
-        workspace: canonicalWorkspace,
-        initialMode: activeMode,
-        initialAutoApprove: activeAutoApprove,
-        isFirstTurn: true,
-        signal,
-      });
+    const turn = await promptInteractiveTurn({
+      model: displayModel,
+      tokens: Math.round(sessionTokens),
+      cost: costDisplay,
+      workspace: canonicalWorkspace,
+      version,
+      initialMode: activeMode,
+      initialAutoApprove: activeAutoApprove,
+      isFirstTurn: isFirst,
+      signal,
+      onModelChange: (newModelId) => {
+        currentModel = newModelId === 'auto' ? undefined : newModelId;
+        saveConfig({ defaultModel: currentModel });
+        config = loadConfig();
+      },
+      onClear: () => {
+        conversationHistory = [];
+      },
+    });
 
-      activeMode = turn.mode;
-      activeAutoApprove = turn.autoApprove;
-      trimmed = turn.text.trim();
-      isFirst = false;
-    } else {
-      const promptLine = await askQuestion('\x1b[1;38;5;75m❯\x1b[0m ', { signal });
-      trimmed = promptLine.trim();
-    }
+    activeMode = turn.mode;
+    activeAutoApprove = turn.autoApprove;
+    trimmed = turn.text.trim();
+    isFirst = false;
 
     if (!trimmed) {
       continue;
@@ -120,7 +124,7 @@ export async function handleChatSession(
 
     // Handle slash commands
     if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
-      process.stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Welcome using Moderado!\x1b[0m\n\n');
+      process.stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
       try {
         process.stdin.pause();
       } catch {

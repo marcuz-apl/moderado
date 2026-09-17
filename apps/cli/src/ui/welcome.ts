@@ -131,31 +131,139 @@ export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
   ].join('\n') + '\n';
 }
 
+export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  const boxWidth = Math.min(terminalWidth, 74);
+  const padLeft = Math.max(0, Math.floor((terminalWidth - boxWidth) / 2));
+  const indent = ' '.repeat(padLeft);
+  const innerW = boxWidth - 4;
+
+  const titleStr = 'Moderado Help & Shortcuts';
+  const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
+  const shortWs = workspace.length > 38 ? '...' + workspace.slice(-35) : workspace;
+
+  const content: string[] = [
+    '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
+    '  \x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
+    '  \x1b[1m/clear\x1b[0m       Reset conversation memory and context history',
+    '  \x1b[1m/help\x1b[0m        Display this commands, shortcuts & version guide',
+    '  \x1b[1m/exit\x1b[0m        Exit Moderado session cleanly',
+    '',
+    '\x1b[1;38;5;114mKeyboard Shortcuts:\x1b[0m',
+    '  \x1b[1mTab\x1b[0m          Toggle between [Plan] and [Execute] mode',
+    '  \x1b[1mShift+Tab\x1b[0m    Toggle Auto-approval on / off for actions',
+    '  \x1b[1mCtrl+C\x1b[0m       Cancel active inference or exit session',
+    '',
+    `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,
+    `\x1b[38;5;245mVersion:\x1b[0m    \x1b[1;38;5;75m${version}\x1b[0m`,
+    '',
+    '\x1b[38;5;244mPress \x1b[1;38;5;75m[Esc]\x1b[0;38;5;244m or \x1b[1;38;5;75m[Enter]\x1b[0;38;5;244m to close\x1b[0m',
+  ];
+
+  const lines: string[] = [];
+  lines.push(indent + '\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
+  for (const item of content) {
+    const plain = item.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    const spaces = Math.max(0, innerW - plain.length);
+    lines.push(indent + '\x1b[38;5;240m│\x1b[0m  ' + item + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
+  }
+  lines.push(indent + '\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
+  return lines;
+}
+
+export interface AvailableModelItem {
+  key: string;
+  id: string;
+  name: string;
+  desc: string;
+}
+
+export const POPUP_MODELS: AvailableModelItem[] = [
+  { key: '1', id: 'auto', name: 'Auto (Free-First)', desc: 'Smart auto-routing favoring free hosted models' },
+  { key: '2', id: 'meta/llama-3.3-70b-instruct', name: 'meta/llama-3.3-70b-instruct', desc: 'Powerful general coding & reasoning' },
+  { key: '3', id: 'meta/llama-3.1-405b-instruct', name: 'meta/llama-3.1-405b-instruct', desc: 'Frontier 405B flagship model' },
+  { key: '4', id: 'deepseek-ai/deepseek-r1', name: 'deepseek-ai/deepseek-r1', desc: 'Deep reasoning and code generation' },
+  { key: '5', id: 'qwen/qwen2.5-coder-32b-instruct', name: 'qwen/qwen2.5-coder-32b-instruct', desc: 'Fast specialized coder' },
+];
+
+export function renderModelPopupBox(currentModel: string, width?: number): string[] {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  const boxWidth = Math.min(terminalWidth, 74);
+  const padLeft = Math.max(0, Math.floor((terminalWidth - boxWidth) / 2));
+  const indent = ' '.repeat(padLeft);
+  const innerW = boxWidth - 4;
+
+  const titleStr = 'Select Active AI Model';
+  const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
+
+  const lines: string[] = [];
+  lines.push(indent + '\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
+  lines.push(indent + '\x1b[38;5;240m│\x1b[0m' + ' '.repeat(innerW + 2) + '\x1b[38;5;240m│\x1b[0m');
+
+  for (const m of POPUP_MODELS) {
+    const isCur =
+      currentModel.toLowerCase().includes(m.id.toLowerCase()) ||
+      (m.id === 'auto' && (currentModel === 'auto' || currentModel.toLowerCase().includes('auto')));
+    const numTag = `\x1b[1;38;5;75m[${m.key}]\x1b[0m`;
+    const namePart = isCur
+      ? `\x1b[1;38;5;114m${m.name} (Active)\x1b[0m`
+      : `\x1b[1;38;5;253m${m.name}\x1b[0m`;
+    const lineStr = `  ${numTag} ${namePart}`;
+    const plain = lineStr.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    const spaces = Math.max(0, innerW - plain.length);
+    lines.push(indent + '\x1b[38;5;240m│\x1b[0m' + lineStr + ' '.repeat(spaces) + '  \x1b[38;5;240m│\x1b[0m');
+
+    const descStr = `      \x1b[38;5;244m${m.desc}\x1b[0m`;
+    const descPlain = descStr.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    const descSpaces = Math.max(0, innerW - descPlain.length);
+    lines.push(indent + '\x1b[38;5;240m│\x1b[0m' + descStr + ' '.repeat(descSpaces) + '  \x1b[38;5;240m│\x1b[0m');
+  }
+
+  lines.push(indent + '\x1b[38;5;240m│\x1b[0m' + ' '.repeat(innerW + 2) + '\x1b[38;5;240m│\x1b[0m');
+  const footerStr =
+    '  Press \x1b[1;38;5;75m[1-5]\x1b[0;38;5;244m to select, or \x1b[1;38;5;75m[Esc / Enter]\x1b[0;38;5;244m to cancel\x1b[0m';
+  const footerPlain = footerStr.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+  const footerSpaces = Math.max(0, innerW - footerPlain.length);
+  lines.push(indent + '\x1b[38;5;240m│\x1b[0m' + footerStr + ' '.repeat(footerSpaces) + '  \x1b[38;5;240m│\x1b[0m');
+
+  lines.push(indent + '\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
+  return lines;
+}
+
 export interface InteractiveTurnResult {
   text: string;
   mode: 'Plan' | 'Execute';
   autoApprove: boolean;
 }
 
-export async function promptInteractiveTurn(options: {
+export interface PromptInteractiveTurnOptions {
   model: string;
   tokens: number;
   cost: string;
   workspace: string;
+  version?: string;
   initialMode?: 'Plan' | 'Execute';
   initialAutoApprove?: boolean;
   isFirstTurn?: boolean;
   signal?: AbortSignal;
-}): Promise<InteractiveTurnResult> {
+  onModelChange?: (newModelId: string) => void;
+  onClear?: () => void;
+}
+
+export async function promptInteractiveTurn(
+  options: PromptInteractiveTurnOptions
+): Promise<InteractiveTurnResult> {
   const stdin = process.stdin;
   const stdout = process.stdout;
 
+  let currentModel = options.model;
   let currentMode: 'Plan' | 'Execute' = options.initialMode ?? 'Execute';
   let currentAutoApprove = options.initialAutoApprove ?? false;
   let input = '';
+  let activeModal: 'help' | 'model' | null = null;
 
   const getOptions = (): WelcomeLayoutOptions => ({
-    model: options.model,
+    model: currentModel,
     tokens: options.tokens,
     cost: options.cost,
     workspace: options.workspace,
@@ -195,9 +303,44 @@ export async function promptInteractiveTurn(options: {
 
   // Position cursor on Line 2 with flashing block
   const positionCursorOnInput = () => {
+    if (activeModal !== null) return;
     const cursorCol = 2 + input.length;
     const moveUp = 4 + getExtraLines();
     stdout.write(`\x1b[1 q\x1b[?25h\x1b[${moveUp}A\r\x1b[${cursorCol}C`);
+  };
+
+  const redrawScreen = () => {
+    stdout.write('\x1b[H\x1b[J');
+    stdout.write(renderFullWelcomeScreen(getOptions()));
+
+    if (activeModal === 'help') {
+      stdout.write('\x1b[?25l');
+      const modalLines = renderHelpPopupBox(
+        options.version ?? 'v0.1.14',
+        options.workspace
+      );
+      stdout.write('\n' + modalLines.join('\n') + '\n');
+      return;
+    }
+
+    if (activeModal === 'model') {
+      stdout.write('\x1b[?25l');
+      const modalLines = renderModelPopupBox(currentModel);
+      stdout.write('\n' + modalLines.join('\n') + '\n');
+      return;
+    }
+
+    positionCursorOnInput();
+  };
+
+  const redrawCard = () => {
+    if (activeModal !== null) {
+      redrawScreen();
+      return;
+    }
+    // From Line 2, move up 1 line to Line 1, clear down, reprint card, reposition cursor
+    stdout.write('\x1b[1A\r\x1b[J' + renderWelcomeCard(getOptions()) + '\n');
+    positionCursorOnInput();
   };
 
   if (options.isFirstTurn) {
@@ -208,12 +351,6 @@ export async function promptInteractiveTurn(options: {
     stdout.write(renderWelcomeCard(getOptions()) + '\n');
   }
   positionCursorOnInput();
-
-  const redrawCard = () => {
-    // From Line 2, move up 1 line to Line 1, clear down, reprint card, reposition cursor
-    stdout.write('\x1b[1A\r\x1b[J' + renderWelcomeCard(getOptions()) + '\n');
-    positionCursorOnInput();
-  };
 
   return new Promise((resolve) => {
     const cleanup = () => {
@@ -253,20 +390,61 @@ export async function promptInteractiveTurn(options: {
         return;
       }
 
+      // Ctrl+C
+      if (key && key.ctrl && key.name === 'c') {
+        cleanup();
+        const moveDown = 4 + getExtraLines();
+        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n`);
+        process.exit(0);
+      }
+
+      // When a modal popup is open
+      if (activeModal === 'help') {
+        if (
+          (key && (key.name === 'escape' || key.name === 'return' || key.name === 'enter')) ||
+          str === 'q' ||
+          str === 'Q'
+        ) {
+          activeModal = null;
+          input = '';
+          redrawScreen();
+        }
+        return;
+      }
+
+      if (activeModal === 'model') {
+        if (
+          (key && (key.name === 'escape' || key.name === 'return' || key.name === 'enter')) ||
+          str === 'q' ||
+          str === 'Q'
+        ) {
+          activeModal = null;
+          input = '';
+          redrawScreen();
+          return;
+        }
+
+        if (str && ['1', '2', '3', '4', '5'].includes(str)) {
+          const selected = POPUP_MODELS.find((m) => m.key === str);
+          if (selected) {
+            currentModel = selected.id === 'auto' ? 'Auto (Free-First)' : selected.id;
+            options.onModelChange?.(selected.id);
+            activeModal = null;
+            input = '';
+            redrawScreen();
+          }
+          return;
+        }
+        return;
+      }
+
+      // Normal mode (activeModal === null)
       if (!key) {
         if (str && str.length === 1 && str.charCodeAt(0) >= 32) {
           input += str;
           redrawCard();
         }
         return;
-      }
-
-      // Ctrl+C
-      if (key.ctrl && key.name === 'c') {
-        cleanup();
-        const moveDown = 4 + getExtraLines();
-        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n`);
-        process.exit(0);
       }
 
       // Shift+Tab or Backtab sequence (\x1b[Z)
@@ -298,13 +476,40 @@ export async function promptInteractiveTurn(options: {
 
       // Enter
       if (key.name === 'return' || key.name === 'enter') {
+        const trimmed = input.trim();
+
+        if (trimmed === '/help') {
+          activeModal = 'help';
+          redrawScreen();
+          return;
+        }
+
+        if (trimmed === '/model') {
+          activeModal = 'model';
+          redrawScreen();
+          return;
+        }
+
+        if (trimmed === '/clear') {
+          input = '';
+          options.onClear?.();
+          redrawScreen();
+          return;
+        }
+
+        if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
+          cleanup();
+          stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
+          process.exit(0);
+        }
+
         cleanup();
         if (options.signal) {
           options.signal.removeEventListener('abort', onAbort);
         }
         const moveDown = 4 + getExtraLines();
         stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
-        resolve({ text: input.trim(), mode: currentMode, autoApprove: currentAutoApprove });
+        resolve({ text: trimmed, mode: currentMode, autoApprove: currentAutoApprove });
         return;
       }
 
