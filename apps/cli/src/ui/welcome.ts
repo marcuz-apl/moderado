@@ -349,12 +349,12 @@ export async function promptInteractiveTurn(
 
         // ── /model overlay popup ──────────────────────────────────────────────
         // Triggered when Enter is pressed with "/model" in the input box.
-        // We hand off to the caller-supplied onModelSelect (which runs the full
-        // live model-catalog selector in an alternate screen), then restore our TUI.
+        // We temporarily detach the main keypress listener so selectModelOverlay
+        // (which uses askModalChoice → raw mode internally) can take full control.
+        // After it returns, we repaint the full welcome TUI and reposition cursor.
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/model') {
           input = '';
           stdin.removeListener('keypress', onKeypress); // pause main handler
-          stdin.setRawMode(false); // selectModelInteractive owns raw mode
 
           if (options.onModelSelect) {
             const newId = await options.onModelSelect();
@@ -363,7 +363,7 @@ export async function promptInteractiveTurn(
             }
           }
 
-          // Restore raw mode and repaint the full welcome TUI
+          // askModalChoice left stdin in non-raw mode — restore it for our TUI
           readlineModule.emitKeypressEvents(stdin);
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');
@@ -373,6 +373,7 @@ export async function promptInteractiveTurn(
           stdin.on('keypress', onKeypress); // re-attach main handler
           return;
         }
+
 
         // ── /clear ────────────────────────────────────────────────────────────
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/clear') {

@@ -35,6 +35,19 @@ export async function selectModelInteractive(
   }
 }
 
+/**
+ * Same model selection flow as selectModelInteractive, but rendered as a floating
+ * overlay on top of whatever is currently on screen (no alternate screen buffer swap).
+ * Used by the TUI /model popup so the welcome background stays visible.
+ */
+export async function selectModelOverlay(
+  options: ModelSelectorOptions = {}
+): Promise<ModelSelectionResult> {
+  // No alternate screen — the caller is responsible for repainting the background.
+  return executeModelSelection(options);
+}
+
+
 async function executeModelSelection(
   options: ModelSelectorOptions = {}
 ): Promise<ModelSelectionResult> {
@@ -130,12 +143,11 @@ async function executeModelSelection(
   menuLines.push(`\x1b[1;38;5;245m[q]\x1b[0m Cancel & Close Window    \x1b[38;5;244m(No changes)\x1b[0m`);
 
   const cols = process.stdout.columns || 80;
-  const rows = process.stdout.rows || 24;
   const boxWidth = Math.min(Math.max(62, Math.min(cols - 4, 72)), cols);
   const leftPad = Math.max(0, Math.floor((cols - boxWidth) / 2));
-  const topPad = Math.max(1, Math.floor((rows - (menuLines.length + 6)) / 2));
 
-  let out = '\x1b[H\x1b[2J' + '\n'.repeat(topPad);
+  // Draw inline below the current cursor — no screen wipe so background TUI stays visible.
+  let out = '\n';
   const pad = ' '.repeat(leftPad);
 
   const titleStr = 'Model Selection Window';

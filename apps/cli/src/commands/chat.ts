@@ -8,7 +8,7 @@ import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
 import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
-import { selectModelInteractive } from '../ui/model_selector.js';
+import { selectModelInteractive, selectModelOverlay } from '../ui/model_selector.js';
 import { promptInteractiveTurn } from '../ui/welcome.js';
 
 export async function handleChatSession(
@@ -103,9 +103,10 @@ export async function handleChatSession(
       isFirstTurn: isFirst,
       signal,
 
-      // /model popup: welcome.ts pauses raw-mode, calls this, then redraws the TUI.
+      // /model popup: selectModelOverlay draws inline (no alternate screen) so the
+      // welcome TUI background stays visible behind the model menu box.
       onModelSelect: async () => {
-        const selection = await selectModelInteractive({
+        const selection = await selectModelOverlay({
           apiKey,
           currentModel,
           signal,
