@@ -198,6 +198,27 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
   return lines;
 }
 
+/**
+ * Exit Moderado cleanly: restore cursor visibility & style, leave the alternate
+ * screen buffer, disable raw mode, fully clear the OS terminal, print the
+ * farewell message, and terminate the process.
+ */
+export function exitCleanly(message: string): never {
+  const stdout = process.stdout;
+  if (stdout.isTTY) {
+    stdout.write(
+      '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + message + '\n\n'
+    );
+  } else {
+    stdout.write(message + '\n\n');
+  }
+  const stdin = process.stdin;
+  if (stdin.isTTY) {
+    try { stdin.setRawMode(false); } catch { /* ignore */ }
+  }
+  process.exit(0);
+}
+
 export interface InteractiveTurnResult {
   text: string;
   mode: 'Plan' | 'Execute';
@@ -338,8 +359,7 @@ export async function promptInteractiveTurn(
         // ── Ctrl+C ────────────────────────────────────────────────────────────
         if (key && key.ctrl && key.name === 'c') {
           cleanup();
-          stdout.write('\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n');
-          process.exit(0);
+          exitCleanly('\x1b[33mSession cancelled.\x1b[0m');
         }
 
         // ── /help overlay popup ───────────────────────────────────────────────
@@ -438,8 +458,7 @@ export async function promptInteractiveTurn(
             (input.trim() === '/exit' || input.trim() === '/quit')) {
           cleanup();
           if (options.signal) options.signal.removeEventListener('abort', onAbort);
-          stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
-          process.exit(0);
+          exitCleanly('\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
         }
 
         // ── Normal keys ───────────────────────────────────────────────────────

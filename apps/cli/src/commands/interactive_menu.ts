@@ -4,6 +4,7 @@ import { handleModelsCommand } from './models.js';
 import { handleRunCommand } from './run.js';
 import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
+import { exitCleanly } from '../ui/welcome.js';
 
 export async function handleInteractiveMenu(
   args: CliParsedArgs,
@@ -59,8 +60,7 @@ export async function handleInteractiveMenu(
   const selection = await askSelect('What would you like to do?', choices, 0, { signal });
 
   if (selection.value === 'exit') {
-    process.stdout.write('\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
-    return 0;
+    exitCleanly('\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
   }
 
   if (selection.value === 'model_select') {
