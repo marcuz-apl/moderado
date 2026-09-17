@@ -13,6 +13,14 @@ export async function askQuestion(
   const stdin = options.stdin ?? process.stdin;
   const stdout = options.stdout ?? process.stdout;
 
+  try {
+    if (typeof (stdin as any).read === 'function') {
+      while ((stdin as any).read() !== null) {}
+    }
+  } catch {
+    // ignore
+  }
+
   return new Promise((resolve) => {
     const rl = readline.createInterface({
       input: stdin,
