@@ -168,7 +168,7 @@ export async function promptInteractiveTurn(options: {
   return new Promise((resolve) => {
     const cleanup = () => {
       stdin.removeListener('keypress', onKeypress);
-      stdout.write('\x1b[0 q');
+      stdout.write('\x1b[0 q\x1b[?25h');
       if (stdin.isTTY) {
         try {
           stdin.setRawMode(false);
@@ -176,11 +176,16 @@ export async function promptInteractiveTurn(options: {
           // ignore
         }
       }
+      try {
+        stdin.pause();
+      } catch {
+        // ignore
+      }
     };
 
     const onAbort = () => {
       cleanup();
-      stdout.write('\x1b[4B\r\n\x1b[0 q');
+      stdout.write('\x1b[4B\r\n\x1b[0 q\x1b[?25h');
       resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
     };
 
@@ -231,8 +236,8 @@ export async function promptInteractiveTurn(options: {
         if (options.signal) {
           options.signal.removeEventListener('abort', onAbort);
         }
-        // Move from Line 2 down 4 lines to bottom, reset cursor to default
-        stdout.write('\x1b[4B\r\n\x1b[0 q');
+        // Move from Line 2 down 4 lines to bottom, reset cursor to default and visible
+        stdout.write('\x1b[4B\r\n\x1b[0 q\x1b[?25h');
         resolve({ text: input.trim(), mode: currentMode, autoApprove: currentAutoApprove });
         return;
       }

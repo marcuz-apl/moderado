@@ -72,6 +72,7 @@ async function main(): Promise<void> {
   }
 
   process.exitCode = exitCode;
+  process.exit(exitCode);
 }
 
 main().catch((err) => {
