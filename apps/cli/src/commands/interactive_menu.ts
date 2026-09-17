@@ -1,0 +1,97 @@
+import { CliParsedArgs, getHelpText } from '../args.js';
+import { askQuestion, askSecret, askSelect, SelectOption } from '../ui/prompt.js';
+import { handleModelsCommand } from './models.js';
+import { handleRunCommand } from './run.js';
+import { resolveApiKey, saveConfig } from '../config.js';
+
+export async function handleInteractiveMenu(
+  args: CliParsedArgs,
+  version: string,
+  signal?: AbortSignal
+): Promise<number> {
+  const cwd = process.cwd();
+  process.stdout.write(`\n\x1b[1mModerado ${version}\x1b[0m | Workspace: \x1b[36m${cwd}\x1b[0m\n`);
+  process.stdout.write('Lightweight CLI coding agent with NVIDIA NIM free-first routing.\n');
+
+  const choices: SelectOption[] = [
+    {
+      label: 'Start a coding task',
+      value: 'task',
+      tag: 'Interactive',
+      description: 'Enter a task prompt and select model routing strategy',
+    },
+    {
+      label: 'Discover models (moderado models)',
+      value: 'models',
+      tag: 'Catalog',
+      description: 'Inspect live NVIDIA NIM models, capability & free trial tiers',
+    },
+    {
+      label: 'Configure API Key',
+      value: 'config',
+      tag: 'Settings',
+      description: 'View or update your persistent NVIDIA API key in ~/.moderado/config.json',
+    },
+    {
+      label: 'View help & command options',
+      value: 'help',
+      tag: 'Docs',
+      description: 'Display CLI flags, environment variables, and usage examples',
+    },
+    {
+      label: 'Exit',
+      value: 'exit',
+      tag: 'Quit',
+      description: 'Exit Moderado',
+    },
+  ];
+
+  const selection = await askSelect('What would you like to do?', choices, 0, { signal });
+
+  if (selection.value === 'exit') {
+    process.stdout.write('Goodbye!\n');
+    return 0;
+  }
+
+  if (selection.value === 'help') {
+    process.stdout.write(getHelpText());
+    return 0;
+  }
+
+  if (selection.value === 'models') {
+    return handleModelsCommand(args);
+  }
+
+  if (selection.value === 'config') {
+    const existing = resolveApiKey();
+    if (existing) {
+      const masked = `${existing.slice(0, 10)}...${existing.slice(-4)}`;
+      process.stdout.write(`\nCurrent API key: \x1b[32m${masked}\x1b[0m\n`);
+    } else {
+      process.stdout.write('\nNo API key currently saved or configured.\n');
+    }
+
+    const newKey = await askSecret('Enter new NVIDIA API Key (or press Enter to keep current): ', { signal });
+    if (newKey) {
+      saveConfig({ apiKey: newKey });
+      process.stdout.write('\x1b[32m✔ API key saved to ~/.moderado/config.json\x1b[0m\n\n');
+    }
+    return 0;
+  }
+
+  // selection.value === 'task'
+  process.stdout.write('\n');
+  const taskPrompt = await askQuestion('Enter task prompt: ', { signal });
+  if (!taskPrompt) {
+    process.stdout.write('\x1b[33mNo task prompt entered. Exiting.\x1b[0m\n');
+    return 0;
+  }
+
+  const runArgs: CliParsedArgs = {
+    ...args,
+    command: 'run',
+    task: taskPrompt,
+  };
+
+  return handleRunCommand(runArgs, signal);
+}

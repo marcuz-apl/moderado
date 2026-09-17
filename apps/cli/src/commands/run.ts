@@ -13,8 +13,13 @@ export async function handleRunCommand(
   signal?: AbortSignal
 ): Promise<number> {
   if (!args.task) {
-    process.stderr.write('\x1b[1;31mError:\x1b[0m Missing task prompt. Usage: moderado run "<task>"\n');
-    return 1;
+    if (!args.nonInteractive) {
+      args.task = await askQuestion('Enter task prompt: ', { signal });
+    }
+    if (!args.task) {
+      process.stderr.write('\x1b[1;31mError:\x1b[0m Missing task prompt. Usage: moderado run "<task>"\n');
+      return 1;
+    }
   }
 
   let canonicalWorkspace: string;
