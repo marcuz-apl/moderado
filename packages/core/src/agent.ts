@@ -9,6 +9,7 @@ import {
   IApprovalHandler,
   IProviderAdapter,
   IToolRegistry,
+  ModelInventoryEntry,
   ModelUnavailableError,
   RateLimitError,
   ToolCall,
@@ -28,6 +29,7 @@ export interface AgentRunOptions {
   eventListener?: AgentEventListener;
   signal?: AbortSignal;
   conversationHistory?: ChatMessage[];
+  modelInventory?: ModelInventoryEntry[];
 }
 
 export interface AgentRunResult {
@@ -49,6 +51,14 @@ CORE OPERATIONAL RULES:
 - Do NOT create unsolicited files on your own initiative.
 - Always inspect existing code (with list_files, read_file, search_files) before editing. Keep edits focused, clean, and test-driven.
 - Do NOT invent tool names.`;
+
+function buildSystemPrompt(modelId: string, workspaceRoot: string): string {
+  return `${DEFAULT_SYSTEM_PROMPT}
+
+SYSTEM RUNTIME CONTEXT:
+- Active Model: ${modelId}
+- Workspace Root: ${workspaceRoot}`;
+}
 
 const PSEUDO_ANSWER_TOOLS = new Set([
   'answer_directly',
@@ -89,15 +99,22 @@ export class AgentLoop {
     }
 
     // 1. Model Discovery & Routing
-    emit({
-      type: 'progress',
-      step: 0,
-      maxSteps: policy.maxSteps,
-      status: 'Discovering and selecting models...',
-      timestamp: Date.now(),
-    });
+    let inventory = options.modelInventory;
+    if (!inventory || inventory.length === 0) {
+      if (options.routeOptions?.pinnedModelId) {
+        inventory = [{ id: options.routeOptions.pinnedModelId, object: 'model', owned_by: 'nvidia' }];
+      } else {
+        emit({
+          type: 'progress',
+          step: 0,
+          maxSteps: policy.maxSteps,
+          status: 'Discovering and selecting models...',
+          timestamp: Date.now(),
+        });
+        inventory = await options.provider.discoverModels(signal);
+      }
+    }
 
-    const inventory = await options.provider.discoverModels(signal);
     const { selectedModel: initialModel, rankedCandidates } = router.selectModel(
       inventory,
       options.routeOptions
@@ -117,7 +134,7 @@ export class AgentLoop {
       options.conversationHistory && options.conversationHistory.length > 0
         ? [...options.conversationHistory, { role: 'user', content: task }]
         : [
-            { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
+            { role: 'system', content: buildSystemPrompt(currentModel.id, options.workspaceRoot) },
             { role: 'user', content: task },
           ];
 
@@ -167,6 +184,14 @@ export class AgentLoop {
               selectedModel: currentModel,
               messages,
             };
+          }
+
+          if (chunk.reasoningDelta) {
+            emit({
+              type: 'reasoning_delta',
+              delta: chunk.reasoningDelta,
+              timestamp: Date.now(),
+            });
           }
 
           if (chunk.contentDelta) {

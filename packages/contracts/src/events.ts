@@ -29,6 +29,13 @@ export const AssistantDeltaEventSchema = z.object({
 });
 export type AssistantDeltaEvent = z.infer<typeof AssistantDeltaEventSchema>;
 
+export const ReasoningDeltaEventSchema = z.object({
+  type: z.literal('reasoning_delta'),
+  delta: z.string(),
+  timestamp: z.number().int().nonnegative(),
+});
+export type ReasoningDeltaEvent = z.infer<typeof ReasoningDeltaEventSchema>;
+
 export const ToolCallInitiatedEventSchema = z.object({
   type: z.literal('tool_call_initiated'),
   toolCallId: z.string().min(1),
@@ -91,6 +98,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   ProgressEventSchema,
   ModelChangeEventSchema,
   AssistantDeltaEventSchema,
+  ReasoningDeltaEventSchema,
   ToolCallInitiatedEventSchema,
   ApprovalRequestEventSchema,
   ApprovalResolvedEventSchema,

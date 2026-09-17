@@ -213,6 +213,13 @@ describe('Contracts: Approvals and Lifecycle Events', () => {
     });
     expect(progressEvent.type).toBe('progress');
 
+    const reasoningEvent = AgentEventSchema.parse({
+      type: 'reasoning_delta',
+      delta: 'Considering approaches...',
+      timestamp: Date.now(),
+    });
+    expect(reasoningEvent.type).toBe('reasoning_delta');
+
     const completionEvent = AgentEventSchema.parse({
       type: 'completion',
       status: 'completed',

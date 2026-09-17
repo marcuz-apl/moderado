@@ -56,6 +56,13 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(models.length).toBe(2);
     expect(models[0].id).toBe('meta/llama-3.3-70b-instruct');
     expect(models[1].id).toBe('mistralai/mixtral-8x7b-instruct-v0.1');
+
+    // Second call should hit memory cache and NOT call HTTP server again
+    nextHandler = () => {
+      throw new Error('Should not hit server on cached discovery');
+    };
+    const cachedModels = await adapter.discoverModels();
+    expect(cachedModels.length).toBe(2);
   });
 
   it('maps 401 error to AuthenticationError on discovery', async () => {
@@ -108,6 +115,36 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(chunks[0].contentDelta).toBe('Hello');
     expect(chunks[1].contentDelta).toBe(' world!');
     expect(chunks[1].finishReason).toBe('stop');
+  });
+
+  it('streams reasoning_content deltas via SSE for reasoning models', async () => {
+    nextHandler = (req, res) => {
+      expect(req.method).toBe('POST');
+      expect(req.url).toBe('/v1/chat/completions');
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      });
+
+      res.write('data: {"choices": [{"delta": {"role": "assistant", "reasoning_content": "Thinking step 1..."}}]}\n\n');
+      res.write('data: {"choices": [{"delta": {"content": "Final answer."}, "finish_reason": "stop"}]}\n\n');
+      res.write('data: [DONE]\n\n');
+      res.end();
+    };
+
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl });
+    const chunks = [];
+    for await (const chunk of adapter.streamChat({
+      modelId: 'z-ai/glm-5.3-flash',
+      messages: [{ role: 'user', content: 'Explain quantum physics' }],
+    })) {
+      chunks.push(chunk);
+    }
+
+    expect(chunks.length).toBe(2);
+    expect(chunks[0].reasoningDelta).toBe('Thinking step 1...');
+    expect(chunks[1].contentDelta).toBe('Final answer.');
   });
 
   it('streams tool call deltas via SSE', async () => {

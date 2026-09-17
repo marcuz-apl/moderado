@@ -10,6 +10,8 @@ export class TerminalRenderer {
   private readonly verbose: boolean;
   private lastEventType?: string;
   private isStreamingAssistant = false;
+  private isStreamingReasoning = false;
+  private hasTransientProgress = false;
 
   constructor(options: TerminalRendererOptions = {}) {
     this.stdout = options.stdout ?? process.stdout;
@@ -20,6 +22,7 @@ export class TerminalRenderer {
     switch (event.type) {
       case 'model_change': {
         this.finishAssistantStream();
+        this.clearTransientProgress();
         const reasonText =
           event.reason === 'initial_selection'
             ? 'Selected'
@@ -36,13 +39,35 @@ export class TerminalRenderer {
       case 'progress': {
         if (this.verbose) {
           this.finishAssistantStream();
+          this.clearTransientProgress();
           this.stdout.write(`\x1b[90m◇ ${event.status}\x1b[0m\n`);
           this.lastEventType = 'progress';
+        } else {
+          this.stdout.write(`\r\x1b[K\x1b[90m◇ ${event.status}\x1b[0m`);
+          this.hasTransientProgress = true;
         }
         break;
       }
 
+      case 'reasoning_delta': {
+        this.clearTransientProgress();
+        if (!this.isStreamingReasoning) {
+          if (this.lastEventType && this.lastEventType !== 'reasoning_delta') {
+            this.stdout.write('\n');
+          }
+          this.stdout.write('\x1b[90m╭─ 💭 Thinking...\x1b[0m\n\x1b[2;37m');
+          this.isStreamingReasoning = true;
+        }
+        this.stdout.write(event.delta);
+        this.lastEventType = 'reasoning_delta';
+        break;
+      }
+
       case 'assistant_delta': {
+        this.clearTransientProgress();
+        if (this.isStreamingReasoning) {
+          this.finishReasoningStream();
+        }
         if (!this.isStreamingAssistant) {
           if (this.lastEventType && this.lastEventType !== 'assistant_delta') {
             this.stdout.write('\n');
@@ -57,6 +82,7 @@ export class TerminalRenderer {
 
       case 'tool_call_initiated': {
         this.finishAssistantStream();
+        this.clearTransientProgress();
         const icon = this.getToolIcon(event.toolName);
         const argsStr = JSON.stringify(event.parameters);
         const truncatedArgs = argsStr.length > 70 ? argsStr.slice(0, 67) + '...' : argsStr;
@@ -70,6 +96,7 @@ export class TerminalRenderer {
 
       case 'tool_result': {
         this.finishAssistantStream();
+        this.clearTransientProgress();
         const isSuccess = event.result.status === 'success';
         const statusColor = isSuccess
           ? '\x1b[32m'
@@ -90,6 +117,7 @@ export class TerminalRenderer {
 
       case 'completion': {
         this.finishAssistantStream();
+        this.clearTransientProgress();
         const bannerColor =
           event.status === 'completed'
             ? '\x1b[1;32m'
@@ -109,6 +137,7 @@ export class TerminalRenderer {
 
       case 'error': {
         this.finishAssistantStream();
+        this.clearTransientProgress();
         this.stdout.write(`\n\x1b[1;31m✖ [Error ${event.code}]\x1b[0m ${event.message}\n`);
         this.lastEventType = 'error';
         break;
@@ -116,6 +145,7 @@ export class TerminalRenderer {
 
       case 'cancellation': {
         this.finishAssistantStream();
+        this.clearTransientProgress();
         this.stdout.write(`\n\x1b[1;33m⚠ [Cancelled]\x1b[0m ${event.reason}\n`);
         this.lastEventType = 'cancellation';
         break;
@@ -127,9 +157,27 @@ export class TerminalRenderer {
   }
 
   private finishAssistantStream(): void {
+    this.clearTransientProgress();
+    if (this.isStreamingReasoning) {
+      this.finishReasoningStream();
+    }
     if (this.isStreamingAssistant) {
       this.stdout.write('\n');
       this.isStreamingAssistant = false;
+    }
+  }
+
+  private finishReasoningStream(): void {
+    if (this.isStreamingReasoning) {
+      this.stdout.write('\x1b[0m\n\x1b[90m╰──────────────────────────────────\x1b[0m\n\n');
+      this.isStreamingReasoning = false;
+    }
+  }
+
+  private clearTransientProgress(): void {
+    if (this.hasTransientProgress) {
+      this.stdout.write('\r\x1b[K');
+      this.hasTransientProgress = false;
     }
   }
 

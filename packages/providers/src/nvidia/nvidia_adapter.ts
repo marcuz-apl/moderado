@@ -22,6 +22,9 @@ export class NvidiaAdapter implements IProviderAdapter {
 
   private readonly apiKey: string;
   private readonly baseUrl: string;
+  private cachedInventory: ModelInventoryEntry[] | null = null;
+  private cacheTimestamp = 0;
+  private readonly cacheTtlMs = 15 * 60 * 1000;
 
   constructor(config: NvidiaAdapterConfig = {}) {
     this.apiKey = config.apiKey || process.env.NVIDIA_API_KEY || '';
@@ -32,6 +35,7 @@ export class NvidiaAdapter implements IProviderAdapter {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      Connection: 'keep-alive',
     };
     if (this.apiKey) {
       headers.Authorization = `Bearer ${this.apiKey}`;
@@ -39,7 +43,11 @@ export class NvidiaAdapter implements IProviderAdapter {
     return headers;
   }
 
-  async discoverModels(signal?: AbortSignal): Promise<ModelInventoryEntry[]> {
+  async discoverModels(signal?: AbortSignal, forceRefresh = false): Promise<ModelInventoryEntry[]> {
+    if (!forceRefresh && this.cachedInventory && Date.now() - this.cacheTimestamp < this.cacheTtlMs) {
+      return this.cachedInventory;
+    }
+
     const url = `${this.baseUrl}/models`;
     let response: Response;
 
@@ -80,6 +88,8 @@ export class NvidiaAdapter implements IProviderAdapter {
       }
     }
 
+    this.cachedInventory = results;
+    this.cacheTimestamp = Date.now();
     return results;
   }
 

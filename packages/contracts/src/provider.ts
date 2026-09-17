@@ -61,6 +61,7 @@ export type ChatUsage = z.infer<typeof ChatUsageSchema>;
 
 export const ChatCompletionChunkSchema = z.object({
   contentDelta: z.string().optional(),
+  reasoningDelta: z.string().optional(),
   toolCallChunks: z.array(z.custom<ToolCallChunk>()).optional(),
   finishReason: z.enum(['stop', 'tool_calls', 'length', 'error']).nullable().optional(),
   usage: ChatUsageSchema.optional(),
@@ -85,6 +86,6 @@ export interface ProviderToolDeclaration {
 export interface IProviderAdapter {
   readonly id: string;
   readonly name: string;
-  discoverModels(signal?: AbortSignal): Promise<ModelInventoryEntry[]>;
+  discoverModels(signal?: AbortSignal, forceRefresh?: boolean): Promise<ModelInventoryEntry[]>;
   streamChat(options: ProviderChatOptions): AsyncIterable<ChatCompletionChunk>;
 }

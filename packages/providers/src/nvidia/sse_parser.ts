@@ -47,6 +47,10 @@ export async function* parseSseStream(
           if (delta?.content) {
             completionChunk.contentDelta = delta.content;
           }
+          const reasoning = delta?.reasoning_content ?? delta?.thought;
+          if (reasoning) {
+            completionChunk.reasoningDelta = reasoning;
+          }
           if (toolCallChunks.length > 0) {
             completionChunk.toolCallChunks = toolCallChunks;
           }
@@ -63,6 +67,7 @@ export async function* parseSseStream(
 
           if (
             completionChunk.contentDelta !== undefined ||
+            completionChunk.reasoningDelta !== undefined ||
             completionChunk.toolCallChunks !== undefined ||
             completionChunk.finishReason !== undefined ||
             completionChunk.usage !== undefined

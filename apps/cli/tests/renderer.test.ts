@@ -63,4 +63,45 @@ describe('TerminalRenderer', () => {
     expect(captured).toContain('SUCCESS');
     expect(captured).toContain('=== Session Finished: COMPLETED');
   });
+
+  it('renders reasoning_delta stream and transient progress', () => {
+    let captured = '';
+    const stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        captured += chunk.toString('utf8');
+        callback();
+      },
+    });
+
+    const renderer = new TerminalRenderer({ stdout, verbose: false });
+
+    // Transient progress
+    renderer.handleEvent({
+      type: 'progress',
+      step: 1,
+      maxSteps: 10,
+      status: 'Inferring with z-ai/glm-5.3-flash...',
+      timestamp: Date.now(),
+    });
+
+    // Reasoning stream
+    renderer.handleEvent({
+      type: 'reasoning_delta',
+      delta: 'Analyzing user inquiry...',
+      timestamp: Date.now(),
+    });
+
+    // Assistant response finishes reasoning
+    renderer.handleEvent({
+      type: 'assistant_delta',
+      delta: 'Here is the answer.',
+      timestamp: Date.now(),
+    });
+
+    expect(captured).toContain('Inferring with z-ai/glm-5.3-flash');
+    expect(captured).toContain('Thinking...');
+    expect(captured).toContain('Analyzing user inquiry...');
+    expect(captured).toContain('Moderado:');
+    expect(captured).toContain('Here is the answer.');
+  });
 });

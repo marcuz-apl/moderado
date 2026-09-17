@@ -309,6 +309,31 @@ describe('AgentLoop (Core Execution Engine)', () => {
     // Ensure history contains turns from both messages
     expect(turn2.messages.length).toBeGreaterThan(turn1.messages.length);
   });
+
+  it('emits reasoning_delta events when provider streams reasoning chunks', async () => {
+    provider.queueResponse([
+      { reasoningDelta: 'Thinking deeply...' },
+      { contentDelta: 'Here is the direct answer.' },
+      { finishReason: 'stop' },
+    ]);
+
+    const result = await loop.run('Think and answer', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('completed');
+    const reasoningEvents = events.filter((e) => e.type === 'reasoning_delta');
+    expect(reasoningEvents.length).toBe(1);
+    expect((reasoningEvents[0] as any).delta).toBe('Thinking deeply...');
+
+    const assistantEvents = events.filter((e) => e.type === 'assistant_delta');
+    expect(assistantEvents.length).toBe(1);
+    expect((assistantEvents[0] as any).delta).toBe('Here is the direct answer.');
+  });
 });
 
 
