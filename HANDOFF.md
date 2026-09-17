@@ -1,60 +1,57 @@
 # Project Handoff
 
-Updated: 2026-09-16 21:54 UTC  
+Updated: 2026-09-16 21:57 UTC  
 Branch: master  
-Commit: in progress (Milestone 2 completed, ready to commit)  
+Commit: in progress (Milestone 3 completed, ready to commit)  
 Status: in progress  
 
 ## Summary
 
-Completed **Milestone 2: Workspace Security Jail & Tools Engine (`packages/tools`)**. Implemented path canonicalization (`fs.realpathSync`), protected file blacklisting, the 7 core workspace tools (`read_file`, `write_file`, `edit_file`, `list_files`, `search_files`, `run_command`, `git_diff`), atomic writes, unique diff preview generator, environment variable purging, and `ToolRegistry`. All 40 unit and security tests pass across the workspace.
+Completed **Milestone 3: Model Discovery & Provider Adapters (`packages/providers`)**. Implemented the in-memory `FakeProviderAdapter` for offline TDD orchestration, the live `NvidiaAdapter` using native Node.js `fetch` and `AbortController`, and a streaming Server-Sent Events (SSE) parser (`sse_parser.ts`). Tested completely offline using a local HTTP mock server. All 50 unit and integration tests pass across the workspace.
 
 ## Completed
 
-- **Milestone 1**: Root npm workspaces, `tsconfig.base.json`, `vitest.config.ts`, and pure contracts package `@moderado/contracts`.
-- **Milestone 2**:
-  - `packages/tools/src/jail.ts`: Path canonicalization, directory traversal prevention (`../`), symlink escape rejection, and blacklist filtering (`.git`, `.env*`, `*.pem`, `*.key`, `id_rsa*`).
-  - `packages/tools/src/diff.ts`: Substring uniqueness detection and git-style unified diff preview generation for `edit_file`.
-  - `packages/tools/src/tools/read_file.ts`: Paginated file reader with line numbering, binary file detection, and truncation indicators.
-  - `packages/tools/src/tools/write_file.ts`: Atomic file writer using sibling temporary files and atomic rename (`fs.renameSync`).
-  - `packages/tools/src/tools/edit_file.ts`: Surgical code modification verifying exact single occurrence and returning diff preview.
-  - `packages/tools/src/tools/list_files.ts`: Recursive directory listing with depth limits and automatic exclusion of `node_modules` and `.git`.
-  - `packages/tools/src/tools/search_files.ts`: Multi-file content search supporting literal strings and regex patterns with match capping.
-  - `packages/tools/src/tools/run_command.ts`: Child process execution via `child_process.spawn` with `shell: false`, argument array, environment sanitization (purging `NVIDIA_API_KEY` and secret tokens), 64KB buffer caps, and execution timeouts.
-  - `packages/tools/src/tools/git_diff.ts`: Hardcoded safe git diff wrapper.
-  - `packages/tools/src/registry.ts`: `ToolRegistry` implementation and JSON Schema declaration generator for providers.
+- **Milestone 1**: Scaffolding, `tsconfig.base.json`, `vitest.config.ts`, pure contracts `@moderado/contracts`.
+- **Milestone 2**: Workspace security jail, path canonicalization, diff generation, and 7 core tools `@moderado/tools`.
+- **Milestone 3**:
+  - `packages/providers/src/fake/fake_provider.ts`: In-memory mock adapter supporting model discovery, queuing text completions, queuing tool calls, simulating network errors, and recording calls for assertions.
+  - `packages/providers/src/nvidia/sse_parser.ts`: Streaming SSE parser converting byte chunks into normalized `ChatCompletionChunk` instances with tool call deltas and usage stats.
+  - `packages/providers/src/nvidia/nvidia_adapter.ts`: Native HTTP adapter targeting NVIDIA NIM `/v1/models` and `/v1/chat/completions`:
+    - Zero external HTTP libraries (pure Node.js native `fetch`).
+    - Maps wire formats into normalized `ChatMessage` and `ProviderToolDeclaration` contracts.
+    - Error mapping: 401/403 $\to$ `AuthenticationError`, 429 $\to$ `RateLimitError` (extracting `Retry-After` header), 5xx $\to$ `ModelUnavailableError`.
+    - Cancellation via `AbortSignal`.
 - Authored and verified Vitest test suites:
-  - `packages/tools/tests/jail.test.ts` (6 tests passing)
-  - `packages/tools/tests/diff.test.ts` (3 tests passing)
-  - `packages/tools/tests/tools.test.ts` (15 tests passing)
-  - Total across workspace: 4 test files, 40 tests passing in 1.62s.
-- Clean build: `tsc` compiles both packages with zero type errors.
+  - `packages/providers/tests/fake_provider.test.ts` (4 tests passing)
+  - `packages/providers/tests/nvidia_adapter.test.ts` (6 tests passing against local offline HTTP server)
+  - Workspace total: 6 test files, 50 tests passing in 1.66s.
+- Clean build: `tsc` compiles `@moderado/contracts`, `@moderado/tools`, and `@moderado/providers` with zero errors.
 
 ## In progress
 
-- Staging and committing Milestone 2.
+- Staging and committing Milestone 3.
 
 ## Working tree
 
 - Modified:
-  - `VERSION` (`v0.1.0+2609163`)
+  - `VERSION` (`v0.1.0+2609164`)
   - `HANDOFF.md`
   - `package-lock.json`
-  - `packages/contracts/src/tools.ts`
 - Added:
-  - `packages/tools/`
+  - `packages/providers/`
 
 ## Checks
 
 - `npm --workspace=@moderado/contracts run build` — PASS
 - `npm --workspace=@moderado/tools run build` — PASS
-- `npm test` — PASS (40 tests, 4 test files)
+- `npm --workspace=@moderado/providers run build` — PASS
+- `npm test` — PASS (50 tests, 6 test files)
 
 ## Decisions and context
 
-- Ponytail standard library: Zero external dependencies in `packages/tools`; relies exclusively on native Node.js (`node:fs`, `node:path`, `node:child_process`, `node:crypto`).
-- Windows batch safety: Rejects direct execution of `.bat` / `.cmd` with `shell: false`, requiring explicit `cmd.exe /c` invocation to guarantee full visibility during user approval.
-- Environment scrubbing: `process.env` cloned and cleaned before spawning commands to prevent API key exfiltration by executed programs.
+- Ponytail HTTP: Used native Node.js `fetch` and `ReadableStream` instead of Axios or third-party HTTP clients.
+- Offline automated testing: Automated CI/Vitest runs must never hit live NVIDIA endpoints or require real keys; local mock HTTP server guarantees deterministic test runs.
+- Model discovery resilience: Safely handles both array and `{ data: [...] }` formats from `/v1/models`.
 
 ## Blockers
 
@@ -62,5 +59,5 @@ Completed **Milestone 2: Workspace Security Jail & Tools Engine (`packages/tools
 
 ## Next action
 
-1. Commit Milestone 2: `git add . && git commit -m "v0.1.0+2609163 feat(tools): implement workspace jail and 7 core tools engine"` and push to `origin/master`.
-2. Begin **Milestone 3: Model Discovery & Provider Adapters (`packages/providers`)**.
+1. Commit Milestone 3: `git add . && git commit -m "v0.1.0+2609164 feat(providers): implement fake and NVIDIA NIM provider adapters with SSE streaming"` and push to `origin/master`.
+2. Begin **Milestone 4: Core Agent Loop, Free-First Router & Policy Engine (`packages/core`)**.
