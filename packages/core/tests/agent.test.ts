@@ -207,4 +207,19 @@ describe('AgentLoop (Core Execution Engine)', () => {
     const cancellationEvent = events.find((e) => e.type === 'cancellation');
     expect(cancellationEvent).toBeDefined();
   });
+
+  it('gracefully handles and completes when model uses pseudo conversational tool (answer_directly)', async () => {
+    provider.queueToolCallResponse('answer_directly', { text: 'I am Moderado AI coding agent.' });
+
+    const result = await loop.run('who are you?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.finalMessage).toContain('I am Moderado AI coding agent.');
+  });
 });

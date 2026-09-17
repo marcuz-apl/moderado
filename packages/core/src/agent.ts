@@ -39,9 +39,24 @@ export interface AgentRunResult {
 const DEFAULT_SYSTEM_PROMPT = `You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
 You follow the Ponytail Decision Ladder: YAGNI, standard library first, zero unnecessary dependencies, and minimal code.
 Use the provided workspace tools to inspect, read, search, modify, and test files within the workspace.
-If the user asks a question, query, or conversational prompt that does not require modifying code, answer directly with text instead of calling tools.
-Never write or overwrite files (such as README.md) unless specifically requested by the user's prompt.
-Always inspect existing code before editing. Keep edits focused, clean, and test-driven.`;
+
+TOOL USAGE RULES:
+- ONLY invoke tools when you actually need to inspect or modify the workspace.
+- Do NOT invent tool names. Do NOT call tools like "answer_directly" or "respond".
+- For questions, explanations, greetings, or conversational prompts, output regular markdown text directly without any tool calls.
+- Never write or overwrite workspace files (such as README.md) unless explicitly commanded to create or edit that file.
+- Always inspect existing code before editing. Keep edits focused, clean, and test-driven.`;
+
+const PSEUDO_ANSWER_TOOLS = new Set([
+  'answer_directly',
+  'answer',
+  'respond',
+  'response',
+  'chat',
+  'message',
+  'final_answer',
+  'reply',
+]);
 
 export class AgentLoop {
   async run(task: string, options: AgentRunOptions): Promise<AgentRunResult> {
@@ -266,6 +281,40 @@ export class AgentLoop {
           timestamp: Date.now(),
         });
 
+        if (PSEUDO_ANSWER_TOOLS.has(call.name.toLowerCase())) {
+          const answerText =
+            (typeof call.arguments.text === 'string' && call.arguments.text) ||
+            (typeof call.arguments.message === 'string' && call.arguments.message) ||
+            (typeof call.arguments.content === 'string' && call.arguments.content) ||
+            (typeof call.arguments.response === 'string' && call.arguments.response) ||
+            (typeof call.arguments.answer === 'string' && call.arguments.answer) ||
+            (typeof call.arguments._raw === 'string' && call.arguments._raw) ||
+            JSON.stringify(call.arguments);
+
+          emit({
+            type: 'assistant_delta',
+            delta: (assistantText ? '\n' : '') + answerText,
+            timestamp: Date.now(),
+          });
+          assistantText = (assistantText ? assistantText + '\n' : '') + answerText;
+          finalAssistantText = assistantText;
+
+          const handledResult: ToolResult = {
+            toolName: call.name,
+            status: 'success',
+            output: 'Response delivered.',
+          };
+          emit({ type: 'tool_result', toolCallId: call.id, result: handledResult, timestamp: Date.now() });
+          messages.push({
+            role: 'tool',
+            toolCallId: call.id,
+            name: call.name,
+            content: handledResult.output,
+            status: 'success',
+          });
+          continue;
+        }
+
         const tool = options.tools.get(call.name);
         if (!tool) {
           const notFoundResult: ToolResult = {
@@ -397,6 +446,26 @@ export class AgentLoop {
           content: result.output,
           status: result.status,
         });
+      }
+
+      // If all executed tools in this turn were pseudo-answering tools, task is complete!
+      const hasRealTool = completedToolCalls.some(
+        (c) => !PSEUDO_ANSWER_TOOLS.has(c.name.toLowerCase())
+      );
+      if (!hasRealTool) {
+        emit({
+          type: 'completion',
+          status: 'completed',
+          totalSteps: step,
+          summary: assistantText || undefined,
+          timestamp: Date.now(),
+        });
+        return {
+          status: 'completed',
+          totalSteps: step,
+          finalMessage: assistantText,
+          selectedModel: currentModel,
+        };
       }
     }
 
