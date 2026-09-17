@@ -34,14 +34,18 @@ describe('OpenCode-style Welcome TUI', () => {
     const lines = output.split('\n');
     expect(lines.length).toBe(5);
 
-    // Line 1: top dash line (OpenCode box-drawing style)
-    expect(stripAnsi(lines[0])).toBe('─'.repeat(80));
+    // Card is centered: width 80 terminal → card width 78, indent 1
+    const expectedWidth = 78;
+    const expectedIndent = ' '.repeat(1);
 
-    // Line 2: command taking text box with placeholder
-    expect(stripAnsi(lines[1])).toBe('❯ Ask anything, I am all ears...');
+    // Line 1: top dash line (OpenCode box-drawing style, centered)
+    expect(stripAnsi(lines[0])).toBe(expectedIndent + '─'.repeat(expectedWidth));
 
-    // Line 3: bottom dash line (OpenCode box-drawing style)
-    expect(stripAnsi(lines[2])).toBe('─'.repeat(80));
+    // Line 2: command taking text box with placeholder (centered)
+    expect(stripAnsi(lines[1])).toBe(expectedIndent + '❯ Ask anything, I am all ears...');
+
+    // Line 3: bottom dash line (OpenCode box-drawing style, centered)
+    expect(stripAnsi(lines[2])).toBe(expectedIndent + '─'.repeat(expectedWidth));
 
     // Line 4: model name, tokens, cost, mode
     const line4Plain = stripAnsi(lines[3]);
@@ -68,7 +72,8 @@ describe('OpenCode-style Welcome TUI', () => {
     });
 
     const lines = output.split('\n');
-    expect(stripAnsi(lines[1])).toBe('❯ refactor database layer');
+    // Card centered on an 80-col terminal → 1-space indent
+    expect(stripAnsi(lines[1])).toBe(' ❯ refactor database layer');
     expect(stripAnsi(lines[3])).toContain('[Plan] / Execute (Tab)');
     expect(stripAnsi(lines[4])).toContain('Auto-approve all enabled (Shift+Tab)');
   });

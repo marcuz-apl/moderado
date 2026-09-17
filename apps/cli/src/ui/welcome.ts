@@ -26,9 +26,34 @@ export function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 }
 
+/** Visible (ANSI-stripped) length of a line. */
+function visibleLen(str: string): number {
+  return stripAnsi(str).length;
+}
+
+/** Card width: nearly full terminal width, like OpenCode/Cline. */
+export function getWelcomeCardWidth(width?: number): number {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  return Math.max(70, Math.min(terminalWidth - 2, 120));
+}
+
+/** Left indent that centers a block of `blockWidth` visible columns on the terminal. */
+export function getWelcomeIndent(blockWidth: number, width?: number): number {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  return Math.max(0, Math.floor((terminalWidth - blockWidth) / 2));
+}
+
+/** Center each line of a block independently (used for the ASCII logo / hints). */
+function centerBlock(lines: string[], width?: number): string[] {
+  return lines.map((line) => {
+    const pad = getWelcomeIndent(visibleLen(line), width);
+    return ' '.repeat(pad) + line;
+  });
+}
+
 export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
-  const terminalWidth = options.width ?? (process.stdout.columns || 80);
-  const width = Math.max(60, Math.min(terminalWidth, 80));
+  const width = getWelcomeCardWidth(options.width);
+  const indent = ' '.repeat(getWelcomeIndent(width, options.width));
   const hr = `\x1b[38;5;238m${'─'.repeat(width)}\x1b[0m`;
 
   const displayInput =
@@ -73,12 +98,12 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     hr,
     line4,
     line5,
-  ];
+  ].map((line) => indent + line);
 
   if (options.input && options.input.startsWith('/')) {
     const matching = getMatchingCommands(options.input);
     if (matching.length > 0) {
-      cardLines.push(...renderSuggestionsBox(matching));
+      cardLines.push(...renderSuggestionsBox(matching).map((line) => indent + line));
     }
   }
 
@@ -119,9 +144,9 @@ export function renderSuggestionsBox(commands: SlashCommand[]): string[] {
 export function renderModeradoHeader(): string {
   return [
     '',
-    ...MODERADO_ASCII_LOGO,
+    ...centerBlock(MODERADO_ASCII_LOGO),
     '',
-    COMMAND_HINT,
+    ...centerBlock([COMMAND_HINT]),
   ].join('\n');
 }
 
@@ -246,9 +271,10 @@ export async function promptInteractiveTurn(
     return matching.length > 0 ? matching.length + 2 : 0;
   };
 
-  /** Move cursor to the ❯ input line (Line 2 inside the card). */
+  /** Move cursor to the ❯ input line (Line 2 inside the centered card). */
   const positionCursorOnInput = () => {
-    const cursorCol = 2 + input.length;
+    const cardIndent = getWelcomeIndent(getWelcomeCardWidth());
+    const cursorCol = cardIndent + 2 + input.length;
     const moveUp = 4 + getExtraLines();
     stdout.write(`\x1b[1 q\x1b[?25h\x1b[${moveUp}A\r\x1b[${cursorCol}C`);
   };

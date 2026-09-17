@@ -2,7 +2,7 @@
 
 Updated: 2026-09-17 21:05 UTC  
 Branch: master  
-Version: v0.1.14+260917m  
+Version: v0.1.14+260917n  
 Status: complete  
 
 ## Summary
@@ -30,6 +30,7 @@ Previously completed: layered `/model` popup rendering (`overlayCentered`, `rend
 ## Next action
 
 - Ready for user verification via `moderado` (chat → type `/model` → Enter): expect dimmed background, drop shadow, `❯`-cursor list window with type-to-filter.
+
 
 
 
