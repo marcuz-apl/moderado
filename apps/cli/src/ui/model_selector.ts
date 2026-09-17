@@ -17,6 +17,8 @@ export interface ModelSelectorOptions {
   saveSelectionByDefault?: boolean;
 }
 
+let cachedInventory: { id: string }[] | null = null;
+
 export async function selectModelInteractive(
   options: ModelSelectorOptions = {}
 ): Promise<ModelSelectionResult> {
@@ -29,24 +31,29 @@ export async function selectModelInteractive(
   const router = new Router();
 
   let discoveredEntries: { id: string }[] = [];
-  try {
-    discoveredEntries = await provider.discoverModels(signal);
-  } catch {
-    // If offline or provider fails, use standard builtins
-    discoveredEntries = [
-      { id: 'nvidia/llama-3.1-nemotron-70b-instruct' },
-      { id: 'meta/llama-3.3-70b-instruct' },
-      { id: 'meta/llama-3.2-90b-vision-instruct' },
-      { id: 'meta/llama-3.2-11b-vision-instruct' },
-      { id: 'meta/llama-3.1-70b-instruct' },
-      { id: 'mistralai/mixtral-8x7b-instruct-v0.1' },
-      { id: 'mistralai/mistral-large-2-instruct' },
-      { id: 'deepseek-ai/deepseek-v4-flash-0731' },
-      { id: 'deepseek-ai/deepseek-coder-6.7b-instruct' },
-      { id: 'google/codegemma-7b' },
-      { id: 'ibm/granite-34b-code-instruct' },
-      { id: 'openai/gpt-oss-20b' },
-    ];
+  if (cachedInventory) {
+    discoveredEntries = cachedInventory;
+  } else {
+    process.stdout.write('\n\x1b[36mQuerying NVIDIA NIM model catalog...\x1b[0m\n');
+    try {
+      discoveredEntries = await provider.discoverModels(signal);
+      cachedInventory = discoveredEntries;
+    } catch {
+      discoveredEntries = [
+        { id: 'nvidia/llama-3.1-nemotron-70b-instruct' },
+        { id: 'meta/llama-3.3-70b-instruct' },
+        { id: 'meta/llama-3.2-90b-vision-instruct' },
+        { id: 'meta/llama-3.2-11b-vision-instruct' },
+        { id: 'meta/llama-3.1-70b-instruct' },
+        { id: 'mistralai/mixtral-8x7b-instruct-v0.1' },
+        { id: 'mistralai/mistral-large-2-instruct' },
+        { id: 'deepseek-ai/deepseek-v4-flash-0731' },
+        { id: 'deepseek-ai/deepseek-coder-6.7b-instruct' },
+        { id: 'google/codegemma-7b' },
+        { id: 'ibm/granite-34b-code-instruct' },
+        { id: 'openai/gpt-oss-20b' },
+      ];
+    }
   }
 
   const freeModels: { id: string; desc: string }[] = [];
