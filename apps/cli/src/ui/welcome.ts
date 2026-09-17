@@ -131,31 +131,81 @@ export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
   ].join('\n') + '\n';
 }
 
+export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  const boxWidth = Math.min(terminalWidth, 74);
+  const padLeft = Math.max(0, Math.floor((terminalWidth - boxWidth) / 2));
+  const indent = ' '.repeat(padLeft);
+  const innerW = boxWidth - 4;
+  const shortWs = workspace.length > 38 ? '...' + workspace.slice(-35) : workspace;
+
+  const titleStr = 'Moderado Help & Shortcuts';
+  const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
+
+  const content: string[] = [
+    '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
+    '  \x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
+    '  \x1b[1m/clear\x1b[0m       Reset conversation memory and context history',
+    '  \x1b[1m/help\x1b[0m        Display this commands, shortcuts & version guide',
+    '  \x1b[1m/exit\x1b[0m        Exit Moderado session cleanly',
+    '',
+    '\x1b[1;38;5;114mKeyboard Shortcuts:\x1b[0m',
+    '  \x1b[1mTab\x1b[0m          Toggle between [Plan] and [Execute] mode',
+    '  \x1b[1mShift+Tab\x1b[0m    Toggle Auto-approval on / off for actions',
+    '  \x1b[1mCtrl+C\x1b[0m       Cancel active inference or exit session',
+    '',
+    `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,
+    `\x1b[38;5;245mVersion:\x1b[0m    \x1b[1;38;5;75m${version}\x1b[0m`,
+    '',
+    '\x1b[38;5;244mPress \x1b[1;38;5;75m[Esc]\x1b[0;38;5;244m or \x1b[1;38;5;75m[Enter]\x1b[0;38;5;244m to close\x1b[0m',
+  ];
+
+  const lines: string[] = [];
+  lines.push(indent + '\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
+  for (const item of content) {
+    const plain = item.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    const spaces = Math.max(0, innerW - plain.length);
+    lines.push(indent + '\x1b[38;5;240m│\x1b[0m  ' + item + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
+  }
+  lines.push(indent + '\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
+  return lines;
+}
+
 export interface InteractiveTurnResult {
   text: string;
   mode: 'Plan' | 'Execute';
   autoApprove: boolean;
 }
 
-export async function promptInteractiveTurn(options: {
+export interface PromptInteractiveTurnOptions {
   model: string;
   tokens: number;
   cost: string;
   workspace: string;
+  version?: string;
   initialMode?: 'Plan' | 'Execute';
   initialAutoApprove?: boolean;
   isFirstTurn?: boolean;
   signal?: AbortSignal;
-}): Promise<InteractiveTurnResult> {
+  /** Called when user selects a model via /model. The callback owns the selection UI and returns the new model id, or undefined if cancelled. */
+  onModelSelect?: () => Promise<string | undefined>;
+  /** Called when user issues /clear so caller can reset conversation history. */
+  onClear?: () => void;
+}
+
+export async function promptInteractiveTurn(
+  options: PromptInteractiveTurnOptions
+): Promise<InteractiveTurnResult> {
   const stdin = process.stdin;
   const stdout = process.stdout;
 
+  let currentModel = options.model;
   let currentMode: 'Plan' | 'Execute' = options.initialMode ?? 'Execute';
   let currentAutoApprove = options.initialAutoApprove ?? false;
   let input = '';
 
   const getOptions = (): WelcomeLayoutOptions => ({
-    model: options.model,
+    model: currentModel,
     tokens: options.tokens,
     cost: options.cost,
     workspace: options.workspace,
@@ -164,14 +214,10 @@ export async function promptInteractiveTurn(options: {
     input,
   });
 
-  // Non-TTY fallback
+  // ── Non-TTY fallback ──────────────────────────────────────────────────────
   if (!stdin.isTTY) {
-    if (options.isFirstTurn) {
-      stdout.write('\x1b]0;Moderado\x07');
-      stdout.write(renderFullWelcomeScreen(getOptions()));
-    } else {
-      stdout.write(renderWelcomeCard(getOptions()) + '\n');
-    }
+    stdout.write('\x1b]0;Moderado\x07');
+    stdout.write(renderFullWelcomeScreen(getOptions()));
     const readlineModule = await import('node:readline');
     return new Promise((resolve) => {
       const rl = readlineModule.createInterface({ input: stdin, output: stdout });
@@ -182,7 +228,7 @@ export async function promptInteractiveTurn(options: {
     });
   }
 
-  // TTY Interactive Loop
+  // ── TTY Interactive Loop ───────────────────────────────────────────────────
   const readlineModule = await import('node:readline');
   readlineModule.emitKeypressEvents(stdin);
   stdin.setRawMode(true);
@@ -193,50 +239,49 @@ export async function promptInteractiveTurn(options: {
     return matching.length > 0 ? matching.length + 2 : 0;
   };
 
-  // Position cursor on Line 2 with flashing block
+  /** Move cursor to the ❯ input line (Line 2 inside the card). */
   const positionCursorOnInput = () => {
     const cursorCol = 2 + input.length;
     const moveUp = 4 + getExtraLines();
     stdout.write(`\x1b[1 q\x1b[?25h\x1b[${moveUp}A\r\x1b[${cursorCol}C`);
   };
 
-  if (options.isFirstTurn) {
-    stdout.write('\x1b]0;Moderado\x07');
-    stdout.write('\x1b[2J\x1b[3J\x1b[H');
+  /** Full-screen redraw: clear everything, repaint welcome TUI, reposition cursor. */
+  const redrawFull = () => {
+    stdout.write('\x1b[H\x1b[J');
     stdout.write(renderFullWelcomeScreen(getOptions()));
-  } else {
-    stdout.write(renderWelcomeCard(getOptions()) + '\n');
-  }
-  positionCursorOnInput();
+    positionCursorOnInput();
+  };
 
+  /** Lightweight card-only redraw (while typing). */
   const redrawCard = () => {
-    // From Line 2, move up 1 line to Line 1, clear down, reprint card, reposition cursor
     stdout.write('\x1b[1A\r\x1b[J' + renderWelcomeCard(getOptions()) + '\n');
     positionCursorOnInput();
   };
+
+  // Initial paint
+  if (options.isFirstTurn) {
+    stdout.write('\x1b]0;Moderado\x07');
+    stdout.write('\x1b[2J\x1b[3J\x1b[H');
+  } else {
+    // After an AI response the screen has content below — clear and repaint the full TUI.
+    stdout.write('\x1b[H\x1b[J');
+  }
+  stdout.write(renderFullWelcomeScreen(getOptions()));
+  positionCursorOnInput();
 
   return new Promise((resolve) => {
     const cleanup = () => {
       stdin.removeListener('keypress', onKeypress);
       stdout.write('\x1b[0 q\x1b[?25h');
       if (stdin.isTTY) {
-        try {
-          stdin.setRawMode(false);
-        } catch {
-          // ignore
-        }
+        try { stdin.setRawMode(false); } catch { /* ignore */ }
       }
-      try {
-        stdin.pause();
-      } catch {
-        // ignore
-      }
+      try { stdin.pause(); } catch { /* ignore */ }
     };
 
     const onAbort = () => {
       cleanup();
-      const moveDown = 4 + getExtraLines();
-      stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
       resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
     };
 
@@ -244,86 +289,173 @@ export async function promptInteractiveTurn(options: {
       options.signal.addEventListener('abort', onAbort, { once: true });
     }
 
+    // ── Async keypress handler ────────────────────────────────────────────────
+    // Using a void async IIFE so we can await async operations (model selector)
+    // inside a synchronous event listener.  For any async branch we first
+    // remove ourselves from stdin so no duplicate events fire during the await.
     const onKeypress = (str: string, key: any) => {
-      if (options.signal?.aborted) {
-        cleanup();
-        const moveDown = 4 + getExtraLines();
-        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q`);
-        resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
-        return;
-      }
+      void (async () => {
 
-      if (!key) {
-        if (str && str.length === 1 && str.charCodeAt(0) >= 32) {
+        if (options.signal?.aborted) {
+          cleanup();
+          resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
+          return;
+        }
+
+        // ── Ctrl+C ────────────────────────────────────────────────────────────
+        if (key && key.ctrl && key.name === 'c') {
+          cleanup();
+          stdout.write('\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n');
+          process.exit(0);
+        }
+
+        // ── /help overlay popup ───────────────────────────────────────────────
+        // Triggered when Enter is pressed with "/help" already in the input box.
+        // We keep the main TUI as background and layer the help box on top.
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/help') {
+          input = '';
+          stdin.removeListener('keypress', onKeypress); // pause main handler
+
+          // Paint: full welcome TUI (background) + help box on top
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderFullWelcomeScreen(getOptions()));
+          const helpLines = renderHelpPopupBox(options.version ?? 'v0.1', options.workspace);
+          stdout.write('\n' + helpLines.join('\n') + '\n');
+          stdout.write('\x1b[?25l'); // hide cursor while modal is open
+
+          // Wait for Esc / Enter / q to dismiss
+          await new Promise<void>((dismissResolve) => {
+            const onDismiss = (s: string, k: any) => {
+              if (
+                (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
+                s === 'q' || s === 'Q' ||
+                (k && k.ctrl && k.name === 'c')
+              ) {
+                stdin.removeListener('keypress', onDismiss);
+                dismissResolve();
+              }
+            };
+            stdin.on('keypress', onDismiss);
+          });
+
+          // Restore: repaint the full welcome TUI, show cursor, position on input line
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderFullWelcomeScreen(getOptions()));
+          positionCursorOnInput();
+
+          stdin.on('keypress', onKeypress); // re-attach main handler
+          return;
+        }
+
+        // ── /model overlay popup ──────────────────────────────────────────────
+        // Triggered when Enter is pressed with "/model" in the input box.
+        // We hand off to the caller-supplied onModelSelect (which runs the full
+        // live model-catalog selector in an alternate screen), then restore our TUI.
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/model') {
+          input = '';
+          stdin.removeListener('keypress', onKeypress); // pause main handler
+          stdin.setRawMode(false); // selectModelInteractive owns raw mode
+
+          if (options.onModelSelect) {
+            const newId = await options.onModelSelect();
+            if (newId && newId !== currentModel) {
+              currentModel = newId;
+            }
+          }
+
+          // Restore raw mode and repaint the full welcome TUI
+          readlineModule.emitKeypressEvents(stdin);
+          stdin.setRawMode(true);
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderFullWelcomeScreen(getOptions()));
+          positionCursorOnInput();
+
+          stdin.on('keypress', onKeypress); // re-attach main handler
+          return;
+        }
+
+        // ── /clear ────────────────────────────────────────────────────────────
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/clear') {
+          input = '';
+          options.onClear?.();
+          redrawFull();
+          return;
+        }
+
+        // ── /exit ─────────────────────────────────────────────────────────────
+        if (key && (key.name === 'return' || key.name === 'enter') &&
+            (input.trim() === '/exit' || input.trim() === '/quit')) {
+          cleanup();
+          if (options.signal) options.signal.removeEventListener('abort', onAbort);
+          stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
+          process.exit(0);
+        }
+
+        // ── Normal keys ───────────────────────────────────────────────────────
+        if (!key) {
+          if (str && str.length === 1 && str.charCodeAt(0) >= 32) {
+            input += str;
+            redrawCard();
+          }
+          return;
+        }
+
+        // Shift+Tab — toggle auto-approve
+        if ((key.name === 'tab' && key.shift) || key.sequence === '\x1b[Z') {
+          currentAutoApprove = !currentAutoApprove;
+          redrawCard();
+          return;
+        }
+
+        // Tab — autocomplete slash command or toggle mode
+        if (key.name === 'tab' && !key.shift) {
+          if (input.startsWith('/')) {
+            const matching = getMatchingCommands(input);
+            if (matching.length > 0) {
+              const exactIdx = matching.findIndex((m) => m.name.toLowerCase() === input.toLowerCase());
+              input = exactIdx === -1
+                ? matching[0].name
+                : matching[(exactIdx + 1) % matching.length].name;
+              redrawCard();
+              return;
+            }
+          }
+          currentMode = currentMode === 'Plan' ? 'Execute' : 'Plan';
+          redrawCard();
+          return;
+        }
+
+        // Enter — submit real user message
+        if (key.name === 'return' || key.name === 'enter') {
+          const trimmed = input.trim();
+          cleanup();
+          if (options.signal) options.signal.removeEventListener('abort', onAbort);
+          const moveDown = 4 + getExtraLines();
+          stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
+          resolve({ text: trimmed, mode: currentMode, autoApprove: currentAutoApprove });
+          return;
+        }
+
+        // Backspace
+        if (key.name === 'backspace') {
+          if (input.length > 0) {
+            input = input.slice(0, -1);
+            redrawCard();
+          }
+          return;
+        }
+
+        // Printable character
+        if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key.ctrl && !key.meta) {
           input += str;
           redrawCard();
         }
-        return;
-      }
 
-      // Ctrl+C
-      if (key.ctrl && key.name === 'c') {
-        cleanup();
-        const moveDown = 4 + getExtraLines();
-        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n`);
-        process.exit(0);
-      }
-
-      // Shift+Tab or Backtab sequence (\x1b[Z)
-      if ((key.name === 'tab' && key.shift) || key.sequence === '\x1b[Z') {
-        currentAutoApprove = !currentAutoApprove;
-        redrawCard();
-        return;
-      }
-
-      // Tab alone
-      if (key.name === 'tab' && !key.shift) {
-        if (input.startsWith('/')) {
-          const matching = getMatchingCommands(input);
-          if (matching.length > 0) {
-            const exactIdx = matching.findIndex((m) => m.name.toLowerCase() === input.toLowerCase());
-            if (exactIdx === -1) {
-              input = matching[0].name;
-            } else {
-              input = matching[(exactIdx + 1) % matching.length].name;
-            }
-            redrawCard();
-            return;
-          }
-        }
-        currentMode = currentMode === 'Plan' ? 'Execute' : 'Plan';
-        redrawCard();
-        return;
-      }
-
-      // Enter
-      if (key.name === 'return' || key.name === 'enter') {
-        cleanup();
-        if (options.signal) {
-          options.signal.removeEventListener('abort', onAbort);
-        }
-        const moveDown = 4 + getExtraLines();
-        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
-        resolve({ text: input.trim(), mode: currentMode, autoApprove: currentAutoApprove });
-        return;
-      }
-
-      // Backspace
-      if (key.name === 'backspace') {
-        if (input.length > 0) {
-          input = input.slice(0, -1);
-          redrawCard();
-        }
-        return;
-      }
-
-      // Normal printable text character
-      if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key.ctrl && !key.meta) {
-        input += str;
-        redrawCard();
-      }
+      })();
     };
 
     stdin.on('keypress', onKeypress);
   });
 }
+
+

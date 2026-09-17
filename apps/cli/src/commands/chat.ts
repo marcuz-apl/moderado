@@ -10,7 +10,6 @@ import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
 import { promptInteractiveTurn } from '../ui/welcome.js';
-import { showHelpModal } from '../ui/help_modal.js';
 
 export async function handleChatSession(
   args: CliParsedArgs,
@@ -62,7 +61,7 @@ export async function handleChatSession(
     config = loadConfig();
   }
 
-  // 3. Enter Chat Terminal (Welcome TUI with OpenCode-style layout)
+  // 3. Enter Chat Terminal (Welcome TUI with OpenCode-style persistent background layout)
   process.stdout.write('\x1b]0;Moderado\x07');
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
   let activeAutoApprove = false;
@@ -86,72 +85,51 @@ export async function handleChatSession(
 
   let conversationHistory: ChatMessage[] = [];
 
-  // 4. Continuous interactive loop - stay until /exit
+  // 4. Continuous interactive loop — the full TUI is the persistent background on every turn.
+  //    /help, /model, /clear, and /exit are handled inside promptInteractiveTurn via callbacks;
+  //    only genuine user messages resolve the promise and reach this loop.
   while (!signal?.aborted) {
     const displayModel = currentModel ?? 'Auto (Free-First)';
     const costDisplay = '$0.00';
 
-    let trimmed: string;
+    const turn = await promptInteractiveTurn({
+      model: displayModel,
+      tokens: Math.round(sessionTokens),
+      cost: costDisplay,
+      workspace: canonicalWorkspace,
+      version,
+      initialMode: activeMode,
+      initialAutoApprove: activeAutoApprove,
+      isFirstTurn: isFirst,
+      signal,
 
-    if (isFirst) {
-      const turn = await promptInteractiveTurn({
-        model: displayModel,
-        tokens: Math.round(sessionTokens),
-        cost: costDisplay,
-        workspace: canonicalWorkspace,
-        initialMode: activeMode,
-        initialAutoApprove: activeAutoApprove,
-        isFirstTurn: true,
-        signal,
-      });
+      // /model popup: welcome.ts pauses raw-mode, calls this, then redraws the TUI.
+      onModelSelect: async () => {
+        const selection = await selectModelInteractive({
+          apiKey,
+          currentModel,
+          signal,
+          saveSelectionByDefault: true,
+        });
+        if (selection.modelId && selection.modelId !== currentModel) {
+          currentModel = selection.modelId;
+          config = loadConfig();
+        }
+        return selection.modelId;
+      },
 
-      activeMode = turn.mode;
-      activeAutoApprove = turn.autoApprove;
-      trimmed = turn.text.trim();
-      isFirst = false;
-    } else {
-      const promptLine = await askQuestion('\x1b[1;38;5;75m❯\x1b[0m ', { signal });
-      trimmed = promptLine.trim();
-    }
+      // /clear: reset conversation history; welcome.ts redraws the TUI automatically.
+      onClear: () => {
+        conversationHistory = [];
+      },
+    });
+
+    activeMode = turn.mode;
+    activeAutoApprove = turn.autoApprove;
+    const trimmed = turn.text.trim();
+    isFirst = false;
 
     if (!trimmed) {
-      continue;
-    }
-
-    // Handle slash commands
-    if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
-      process.stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
-      try {
-        process.stdin.pause();
-      } catch {
-        // ignore
-      }
-      return 0;
-    }
-
-    if (trimmed === '/help') {
-      await showHelpModal(version, canonicalWorkspace, signal);
-      continue;
-    }
-
-    if (trimmed === '/clear') {
-      conversationHistory = [];
-      process.stdout.write('\x1b[32m✔ Conversation memory cleared.\x1b[0m\n\n');
-      continue;
-    }
-
-    if (trimmed === '/model') {
-      const selection = await selectModelInteractive({
-        apiKey,
-        currentModel,
-        signal,
-        saveSelectionByDefault: true,
-      });
-      if (selection.modelId && selection.modelId !== currentModel) {
-        currentModel = selection.modelId;
-        config = loadConfig();
-        process.stdout.write(`\x1b[32m✔ Active model updated:\x1b[0m \x1b[1;38;5;75m${currentModel}\x1b[0m\n\n`);
-      }
       continue;
     }
 
@@ -194,7 +172,7 @@ export async function handleChatSession(
       process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`);
     }
 
-    // Once the question gets answered, DON'T exit! Stay here for next input.
+    // After the AI response, loop back — promptInteractiveTurn redraws the full TUI.
   }
 
   return 0;
