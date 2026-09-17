@@ -63,27 +63,24 @@ export async function handleChatSession(
 
   // 3. Enter Chat Terminal (REPL like OpenCode / Cline)
   const displayModel = currentModel ?? 'Auto (Free-First)';
-  const shortWs = canonicalWorkspace.length > 42
-    ? '...' + canonicalWorkspace.slice(-39)
+  const shortWs = canonicalWorkspace.length > 45
+    ? '...' + canonicalWorkspace.slice(-42)
     : canonicalWorkspace;
 
   process.stdout.write(
     '\n' +
       renderBox(
         [
-          `\x1b[38;5;245mDirectory\x1b[0m   \x1b[38;5;253m${shortWs}\x1b[0m`,
-          `\x1b[38;5;245mModel\x1b[0m       \x1b[38;5;141m${displayModel}\x1b[0m \x1b[38;5;114m● ready\x1b[0m`,
-          '---',
-          `\x1b[38;5;245mCommands\x1b[0m    \x1b[38;5;222m/help\x1b[0m · \x1b[38;5;222m/model\x1b[0m · \x1b[38;5;222m/clear\x1b[0m · \x1b[38;5;222m/exit\x1b[0m`,
+          `\x1b[1;38;5;255mModerado\x1b[0m \x1b[38;5;242m${version}\x1b[0m`,
+          `\x1b[38;5;242m${shortWs}\x1b[0m`,
+          `\x1b[38;5;245mModel:\x1b[0m \x1b[38;5;75m${displayModel}\x1b[0m`,
         ],
         {
-          title: `MODERADO CLI ${version}`,
-          minWidth: 62,
-          borderColor: '\x1b[38;5;240m',
-          titleColor: '\x1b[1;38;5;75m',
+          minWidth: 46,
+          borderColor: '\x1b[38;5;238m',
         }
       ) +
-      '\n'
+      '\x1b[38;5;242mType /help for commands, /exit to quit.\x1b[0m\n\n'
   );
 
   const provider = new NvidiaAdapter({ apiKey });
@@ -103,11 +100,7 @@ export async function handleChatSession(
 
   // 4. Continuous interactive loop - stay until /exit
   while (!signal?.aborted) {
-    const modelBadge = currentModel ? currentModel.split('/').pop() : 'auto';
-    process.stdout.write(
-      `\x1b[38;5;240m╭─\x1b[0m \x1b[1;38;5;75mmoderado\x1b[0m \x1b[38;5;240m(\x1b[38;5;141m${modelBadge}\x1b[38;5;240m)\x1b[0m \x1b[38;5;243m${path.basename(canonicalWorkspace)}\x1b[0m\n`
-    );
-    const promptLine = await askQuestion('\x1b[38;5;240m╰─\x1b[1;38;5;75m❯\x1b[0m ', { signal });
+    const promptLine = await askQuestion('\x1b[1;38;5;75m❯\x1b[0m ', { signal });
     const trimmed = promptLine.trim();
 
     if (!trimmed) {
@@ -116,28 +109,17 @@ export async function handleChatSession(
 
     // Handle slash commands
     if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
-      process.stdout.write('\n\x1b[32m✔ Session terminated. Goodbye!\x1b[0m\n\n');
+      process.stdout.write('\x1b[32mGoodbye!\x1b[0m\n\n');
       return 0;
     }
 
     if (trimmed === '/help') {
       process.stdout.write(
-        '\n' +
-          renderBox(
-            [
-              `\x1b[38;5;222m/model\x1b[0m    Switch AI model (Free Trial or Paid NIM)`,
-              `\x1b[38;5;222m/clear\x1b[0m    Reset conversation memory & start fresh`,
-              `\x1b[38;5;222m/help\x1b[0m     Display this command reference`,
-              `\x1b[38;5;222m/exit\x1b[0m     Terminate session & return to shell`,
-            ],
-            {
-              title: 'Commands',
-              minWidth: 55,
-              borderColor: '\x1b[38;5;240m',
-              titleColor: '\x1b[1;38;5;75m',
-            }
-          ) +
-          '\n'
+        '\n\x1b[1mCommands:\x1b[0m\n' +
+        '  \x1b[38;5;75m/model\x1b[0m    Switch AI model\n' +
+        '  \x1b[38;5;75m/clear\x1b[0m    Reset conversation memory\n' +
+        '  \x1b[38;5;75m/help\x1b[0m     Display command reference\n' +
+        '  \x1b[38;5;75m/exit\x1b[0m     Exit Moderado\n\n'
       );
       continue;
     }

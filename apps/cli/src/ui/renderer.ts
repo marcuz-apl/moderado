@@ -10,9 +10,7 @@ export class TerminalRenderer {
   private readonly stdout: NodeJS.WritableStream;
   private readonly verbose: boolean;
   private readonly isChatMode: boolean;
-  private lastEventType?: string;
   private isStreamingAssistant = false;
-  private isStreamingReasoning = false;
   private hasTransientProgress = false;
 
   constructor(options: TerminalRendererOptions = {}) {
@@ -27,13 +25,12 @@ export class TerminalRenderer {
         this.finishAssistantStream();
         this.clearTransientProgress();
 
-        // In interactive chat mode, model is already visible in the prompt.
+        // In interactive chat mode, model is already configured.
         // Only print if there is an unexpected fallback.
         if (
           this.isChatMode &&
           (event.reason === 'initial_selection' || event.reason === 'user_pinned')
         ) {
-          this.lastEventType = 'model_change';
           break;
         }
 
@@ -46,7 +43,6 @@ export class TerminalRenderer {
         this.stdout.write(
           `\x1b[38;5;141m● Model:\x1b[0m ${reasonText} \x1b[1;38;5;75m${event.newModelId}\x1b[0m \x1b[38;5;244m(${event.accessClass})\x1b[0m\n`
         );
-        this.lastEventType = 'model_change';
         break;
       }
 
@@ -55,7 +51,6 @@ export class TerminalRenderer {
           this.finishAssistantStream();
           this.clearTransientProgress();
           this.stdout.write(`\x1b[38;5;244m◇ ${event.status}\x1b[0m\n`);
-          this.lastEventType = 'progress';
         } else {
           this.stdout.write(`\r\x1b[K\x1b[38;5;245m⠋ Thinking...\x1b[0m`);
           this.hasTransientProgress = true;
@@ -64,33 +59,20 @@ export class TerminalRenderer {
       }
 
       case 'reasoning_delta': {
-        this.clearTransientProgress();
-        if (!this.isStreamingReasoning) {
-          if (this.lastEventType && this.lastEventType !== 'reasoning_delta') {
-            this.stdout.write('\n');
-          }
-          this.stdout.write('\x1b[38;5;240m╭─ 💭 \x1b[1;38;5;250mThought\x1b[0m\n\x1b[38;5;244m');
-          this.isStreamingReasoning = true;
+        // Do not display internal thinking process. Keep subtle transient spinner.
+        if (!this.hasTransientProgress) {
+          this.stdout.write('\r\x1b[K\x1b[38;5;245m⠋ Thinking...\x1b[0m');
+          this.hasTransientProgress = true;
         }
-        this.stdout.write(event.delta);
-        this.lastEventType = 'reasoning_delta';
         break;
       }
 
       case 'assistant_delta': {
         this.clearTransientProgress();
-        if (this.isStreamingReasoning) {
-          this.finishReasoningStream();
-        }
         if (!this.isStreamingAssistant) {
-          if (this.lastEventType && this.lastEventType !== 'assistant_delta') {
-            this.stdout.write('\n');
-          }
-          this.stdout.write('\x1b[1;38;5;75m● Moderado\x1b[0m\n\n');
           this.isStreamingAssistant = true;
         }
         this.stdout.write(event.delta);
-        this.lastEventType = 'assistant_delta';
         break;
       }
 
@@ -102,9 +84,8 @@ export class TerminalRenderer {
         const truncatedArgs = argsStr.length > 65 ? argsStr.slice(0, 62) + '...' : argsStr;
 
         this.stdout.write(
-          `\n\x1b[38;5;240m╭─ ${icon} \x1b[1;38;5;75m${event.toolName}\x1b[0m \x1b[38;5;245m${truncatedArgs}\x1b[0m\n`
+          `\x1b[38;5;242m╭─\x1b[0m ${icon} \x1b[38;5;75m${event.toolName}\x1b[0m \x1b[38;5;244m${truncatedArgs}\x1b[0m\n`
         );
-        this.lastEventType = 'tool_call_initiated';
         break;
       }
 
@@ -123,9 +104,8 @@ export class TerminalRenderer {
         const preview = lines[0] + (lines.length > 1 ? ` ... (+${lines.length - 1} lines)` : '');
 
         this.stdout.write(
-          `\x1b[38;5;240m╰─\x1b[0m ${statusColor}${statusIcon} ${event.result.status}\x1b[0m \x1b[38;5;245m${preview.slice(0, 75)}\x1b[0m\n\n`
+          `\x1b[38;5;242m╰─\x1b[0m ${statusColor}${statusIcon}\x1b[0m \x1b[38;5;244m${preview.slice(0, 75)}\x1b[0m\n\n`
         );
-        this.lastEventType = 'tool_result';
         break;
       }
 
@@ -135,8 +115,7 @@ export class TerminalRenderer {
 
         if (this.isChatMode) {
           // Clean finish without large batch completion card
-          this.stdout.write('\n');
-          this.lastEventType = 'completion';
+          this.stdout.write('\n\n');
           break;
         }
 
@@ -153,7 +132,6 @@ export class TerminalRenderer {
           `\x1b[90m│\x1b[0m  ${icon} ${bannerColor}=== Session Finished: ${event.status.toUpperCase()} (Total Steps: ${event.totalSteps}) ===\x1b[0m\n` +
           `\x1b[90m╰─────────────────────────────────────────────────────────────╯\x1b[0m\n`
         );
-        this.lastEventType = 'completion';
         break;
       }
 
@@ -161,7 +139,6 @@ export class TerminalRenderer {
         this.finishAssistantStream();
         this.clearTransientProgress();
         this.stdout.write(`\n\x1b[1;31m✖ [Error ${event.code}]\x1b[0m ${event.message}\n`);
-        this.lastEventType = 'error';
         break;
       }
 
@@ -169,7 +146,6 @@ export class TerminalRenderer {
         this.finishAssistantStream();
         this.clearTransientProgress();
         this.stdout.write(`\n\x1b[1;33m⚠ [Cancelled]\x1b[0m ${event.reason}\n`);
-        this.lastEventType = 'cancellation';
         break;
       }
 
@@ -180,19 +156,9 @@ export class TerminalRenderer {
 
   private finishAssistantStream(): void {
     this.clearTransientProgress();
-    if (this.isStreamingReasoning) {
-      this.finishReasoningStream();
-    }
     if (this.isStreamingAssistant) {
       this.stdout.write('\n');
       this.isStreamingAssistant = false;
-    }
-  }
-
-  private finishReasoningStream(): void {
-    if (this.isStreamingReasoning) {
-      this.stdout.write('\x1b[0m\n\x1b[38;5;240m╰──────────────────────────────────────────────\x1b[0m\n\n');
-      this.isStreamingReasoning = false;
     }
   }
 

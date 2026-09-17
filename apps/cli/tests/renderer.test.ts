@@ -58,7 +58,7 @@ describe('TerminalRenderer', () => {
     expect(captured).toContain('meta/llama-3.3-70b-instruct');
     expect(captured).toContain('Inspecting files...');
     expect(captured).toContain('read_file');
-    expect(captured).toContain('success');
+    expect(captured).toContain('✔');
     expect(captured).toContain('=== Session Finished: COMPLETED');
   });
 
@@ -97,9 +97,7 @@ describe('TerminalRenderer', () => {
     });
 
     expect(captured).toContain('Thinking...');
-    expect(captured).toContain('Thought');
-    expect(captured).toContain('Analyzing user inquiry...');
-    expect(captured).toContain('Moderado');
+    expect(captured).not.toContain('Analyzing user inquiry...');
     expect(captured).toContain('Here is the answer.');
   });
 
