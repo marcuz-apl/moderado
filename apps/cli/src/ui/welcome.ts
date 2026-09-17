@@ -123,6 +123,7 @@ export async function promptInteractiveTurn(options: {
   // Non-TTY fallback
   if (!stdin.isTTY) {
     if (options.isFirstTurn) {
+      stdout.write('\x1b]0;Moderado\x07');
       stdout.write(renderFullWelcomeScreen(getOptions()));
     } else {
       stdout.write(renderWelcomeCard(getOptions()) + '\n');
@@ -151,6 +152,7 @@ export async function promptInteractiveTurn(options: {
   };
 
   if (options.isFirstTurn) {
+    stdout.write('\x1b]0;Moderado\x07');
     stdout.write(renderFullWelcomeScreen(getOptions()));
   } else {
     stdout.write(renderWelcomeCard(getOptions()) + '\n');

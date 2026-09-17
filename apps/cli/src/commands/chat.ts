@@ -62,6 +62,7 @@ export async function handleChatSession(
   }
 
   // 3. Enter Chat Terminal (Welcome TUI with OpenCode-style layout)
+  process.stdout.write('\x1b]0;Moderado\x07');
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
   let activeAutoApprove = false;
   let sessionTokens = 0;
