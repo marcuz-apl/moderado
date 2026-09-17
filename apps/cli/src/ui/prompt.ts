@@ -54,6 +54,81 @@ export async function askSecret(
   return askQuestion(query, options);
 }
 
+export async function askModalChoice(
+  promptMsg: string,
+  options: PromptOptions = {}
+): Promise<string> {
+  const stdin = (options.stdin ?? process.stdin) as any;
+  const stdout = (options.stdout ?? process.stdout) as any;
+
+  if (!stdin.isTTY) {
+    return askQuestion(promptMsg, options);
+  }
+
+  return new Promise((resolve) => {
+    readline.emitKeypressEvents(stdin);
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    let buffer = '';
+    stdout.write(promptMsg);
+
+    let closed = false;
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      stdin.removeListener('keypress', onKeypress);
+      try {
+        stdin.setRawMode(false);
+      } catch {
+        // ignore
+      }
+    };
+
+    const onKeypress = (str: string, key: any) => {
+      if (key && (key.name === 'escape' || (key.ctrl && key.name === 'c'))) {
+        cleanup();
+        stdout.write('\r\n');
+        resolve('q');
+        return;
+      }
+
+      if (key && (key.name === 'return' || key.name === 'enter')) {
+        cleanup();
+        stdout.write('\r\n');
+        resolve(buffer.trim());
+        return;
+      }
+
+      if (key && (key.name === 'backspace' || key.name === 'delete')) {
+        if (buffer.length > 0) {
+          buffer = buffer.slice(0, -1);
+          stdout.write('\b \b');
+        }
+        return;
+      }
+
+      if (str && !key.ctrl && !key.meta) {
+        buffer += str;
+        stdout.write(str);
+      }
+    };
+
+    if (options.signal) {
+      options.signal.addEventListener(
+        'abort',
+        () => {
+          cleanup();
+          resolve('q');
+        },
+        { once: true }
+      );
+    }
+
+    stdin.on('keypress', onKeypress);
+  });
+}
+
 export interface SelectOption {
   label: string;
   value: string;

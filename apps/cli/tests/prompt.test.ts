@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { PassThrough } from 'node:stream';
-import { askQuestion, askSelect, SelectOption } from '../src/ui/prompt.js';
+import { askQuestion, askSelect, askModalChoice, SelectOption } from '../src/ui/prompt.js';
 
 describe('CLI Terminal Prompts', () => {
   it('reads answer from stdin stream', async () => {
@@ -12,6 +12,17 @@ describe('CLI Terminal Prompts', () => {
 
     const result = await promise;
     expect(result).toBe('Moderado');
+  });
+
+  it('askModalChoice reads input via non-TTY stream fallback', async () => {
+    const stdin = new PassThrough();
+    const stdout = new PassThrough();
+
+    const promise = askModalChoice('Select option: ', { stdin, stdout });
+    stdin.write('1\n');
+
+    const result = await promise;
+    expect(result).toBe('1');
   });
 
   it('selects option by index from choices', async () => {

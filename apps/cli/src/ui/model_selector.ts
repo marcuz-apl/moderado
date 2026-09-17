@@ -1,7 +1,6 @@
 import { NvidiaAdapter } from '@moderado/providers';
 import { Router } from '@moderado/core';
-import { askQuestion, askSelect, SelectOption } from './prompt.js';
-import { renderBox } from './box.js';
+import { askQuestion, askSelect, askModalChoice, SelectOption } from './prompt.js';
 import { loadConfig, saveConfig, resolveApiKey } from '../config.js';
 
 export interface ModelSelectionResult {
@@ -23,7 +22,17 @@ let cachedInventory: { id: string }[] | null = null;
 export async function selectModelInteractive(
   options: ModelSelectorOptions = {}
 ): Promise<ModelSelectionResult> {
-  return await executeModelSelection(options);
+  const isTty = Boolean(process.stdout.isTTY && process.stdin.isTTY);
+  if (isTty) {
+    process.stdout.write('\x1b[?1049h\x1b[?25l\x1b[H\x1b[2J');
+  }
+  try {
+    return await executeModelSelection(options);
+  } finally {
+    if (isTty) {
+      process.stdout.write('\x1b[?25h\x1b[?1049l');
+    }
+  }
 }
 
 async function executeModelSelection(
@@ -120,22 +129,35 @@ async function executeModelSelection(
   }
   menuLines.push(`\x1b[1;38;5;245m[q]\x1b[0m Cancel & Close Window    \x1b[38;5;244m(No changes)\x1b[0m`);
 
-  process.stdout.write(
-    '\n' +
-      renderBox(menuLines, {
-        title: 'Model Selection Window',
-        minWidth: 58,
-        borderColor: '\x1b[38;5;240m',
-        titleColor: '\x1b[1;38;5;75m',
-      }) +
-      '\n'
-  );
+  const cols = process.stdout.columns || 80;
+  const rows = process.stdout.rows || 24;
+  const boxWidth = Math.min(Math.max(62, Math.min(cols - 4, 72)), cols);
+  const leftPad = Math.max(0, Math.floor((cols - boxWidth) / 2));
+  const topPad = Math.max(1, Math.floor((rows - (menuLines.length + 6)) / 2));
+
+  let out = '\x1b[H\x1b[2J' + '\n'.repeat(topPad);
+  const pad = ' '.repeat(leftPad);
+
+  const titleStr = 'Model Selection Window';
+  const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
+  out += pad + '\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m\n';
+
+  for (const line of menuLines) {
+    if (line === '---') {
+      out += pad + '\x1b[38;5;240m├─' + '─'.repeat(Math.max(0, boxWidth - 4)) + '─┤\x1b[0m\n';
+      continue;
+    }
+    const plain = line.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    const spaces = Math.max(0, boxWidth - 4 - plain.length);
+    out += pad + '\x1b[38;5;240m│\x1b[0m  ' + line + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m\n';
+  }
+
+  out += pad + '\x1b[38;5;240m╰' + '─'.repeat(Math.max(0, boxWidth - 2)) + '╯\x1b[0m\n';
+  process.stdout.write(out);
 
   const maxOption = activeModel ? 6 : 5;
-  const input = await askQuestion(
-    `Select [1-${maxOption}], [q] to cancel, or type keyword: `,
-    { signal }
-  );
+  const promptMsg = pad + `\x1b[38;5;244mSelect [1-${maxOption}], [Esc]/[Enter] to close, or type keyword:\x1b[0m `;
+  const input = await askModalChoice(promptMsg, { signal });
 
   let chosenModelId: string | undefined = undefined;
   let isPaid = false;
@@ -345,7 +367,9 @@ async function browseOrSearchList(
   signal?: AbortSignal
 ): Promise<string> {
   process.stdout.write(`\n\x1b[1m${title}\x1b[0m (${modelIds.length} models)\n`);
-  const filter = await askQuestion('Filter by keyword (e.g. "glm", "flash", "coder") or press Enter to list all: ', { signal });
+  const filter = await askModalChoice('Filter by keyword (e.g. "glm", "flash", "coder"), [Esc] to cancel, or press Enter to list all: ', { signal });
+
+  if (filter === 'q') return '';
 
   if (filter.trim()) {
     return searchAndSelect(filter.trim(), modelIds, router, signal);
@@ -389,10 +413,11 @@ async function pickFromList(
       process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
 
       const promptMsg = page + 1 < totalPages
-        ? `Select [1-${pageChoices.length}], type model name, or press Enter for next page: `
-        : `Select [1-${pageChoices.length}] or type model name: `;
+        ? `Select [1-${pageChoices.length}], [Esc] to cancel, or press Enter for next page: `
+        : `Select [1-${pageChoices.length}] or [Esc] to cancel: `;
 
-      const answer = await askQuestion(promptMsg, { signal });
+      const answer = await askModalChoice(promptMsg, { signal });
+      if (answer === 'q') return '';
       if (!answer && page + 1 < totalPages) {
         page++;
         continue;
