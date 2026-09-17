@@ -1,41 +1,46 @@
 # Project Handoff
 
-Updated: 2026-09-17 15:52 UTC  
+Updated: 2026-09-17 16:01 UTC  
 Branch: master  
-Version: v0.1.2+2609177  
+Version: v0.1.2+2609178  
 Status: complete  
 
 ## Summary
 
-Investigated and eliminated response latency bottlenecks:
-1. **Network Discovery Latency Elimination**: Previously, `AgentLoop.run()` executed `discoverModels()` on every message turn, making an HTTPS GET request to NVIDIA NIM (`/v1/models`) that took 10-15 seconds per query. Now:
-   - When a model is pinned (via config or `--model`), network discovery is bypassed entirely (0ms overhead).
-   - `NvidiaAdapter` maintains an in-memory discovery cache (15-minute TTL) across all operations.
-2. **Reasoning Model Real-time Streaming**: Models like `z-ai/glm-5.3-flash` and `deepseek` stream thinking tokens via `reasoning_content`. Previously, Moderado discarded `reasoning_content`, causing the terminal to appear completely frozen for 30+ seconds while thinking occurred.
-   - Added `reasoningDelta` to `ChatCompletionChunk` in `@moderado/contracts`.
-   - Updated `sse_parser.ts` to capture `reasoning_content` and `thought`.
-   - Emitted `reasoning_delta` in `AgentLoop`.
-   - Built a sleek OpenCode/Cline-style live thinking card (`╭─ 💭 Thinking...` with dimmed streaming tokens) that seamlessly completes when final output starts.
-3. **Transient Progress Feedback**: Terminal displays immediate responsive feedback (`◇ Inferring with <model>...`) on turn submission so the screen is never dead.
-4. **Context Injection**: Injected active model ID and workspace root into the system runtime context.
+Redesigned Start TUI and Chat TUI to Cline / OpenCode design standards:
+1. **Mathematical Box Alignment (`box.ts`)**: Built `renderBox` using `stripAnsi` to guarantee 100% pixel-perfect column alignment for all boxes and cards, eliminating ragged borders and character overshoots.
+2. **Cline-grade Start Hero Card**: Replaced the previous clunky banner with a clean, centered, muted slate-bordered (`\x1b[38;5;240m`) hero card displaying directory, active model with ready indicator, and command shortcuts.
+3. **Streamlined Two-Line Prompt**:
+   `╭─ moderado (glm-5.3-flash) <workspace>`
+   `╰─❯ `
+   Using subdued zinc borders, brand cyan, and purple model badge.
+4. **Chat Mode Streamlining**:
+   - Suppressed redundant `[Model] Pinned...` banners before every answer in chat mode (only shown on unexpected model fallbacks).
+   - Replaced clunky `Step 1/25: Inferring...` status text with a subtle transient spinner `⠋ Thinking...`.
+   - Streaming reasoning tokens now render inside a Cline-grade `╭─ 💭 Thought` block.
+   - Assistant response streams cleanly with `● Moderado` header.
+   - Suppressed the giant batch `=== Session Finished ===` box after single chat turns.
+5. **Approval Dialog & Model Selection Overhaul**:
+   - Replaced raw string-concatenated approval dialog with an enclosed warning card in gold/amber.
+   - Replaced ASCII model selection menu with a structured card.
 
 ## Completed
 
-- `packages/contracts/src/events.ts`: Added `ReasoningDeltaEventSchema` and `ReasoningDeltaEvent` to `AgentEventSchema`.
-- `packages/contracts/src/provider.ts`: Added `reasoningDelta` to `ChatCompletionChunkSchema`.
-- `packages/providers/src/nvidia/sse_parser.ts`: Extracted `reasoning_content` and `thought` into `reasoningDelta`.
-- `packages/providers/src/nvidia/nvidia_adapter.ts`: Added 15-minute in-memory discovery caching and keep-alive headers.
-- `packages/core/src/agent.ts`: Handled `reasoning_delta` event emission, dynamic runtime system prompt context, and discovery bypass for pinned models.
-- `apps/cli/src/ui/renderer.ts`: Rendered live reasoning box and transient progress indicator.
-- `packages/providers/tests/nvidia_adapter.test.ts`, `apps/cli/tests/renderer.test.ts`, `packages/core/tests/agent.test.ts`, `packages/contracts/tests/contracts.test.ts`: Added unit tests covering all optimizations.
+- `apps/cli/src/ui/box.ts`: Added `stripAnsi`, `getVisibleWidth`, and `renderBox`.
+- `apps/cli/tests/box.test.ts`: Added unit tests verifying pixel-perfect visual width alignment.
+- `apps/cli/src/commands/chat.ts`: Applied `renderBox` to Start hero card, prompt, and `/help` palette; enabled `isChatMode: true`.
+- `apps/cli/src/ui/renderer.ts`: Streamlined chat mode rendering, suppressed debug noise, and added Cline-grade thought and action cards.
+- `apps/cli/src/ui/terminal_approval.ts`: Upgraded permission dialog with `renderBox`.
+- `apps/cli/src/ui/model_selector.ts`: Styled model selection menu with `renderBox`.
+- `apps/cli/tests/renderer.test.ts`: Added test verifying chat mode noise suppression.
 
 ## Checks
 
 - `npm run build` (`tsc -b --force`): Clean compilation across all workspaces.
-- `npm test` (`vitest run`): 96 tests passed across 19 test suites offline in 1.87s.
+- `npm test` (`vitest run`): 99 tests passed across 20 test suites offline in 1.91s.
 - `npm link --workspace moderado`: Re-linked global CLI binary.
 
 ## Next action
 
-- Await user feedback on latency and streaming behavior in the chat terminal.
+- Await user validation in their active terminal.
 
