@@ -33,6 +33,18 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     expect(typeof selectModelInteractive).toBe('function');
   });
 
+  it('selectModelInteractive preserves currentModel when signal is aborted or cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    const result = await selectModelInteractive({
+      currentModel: 'moonshotai/kimi-k3',
+      signal: controller.signal,
+    });
+
+    expect(result.modelId).toBe('moonshotai/kimi-k3');
+  });
+
   it('correctly persists default model and allowPaid flags in config', () => {
     saveConfig(
       {

@@ -139,11 +139,13 @@ export async function handleChatSession(
         signal,
         saveSelectionByDefault: true,
       });
-      if (selection.modelId !== undefined) {
+      if (selection.modelId && selection.modelId !== currentModel) {
         currentModel = selection.modelId;
+        config = loadConfig();
+        process.stdout.write(`\x1b[32m✔ Active model updated:\x1b[0m \x1b[1;38;5;75m${currentModel}\x1b[0m\n\n`);
+      } else {
+        process.stdout.write(`\x1b[38;5;244mActive model unchanged:\x1b[0m \x1b[1;38;5;180m${currentModel ?? 'Auto (Free-First)'}\x1b[0m\n\n`);
       }
-      config = loadConfig();
-      process.stdout.write(`Active model updated: \x1b[35m${currentModel ?? 'Auto (Free-First)'}\x1b[0m\n\n`);
       continue;
     }
 

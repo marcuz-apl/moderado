@@ -27,14 +27,14 @@ export function stripAnsi(str: string): string {
 export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const terminalWidth = options.width ?? (process.stdout.columns || 80);
   const width = Math.max(60, Math.min(terminalWidth, 80));
-  const hr = '-'.repeat(width);
+  const hr = `\x1b[38;5;238m${'─'.repeat(width)}\x1b[0m`;
 
   const displayInput =
     options.input && options.input.length > 0
       ? options.input
       : '\x1b[38;5;242mWhat can I service for you, bro/sis?\x1b[0m';
 
-  const textBox = `> ${displayInput}`;
+  const textBox = `\x1b[1;38;5;75m>\x1b[0m ${displayInput}`;
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
   const left4Raw = `${options.model}  ${options.tokens} tokens / ${options.cost}`;

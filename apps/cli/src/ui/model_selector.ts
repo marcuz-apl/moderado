@@ -23,10 +23,37 @@ let cachedInventory: { id: string }[] | null = null;
 export async function selectModelInteractive(
   options: ModelSelectorOptions = {}
 ): Promise<ModelSelectionResult> {
+  const isTty = Boolean(process.stdout.isTTY);
+  if (isTty) {
+    // Open dedicated alternate screen popup window
+    process.stdout.write('\x1b[?1049h\x1b[H\x1b[2J');
+  }
+  try {
+    return await executeModelSelection(options);
+  } finally {
+    if (isTty) {
+      // Restore previous chat terminal screen buffer
+      process.stdout.write('\x1b[?1049l');
+    }
+  }
+}
+
+async function executeModelSelection(
+  options: ModelSelectorOptions = {}
+): Promise<ModelSelectionResult> {
   const signal = options.signal;
   const apiKey = options.apiKey ?? resolveApiKey();
   const config = loadConfig();
   const activeModel = options.currentModel ?? config.defaultModel;
+
+  if (signal?.aborted) {
+    return {
+      modelId: activeModel,
+      allowPaid: config.allowPaid ?? false,
+      allowUnknown: config.allowUnknown ?? false,
+      savedAsDefault: false,
+    };
+  }
 
   const provider = new NvidiaAdapter({ apiKey });
   const router = new Router();
@@ -103,11 +130,12 @@ export async function selectModelInteractive(
     menuLines.push('---');
     menuLines.push(`\x1b[1;38;5;39m[6]\x1b[0m Keep Current             \x1b[38;5;141m${activeModel}\x1b[0m`);
   }
+  menuLines.push(`\x1b[1;38;5;245m[q]\x1b[0m Cancel & Close Window    \x1b[38;5;244m(No changes)\x1b[0m`);
 
   process.stdout.write(
     '\n' +
       renderBox(menuLines, {
-        title: 'Model Selection',
+        title: 'Model Selection Window',
         minWidth: 58,
         borderColor: '\x1b[38;5;240m',
         titleColor: '\x1b[1;38;5;75m',
@@ -117,7 +145,7 @@ export async function selectModelInteractive(
 
   const maxOption = activeModel ? 6 : 5;
   const input = await askQuestion(
-    `Select [1-${maxOption}] or type model name / keyword directly: `,
+    `Select [1-${maxOption}], [q] to cancel, or type keyword: `,
     { signal }
   );
 
@@ -126,12 +154,15 @@ export async function selectModelInteractive(
 
   const normalized = input.trim().toLowerCase();
 
-  if (normalized === '6' && activeModel) {
-    chosenModelId = activeModel;
-    const meta = router.classifyModel(activeModel);
-    isPaid = meta.accessTier === 'paid' || meta.accessTier === 'unknown';
+  if (normalized === 'q' || normalized === 'cancel' || normalized === 'exit' || normalized === '' || (normalized === '6' && activeModel)) {
+    return {
+      modelId: activeModel,
+      allowPaid: config.allowPaid ?? false,
+      allowUnknown: config.allowUnknown ?? false,
+      savedAsDefault: false,
+    };
   } else if (normalized === '5' || normalized === 'auto') {
-    chosenModelId = undefined;
+    chosenModelId = 'auto';
     isPaid = false;
   } else if (normalized === '2' || normalized === 'free') {
     // Browse all free models
@@ -156,9 +187,12 @@ export async function selectModelInteractive(
     }
 
     if (!searchTerm) {
-      process.stdout.write('\x1b[33mNo model entered. Using Auto Free-First.\x1b[0m\n');
-      chosenModelId = undefined;
-      isPaid = false;
+      return {
+        modelId: activeModel,
+        allowPaid: config.allowPaid ?? false,
+        allowUnknown: config.allowUnknown ?? false,
+        savedAsDefault: false,
+      };
     } else {
       chosenModelId = await searchAndSelect(searchTerm, discoveredEntries.map((m) => m.id), router, signal);
       if (chosenModelId) {
@@ -166,6 +200,15 @@ export async function selectModelInteractive(
         isPaid = meta.accessTier === 'paid' || meta.accessTier === 'unknown';
       }
     }
+  }
+
+  if (!chosenModelId || chosenModelId === activeModel) {
+    return {
+      modelId: activeModel,
+      allowPaid: config.allowPaid ?? false,
+      allowUnknown: config.allowUnknown ?? false,
+      savedAsDefault: false,
+    };
   }
 
   let savedAsDefault = false;

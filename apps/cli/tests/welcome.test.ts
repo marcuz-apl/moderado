@@ -30,14 +30,14 @@ describe('OpenCode-style Welcome TUI', () => {
     const lines = output.split('\n');
     expect(lines.length).toBe(5);
 
-    // Line 1: top dash line
-    expect(stripAnsi(lines[0])).toBe('-'.repeat(80));
+    // Line 1: top dash line (OpenCode box-drawing style)
+    expect(stripAnsi(lines[0])).toBe('─'.repeat(80));
 
     // Line 2: command taking text box with placeholder
     expect(stripAnsi(lines[1])).toBe('> What can I service for you, bro/sis?');
 
-    // Line 3: bottom dash line
-    expect(stripAnsi(lines[2])).toBe('-'.repeat(80));
+    // Line 3: bottom dash line (OpenCode box-drawing style)
+    expect(stripAnsi(lines[2])).toBe('─'.repeat(80));
 
     // Line 4: model name, tokens, cost, mode
     const line4Plain = stripAnsi(lines[3]);
