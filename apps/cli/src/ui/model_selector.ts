@@ -183,39 +183,116 @@ export async function selectModelInteractive(
 }
 
 async function searchAndSelect(
-  query: string,
+  initialQuery: string,
   allModelIds: string[],
   router: Router,
   signal?: AbortSignal
 ): Promise<string> {
-  const q = query.trim().toLowerCase();
+  let currentQuery = initialQuery;
 
-  // Check exact match first
-  const exact = allModelIds.find((id) => id.toLowerCase() === q);
-  if (exact) {
-    return exact;
-  }
+  while (!signal?.aborted) {
+    const q = currentQuery.trim().toLowerCase();
 
-  // Filter matching models
-  const matches = allModelIds.filter((id) => id.toLowerCase().includes(q));
-
-  if (matches.length === 0) {
-    process.stdout.write(`\x1b[33mNo catalog model found matching "${query}".\x1b[0m\n`);
-    const useCustom = await askQuestion(`Use "${query}" as custom Model ID? [Y/n]: `, { signal });
-    if (useCustom.toLowerCase() !== 'n' && useCustom.toLowerCase() !== 'no') {
-      return query.trim();
+    // Check exact match first
+    const exact = allModelIds.find((id) => id.toLowerCase() === q);
+    if (exact) {
+      const meta = router.classifyModel(exact);
+      const conf = await askQuestion(`\nSelected: ${exact} [${meta.accessTier}]. Confirm? [Y/n, or type new keyword]: `, { signal });
+      const confNorm = conf.trim().toLowerCase();
+      if (!confNorm || confNorm === 'y' || confNorm === 'yes') {
+        return exact;
+      }
+      if (confNorm !== 'n' && confNorm !== 'no') {
+        currentQuery = conf.trim();
+        continue;
+      }
     }
+
+    // Filter matching models
+    const matches = allModelIds.filter((id) => id.toLowerCase().includes(q));
+
+    if (matches.length === 0) {
+      process.stdout.write(`\n\x1b[33mNo catalog model found matching "${currentQuery}".\x1b[0m\n`);
+      process.stdout.write('  \x1b[1m[1]\x1b[0m Try another search keyword\n');
+      process.stdout.write(`  \x1b[1m[2]\x1b[0m Use "${currentQuery}" as custom Model ID\n`);
+      process.stdout.write('  \x1b[1m[3]\x1b[0m Cancel search\n');
+      const action = await askQuestion('Select [1-3] or type a new search keyword: ', { signal });
+      const actNorm = action.trim().toLowerCase();
+      if (actNorm === '2') {
+        return currentQuery.trim();
+      } else if (actNorm === '3' || actNorm === 'cancel' || actNorm === 'exit') {
+        return '';
+      } else if (actNorm === '1') {
+        const next = await askQuestion('Enter new search keyword: ', { signal });
+        if (!next) return '';
+        currentQuery = next;
+        continue;
+      } else if (action.trim()) {
+        currentQuery = action.trim();
+        continue;
+      }
+      return '';
+    }
+
+    if (matches.length === 1) {
+      const meta = router.classifyModel(matches[0]);
+      process.stdout.write(`\n\x1b[32mFound 1 matching model:\x1b[0m \x1b[1m${matches[0]}\x1b[0m [${meta.accessTier}]\n`);
+      const conf = await askQuestion('Select this model? [Y/n, or type a new search keyword]: ', { signal });
+      const confNorm = conf.trim().toLowerCase();
+      if (!confNorm || confNorm === 'y' || confNorm === 'yes') {
+        return matches[0];
+      }
+      if (confNorm !== 'n' && confNorm !== 'no') {
+        currentQuery = conf.trim();
+        continue;
+      }
+      const next = await askQuestion('Enter new search keyword (or press Enter to cancel): ', { signal });
+      if (!next) return '';
+      currentQuery = next;
+      continue;
+    }
+
+    // Multiple matches
+    process.stdout.write(`\n\x1b[1mFound ${matches.length} models matching "${currentQuery}":\x1b[0m\n`);
+    process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
+    for (let i = 0; i < matches.length; i++) {
+      const m = matches[i];
+      const meta = router.classifyModel(m);
+      const tag = meta.accessTier === 'free_trial' ? 'Free Trial' : 'Paid';
+      process.stdout.write(`  \x1b[1m[${i + 1}]\x1b[0m ${m} \x1b[36m[${tag}]\x1b[0m\n`);
+    }
+    process.stdout.write('  \x1b[1m[s]\x1b[0m Search again with a different keyword\n');
+    process.stdout.write('  \x1b[1m[b]\x1b[0m Back to main menu\n');
+    process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
+
+    const choice = await askQuestion(`Select [1-${matches.length}], "s" to search again, or type a new keyword: `, { signal });
+    const choiceNorm = choice.trim().toLowerCase();
+
+    if (choiceNorm === 'b' || choiceNorm === 'back') {
+      return '';
+    }
+
+    if (choiceNorm === 's' || choiceNorm === 'search') {
+      const next = await askQuestion('Enter new search keyword: ', { signal });
+      if (!next) return '';
+      currentQuery = next;
+      continue;
+    }
+
+    const num = parseInt(choice, 10);
+    if (!isNaN(num) && num >= 1 && num <= matches.length) {
+      return matches[num - 1];
+    }
+
+    if (choice.trim()) {
+      currentQuery = choice.trim();
+      continue;
+    }
+
     return '';
   }
 
-  if (matches.length === 1) {
-    const meta = router.classifyModel(matches[0]);
-    process.stdout.write(`\x1b[32mFound 1 matching model:\x1b[0m \x1b[1m${matches[0]}\x1b[0m [${meta.accessTier}]\n`);
-    return matches[0];
-  }
-
-  // Multiple matches
-  return pickFromList(`Found ${matches.length} models matching "${query}":`, matches, router, signal);
+  return '';
 }
 
 async function browseOrSearchList(

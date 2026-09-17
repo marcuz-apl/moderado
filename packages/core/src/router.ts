@@ -78,12 +78,56 @@ export class Router {
       return { ...found };
     }
 
-    // Default classification for unknown models
+    const id = modelId.toLowerCase();
+
+    // 1. Utility, safety guard, detector, or embedding models (not chat/coding agents)
+    const isUtilityOrEmbedding =
+      id.includes('embed') ||
+      id.includes('qa-') ||
+      id.includes('detector') ||
+      id.includes('calibration') ||
+      id.includes('clip') ||
+      id.includes('safety-guard') ||
+      id.includes('nemoguard') ||
+      id.includes('reward') ||
+      id.includes('parse');
+
+    if (isUtilityOrEmbedding) {
+      return {
+        modelId,
+        accessTier: isLocalProfile ? 'local' : 'free_trial',
+        toolSupport: 'unsupported',
+        source: 'heuristic',
+        notes: 'Utility or embedding endpoint',
+      };
+    }
+
+    // 2. Chat, reasoning, and instruction models (hosted under free trial credits on build.nvidia.com)
+    const isChatOrInstruct =
+      id.includes('instruct') ||
+      id.includes('-it') ||
+      id.includes('coder') ||
+      id.includes('vision') ||
+      id.includes('chat') ||
+      id.includes('large') ||
+      id.includes('flash') ||
+      id.includes('glm') ||
+      id.includes('kimi') ||
+      id.includes('dbrx') ||
+      id.includes('yi') ||
+      id.includes('granite') ||
+      id.includes('gemma') ||
+      id.includes('codestral') ||
+      id.includes('starcoder') ||
+      id.includes('llama') ||
+      id.includes('mistral');
+
     return {
       modelId,
-      accessTier: isLocalProfile ? 'local' : 'unknown',
-      toolSupport: 'unknown',
+      accessTier: isLocalProfile ? 'local' : 'free_trial',
+      toolSupport: isChatOrInstruct ? 'supported' : 'unknown',
       source: 'heuristic',
+      notes: isChatOrInstruct ? 'Inferred instruction/chat model with tool support' : undefined,
     };
   }
 
