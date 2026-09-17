@@ -22,7 +22,7 @@ export interface IToolDefinition<TParams = unknown> {
   readonly name: string;
   readonly description: string;
   readonly requiresApproval: boolean;
-  readonly parametersSchema: z.ZodType<TParams>;
+  readonly parametersSchema: z.ZodType<TParams, any, any>;
   execute(params: TParams, context: ToolExecutionContext): Promise<ToolResult>;
 }
 

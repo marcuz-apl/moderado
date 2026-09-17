@@ -1,56 +1,60 @@
 # Project Handoff
 
-Updated: 2026-09-16 21:49 UTC  
+Updated: 2026-09-16 21:54 UTC  
 Branch: master  
-Commit: in progress (Milestone 1 completed, ready to commit)  
+Commit: in progress (Milestone 2 completed, ready to commit)  
 Status: in progress  
 
 ## Summary
 
-Completed **Milestone 1: Workspace Scaffolding & Contracts (`packages/contracts`)**. The root npm workspace, strict TypeScript configuration, and Vitest test environment are operational. The pure contracts package `@moderado/contracts` is implemented, strictly compiled, and backed by a comprehensive Vitest test suite with 16 passing unit tests.
+Completed **Milestone 2: Workspace Security Jail & Tools Engine (`packages/tools`)**. Implemented path canonicalization (`fs.realpathSync`), protected file blacklisting, the 7 core workspace tools (`read_file`, `write_file`, `edit_file`, `list_files`, `search_files`, `run_command`, `git_diff`), atomic writes, unique diff preview generator, environment variable purging, and `ToolRegistry`. All 40 unit and security tests pass across the workspace.
 
 ## Completed
 
-- Initialized root npm workspace with `apps/*` and `packages/*` (`package.json`).
-- Configured root strict TypeScript compilation (`tsconfig.base.json`) targeting Node.js ESM.
-- Configured root test runner (`vitest.config.ts`).
-- Created `packages/contracts` workspace package:
-  - `src/models.ts`: Model inventory schemas, classification contracts, access tiers (`free_trial`, `paid`, `local`, `unknown`), and tool capabilities (`supported`, `unsupported`, `unknown`).
-  - `src/messages.ts`: Normalized chat messages (`system`, `user`, `assistant`, `tool`), tool calls, and streaming chunks.
-  - `src/provider.ts`: Typed error hierarchy (`AuthenticationError`, `RateLimitError`, `ModelUnavailableError`, `MalformedResponseError`), streaming chunk schemas, and `IProviderAdapter` contract.
-  - `src/tools.ts`: Tool execution contexts, `IToolDefinition`, `IToolRegistry`, and parameter schemas for the 7 workspace tools (`read_file`, `write_file`, `edit_file`, `list_files`, `search_files`, `run_command`, `git_diff`).
-  - `src/approvals.ts`: Approval payloads, `ApprovalRequest`, `ApprovalDecision`, and `IApprovalHandler` interface.
-  - `src/events.ts`: Strongly typed, discriminated union `AgentEvent` for all agent lifecycle states.
-  - `src/index.ts`: Comprehensive barrel export.
-- Authored and verified Vitest test suite (`packages/contracts/tests/contracts.test.ts`): 16 tests passing in 6ms.
-- Built package (`npm --workspace=@moderado/contracts run build`): zero type errors.
+- **Milestone 1**: Root npm workspaces, `tsconfig.base.json`, `vitest.config.ts`, and pure contracts package `@moderado/contracts`.
+- **Milestone 2**:
+  - `packages/tools/src/jail.ts`: Path canonicalization, directory traversal prevention (`../`), symlink escape rejection, and blacklist filtering (`.git`, `.env*`, `*.pem`, `*.key`, `id_rsa*`).
+  - `packages/tools/src/diff.ts`: Substring uniqueness detection and git-style unified diff preview generation for `edit_file`.
+  - `packages/tools/src/tools/read_file.ts`: Paginated file reader with line numbering, binary file detection, and truncation indicators.
+  - `packages/tools/src/tools/write_file.ts`: Atomic file writer using sibling temporary files and atomic rename (`fs.renameSync`).
+  - `packages/tools/src/tools/edit_file.ts`: Surgical code modification verifying exact single occurrence and returning diff preview.
+  - `packages/tools/src/tools/list_files.ts`: Recursive directory listing with depth limits and automatic exclusion of `node_modules` and `.git`.
+  - `packages/tools/src/tools/search_files.ts`: Multi-file content search supporting literal strings and regex patterns with match capping.
+  - `packages/tools/src/tools/run_command.ts`: Child process execution via `child_process.spawn` with `shell: false`, argument array, environment sanitization (purging `NVIDIA_API_KEY` and secret tokens), 64KB buffer caps, and execution timeouts.
+  - `packages/tools/src/tools/git_diff.ts`: Hardcoded safe git diff wrapper.
+  - `packages/tools/src/registry.ts`: `ToolRegistry` implementation and JSON Schema declaration generator for providers.
+- Authored and verified Vitest test suites:
+  - `packages/tools/tests/jail.test.ts` (6 tests passing)
+  - `packages/tools/tests/diff.test.ts` (3 tests passing)
+  - `packages/tools/tests/tools.test.ts` (15 tests passing)
+  - Total across workspace: 4 test files, 40 tests passing in 1.62s.
+- Clean build: `tsc` compiles both packages with zero type errors.
 
 ## In progress
 
-- Milestone 1 verification complete and staged for git commit.
+- Staging and committing Milestone 2.
 
 ## Working tree
 
 - Modified:
-  - `VERSION` (`v0.1.0+2609162`)
+  - `VERSION` (`v0.1.0+2609163`)
   - `HANDOFF.md`
+  - `package-lock.json`
+  - `packages/contracts/src/tools.ts`
 - Added:
-  - `package.json`, `package-lock.json`
-  - `tsconfig.base.json`
-  - `vitest.config.ts`
-  - `packages/contracts/`
+  - `packages/tools/`
 
 ## Checks
 
-- `npm run typecheck` / `tsc` — PASS
 - `npm --workspace=@moderado/contracts run build` — PASS
-- `npm test` — PASS (16 tests, 1 test file)
+- `npm --workspace=@moderado/tools run build` — PASS
+- `npm test` — PASS (40 tests, 4 test files)
 
 ## Decisions and context
 
-- Pure contracts: `packages/contracts` depends only on `zod` for runtime validation. Zero provider SDKs or heavy runtime dependencies.
-- Node.js ESM native: Native `fetch` and `AbortController` types enabled via `tsconfig.base.json` (`DOM` + Node types).
-- Vitest configuration in root sweeps all package test directories (`packages/*/tests/**/*.test.ts`).
+- Ponytail standard library: Zero external dependencies in `packages/tools`; relies exclusively on native Node.js (`node:fs`, `node:path`, `node:child_process`, `node:crypto`).
+- Windows batch safety: Rejects direct execution of `.bat` / `.cmd` with `shell: false`, requiring explicit `cmd.exe /c` invocation to guarantee full visibility during user approval.
+- Environment scrubbing: `process.env` cloned and cleaned before spawning commands to prevent API key exfiltration by executed programs.
 
 ## Blockers
 
@@ -58,5 +62,5 @@ Completed **Milestone 1: Workspace Scaffolding & Contracts (`packages/contracts`
 
 ## Next action
 
-1. Commit Milestone 1: `git add . && git commit -m "v0.1.0+2609162 feat(contracts): scaffold workspace and implement pure contracts package"` and push to `origin/master`.
-2. Begin **Milestone 2: Workspace Security Jail & Tools Engine (`packages/tools`)**.
+1. Commit Milestone 2: `git add . && git commit -m "v0.1.0+2609163 feat(tools): implement workspace jail and 7 core tools engine"` and push to `origin/master`.
+2. Begin **Milestone 3: Model Discovery & Provider Adapters (`packages/providers`)**.
