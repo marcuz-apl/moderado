@@ -6,7 +6,6 @@ import { ChatMessage } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
-import { renderBox } from '../ui/box.js';
 import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
@@ -62,25 +61,22 @@ export async function handleChatSession(
   }
 
   // 3. Enter Chat Terminal (REPL like OpenCode / Cline)
+  // 3. Enter Chat Terminal (Cline / OpenCode style)
   const displayModel = currentModel ?? 'Auto (Free-First)';
-  const shortWs = canonicalWorkspace.length > 45
-    ? '...' + canonicalWorkspace.slice(-42)
+  const shortWs = canonicalWorkspace.length > 38
+    ? '...' + canonicalWorkspace.slice(-35)
     : canonicalWorkspace;
 
+  const modeBadge = args.readOnly ? 'read-only' : 'plan-act';
+  const approvalBadge = args.nonInteractive ? 'auto-deny' : 'manual-approval';
+
+  // Cline-style clean horizontal status bar
   process.stdout.write(
-    '\n' +
-      renderBox(
-        [
-          `\x1b[1;38;5;255mModerado\x1b[0m \x1b[38;5;242m${version}\x1b[0m`,
-          `\x1b[38;5;242m${shortWs}\x1b[0m`,
-          `\x1b[38;5;245mModel:\x1b[0m \x1b[38;5;75m${displayModel}\x1b[0m`,
-        ],
-        {
-          minWidth: 46,
-          borderColor: '\x1b[38;5;238m',
-        }
-      ) +
-      '\x1b[38;5;242mType /help for commands, /exit to quit.\x1b[0m\n\n'
+    `\n\x1b[38;5;75m● moderado\x1b[0m \x1b[38;5;242m${version}\x1b[0m  \x1b[38;5;240m·\x1b[0m  ` +
+    `\x1b[38;5;180m${displayModel}\x1b[0m  \x1b[38;5;240m·\x1b[0m  ` +
+    `\x1b[38;5;244m${shortWs}\x1b[0m  \x1b[38;5;240m·\x1b[0m  ` +
+    `\x1b[38;5;242m${modeBadge} (${approvalBadge})\x1b[0m\n` +
+    `\x1b[38;5;242mType /help for commands, /exit to quit.\x1b[0m\n\n`
   );
 
   const provider = new NvidiaAdapter({ apiKey });
@@ -98,20 +94,54 @@ export async function handleChatSession(
 
   let conversationHistory: ChatMessage[] = [];
 
-  // 4. Continuous interactive loop - stay until /exit
-  while (!signal?.aborted) {
-    const promptLine = await askQuestion('\x1b[1;38;5;75m❯\x1b[0m ', { signal });
-    const trimmed = promptLine.trim();
+  // Persistent readline interface to prevent stdin detachment and ghost newlines
+  const readlineModule = await import('node:readline');
+  const rl = readlineModule.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    terminal: process.stdin.isTTY,
+  });
 
-    if (!trimmed) {
-      continue;
+  const closeRl = () => {
+    try {
+      rl.close();
+    } catch {
+      // ignore
     }
+  };
 
-    // Handle slash commands
-    if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
-      process.stdout.write('\x1b[32mGoodbye!\x1b[0m\n\n');
-      return 0;
-    }
+  if (signal) {
+    signal.addEventListener('abort', closeRl, { once: true });
+  }
+
+  // Helper for prompt
+  const askPrompt = (query: string): Promise<string> => {
+    return new Promise((resolve) => {
+      if (signal?.aborted) {
+        resolve('');
+        return;
+      }
+      rl.question(query, (answer) => {
+        resolve(answer.trim());
+      });
+    });
+  };
+
+  try {
+    // 4. Continuous interactive loop - stay until /exit
+    while (!signal?.aborted) {
+      const promptLine = await askPrompt('\x1b[1;38;5;75m❯\x1b[0m ');
+      const trimmed = promptLine.trim();
+
+      if (!trimmed) {
+        continue;
+      }
+
+      // Handle slash commands
+      if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
+        process.stdout.write('\x1b[32mGoodbye!\x1b[0m\n\n');
+        return 0;
+      }
 
     if (trimmed === '/help') {
       process.stdout.write(
@@ -173,7 +203,10 @@ export async function handleChatSession(
     }
 
     // Once the question gets answered, DON'T exit! Stay here for next input.
-  }
+    }
 
-  return 0;
+    return 0;
+  } finally {
+    closeRl();
+  }
 }

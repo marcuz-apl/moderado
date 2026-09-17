@@ -79,12 +79,10 @@ export class TerminalRenderer {
       case 'tool_call_initiated': {
         this.finishAssistantStream();
         this.clearTransientProgress();
-        const icon = this.getToolIcon(event.toolName);
-        const argsStr = JSON.stringify(event.parameters);
-        const truncatedArgs = argsStr.length > 65 ? argsStr.slice(0, 62) + '...' : argsStr;
+        const summary = this.formatToolSummary(event.toolName, event.parameters);
 
         this.stdout.write(
-          `\x1b[38;5;242m╭─\x1b[0m ${icon} \x1b[38;5;75m${event.toolName}\x1b[0m \x1b[38;5;244m${truncatedArgs}\x1b[0m\n`
+          `\x1b[38;5;75m⏺\x1b[0m \x1b[1m${event.toolName}\x1b[0m \x1b[38;5;244m${summary}\x1b[0m\n`
         );
         break;
       }
@@ -104,7 +102,7 @@ export class TerminalRenderer {
         const preview = lines[0] + (lines.length > 1 ? ` ... (+${lines.length - 1} lines)` : '');
 
         this.stdout.write(
-          `\x1b[38;5;242m╰─\x1b[0m ${statusColor}${statusIcon}\x1b[0m \x1b[38;5;244m${preview.slice(0, 75)}\x1b[0m\n\n`
+          `  \x1b[38;5;240m└\x1b[0m ${statusColor}${statusIcon}\x1b[0m \x1b[38;5;244m${preview.slice(0, 75)}\x1b[0m\n\n`
         );
         break;
       }
@@ -169,24 +167,12 @@ export class TerminalRenderer {
     }
   }
 
-  private getToolIcon(name: string): string {
-    switch (name) {
-      case 'read_file':
-        return '📖';
-      case 'write_file':
-        return '✎';
-      case 'edit_file':
-        return '✂';
-      case 'list_files':
-        return '📁';
-      case 'search_files':
-        return '🔍';
-      case 'run_command':
-        return '⚙';
-      case 'git_diff':
-        return '⎇';
-      default:
-        return '⚙';
-    }
+  private formatToolSummary(toolName: string, params: Record<string, any>): string {
+    if (params.filePath) return String(params.filePath);
+    if (params.command) return String(params.command);
+    if (params.pattern) return `"${params.pattern}"`;
+    if (toolName === 'list_files') return params.directoryPath ? String(params.directoryPath) : '.';
+    const raw = JSON.stringify(params);
+    return raw.length > 55 ? raw.slice(0, 52) + '...' : raw;
   }
 }
