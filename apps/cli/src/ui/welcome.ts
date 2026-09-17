@@ -1,4 +1,4 @@
-import { overlayCentered } from './popup.js';
+import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 
 export interface WelcomeLayoutOptions {
   model: string;
@@ -368,12 +368,17 @@ export async function promptInteractiveTurn(
 
           if (options.onModelSelect) {
             const drawFrame = (popupLines: string[]): void => {
-              // 1. Background: the main TUI window stays as-is underneath.
+              // 1. Background: the main TUI window stays as-is underneath, but
+              //    dimmed so the popup layer visually floats above it.
               stdout.write('\x1b[H\x1b[J');
-              stdout.write(renderFullWelcomeScreen(getOptions()));
-              // 2. New layer: popup window composited centered on top.
+              stdout.write(
+                dimLines(renderFullWelcomeScreen(getOptions()).split('\n')).join('\n')
+              );
               const cols = process.stdout.columns || 80;
               const rows = process.stdout.rows || 24;
+              // 2. Soft drop shadow under the popup, then the popup window
+              //    composited centered on top (Cline/OpenCode style).
+              stdout.write(shadowUnder(popupLines, cols, rows));
               stdout.write(overlayCentered(popupLines, cols, rows));
             };
             const newId = await options.onModelSelect(drawFrame);

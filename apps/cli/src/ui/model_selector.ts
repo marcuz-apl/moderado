@@ -1,7 +1,13 @@
 import { NvidiaAdapter } from '@moderado/providers';
 import { Router } from '@moderado/core';
 import { askQuestion, askSelect, askModalChoice, SelectOption } from './prompt.js';
-import { renderBoxLines, layerPromptBox } from './popup.js';
+import {
+  renderBoxLines,
+  layerPromptBox,
+  selectListPopup,
+  selectConfirmPopup,
+  type PopupListItem,
+} from './popup.js';
 import { loadConfig, saveConfig, resolveApiKey } from '../config.js';
 
 export interface ModelSelectionResult {
@@ -159,17 +165,138 @@ async function executeModelSelection(
   const cols = process.stdout.columns || 80;
   const boxWidth = Math.min(Math.max(62, Math.min(cols - 4, 72)), cols);
   const popupLines = renderBoxLines('Model Selection Window', menuLines, boxWidth);
+  const layer = options.drawFrame;
 
   if (options.drawFrame) {
-    // Popup window mode: composite the box as a centered floating layer on top
-    // of the main app window — the background stays as-is underneath.
-    options.drawFrame(popupLines);
-  } else {
-    // Standalone setup mode: draw inline below the current cursor.
-    const leftPad = Math.max(0, Math.floor((cols - boxWidth) / 2));
-    const pad = ' '.repeat(leftPad);
-    process.stdout.write('\n' + popupLines.map((l) => pad + l).join('\n') + '\n');
+    // Popup window mode: Cline/OpenCode-style interactive list window layered
+    // on top of the main app window (background stays as-is underneath).
+    const menuItems: PopupListItem[] = [
+      {
+        label: 'Search by keyword',
+        value: 'search',
+        description: 'Type-to-filter across the full NVIDIA NIM catalog',
+      },
+      {
+        label: 'Free Trial Models',
+        value: 'free',
+        tag: `${freeModels.length}`,
+        description: 'Free trial endpoints — ready to use, no cost',
+      },
+      {
+        label: 'Paid & Frontier Models',
+        value: 'paid',
+        tag: `${paidModels.length}`,
+        description: 'Flagship and paid-tier models',
+      },
+      {
+        label: 'Complete Catalog',
+        value: 'all',
+        tag: `${discoveredEntries.length}`,
+        description: 'Every discovered NVIDIA NIM endpoint',
+      },
+      {
+        label: 'Auto Routing',
+        value: 'auto',
+        description: 'Free-first recommended routing',
+      },
+    ];
+    if (activeModel) {
+      menuItems.push({
+        label: 'Keep Current',
+        value: 'keep',
+        tag: activeModel,
+        description: 'Close the window without switching models',
+      });
+    }
+    menuItems.push({
+      label: 'Cancel & Close Window',
+      value: 'cancel',
+      description: 'No changes will be made',
+    });
+
+    const picked = await selectListPopup('Model Selection Window', menuItems, {
+      signal,
+      drawFrame: options.drawFrame,
+      pageSize: 9,
+    });
+    if (picked === null || picked === 'keep' || picked === 'cancel') {
+      return {
+        modelId: activeModel,
+        allowPaid: config.allowPaid ?? false,
+        allowUnknown: config.allowUnknown ?? false,
+        savedAsDefault: false,
+      };
+    }
+
+    let chosenModelId: string | undefined = undefined;
+    let isPaid = false;
+
+    if (picked === 'auto') {
+      chosenModelId = 'auto';
+      isPaid = false;
+    } else if (picked === 'free') {
+      chosenModelId = await pickFromList('Choose Free Model:', freeModels.map((m) => m.id), router, signal, layer);
+      isPaid = false;
+    } else if (picked === 'paid') {
+      chosenModelId = await browseOrSearchList('Paid & Frontier Models:', paidModels.map((m) => m.id), router, signal, layer);
+      isPaid = true;
+    } else if (picked === 'all') {
+      chosenModelId = await browseOrSearchList('All NVIDIA NIM Models:', discoveredEntries.map((m) => m.id), router, signal, layer);
+      if (chosenModelId) {
+        const meta = router.classifyModel(chosenModelId);
+        isPaid = meta.accessTier === 'paid' || meta.accessTier === 'unknown';
+      }
+    } else {
+      // Search by keyword: interactive type-to-filter popup over the catalog.
+      chosenModelId = await searchAndSelect('', discoveredEntries.map((m) => m.id), router, signal, layer);
+      if (chosenModelId) {
+        const meta = router.classifyModel(chosenModelId);
+        isPaid = meta.accessTier === 'paid' || meta.accessTier === 'unknown';
+      }
+    }
+
+    if (!chosenModelId || chosenModelId === activeModel) {
+      return {
+        modelId: activeModel,
+        allowPaid: config.allowPaid ?? false,
+        allowUnknown: config.allowUnknown ?? false,
+        savedAsDefault: false,
+      };
+    }
+
+    let savedAsDefault = false;
+    if (options.saveSelectionByDefault !== false && chosenModelId) {
+      const shouldSave = await selectConfirmPopup(
+        'Save Default Model',
+        [
+          `\x1b[32m✔ Selected model:\x1b[0m \x1b[1m${chosenModelId}\x1b[0m`,
+          'Save as persistent default in ~/.moderado/config.json?',
+        ],
+        { signal, drawFrame: options.drawFrame }
+      );
+      if (shouldSave === true) {
+        saveConfig({
+          defaultModel: chosenModelId,
+          allowPaid: isPaid ? true : config.allowPaid,
+          allowUnknown: isPaid ? true : config.allowUnknown,
+        });
+        layerPromptBox(options.drawFrame, `\x1b[32m✔ Saved ${chosenModelId} as default model.\x1b[0m`);
+        savedAsDefault = true;
+      }
+    }
+
+    return {
+      modelId: chosenModelId,
+      allowPaid: isPaid || (config.allowPaid ?? false),
+      allowUnknown: isPaid || (config.allowUnknown ?? false),
+      savedAsDefault,
+    };
   }
+
+  // ── Standalone setup mode: inline number-menu flow (unchanged) ────────────
+  const leftPad = Math.max(0, Math.floor((cols - boxWidth) / 2));
+  const pad = ' '.repeat(leftPad);
+  process.stdout.write('\n' + popupLines.map((l) => pad + l).join('\n') + '\n');
 
   const maxOption = activeModel ? 6 : 5;
   const promptMsg =
@@ -179,7 +306,6 @@ async function executeModelSelection(
 
   let chosenModelId: string | undefined = undefined;
   let isPaid = false;
-  const layer = options.drawFrame;
 
   const normalized = input.trim().toLowerCase();
 
@@ -291,6 +417,42 @@ async function searchAndSelect(
   signal?: AbortSignal,
   layer?: (popupLines: string[]) => void
 ): Promise<string> {
+  // Layer mode: Cline-style interactive type-to-filter popup. The filter is
+  // built into the list window itself; Esc opens a retry/custom-ID/cancel
+  // menu so the "custom Model ID" escape hatch is preserved.
+  if (layer) {
+    const tier = (id: string): string => {
+      const meta = router.classifyModel(id);
+      return meta.accessTier === 'free_trial' ? 'Free' : meta.accessTier === 'paid' ? 'Paid' : 'NIM';
+    };
+    while (!signal?.aborted) {
+      const items: PopupListItem[] = allModelIds.map((id) => ({
+        label: id,
+        value: id,
+        tag: tier(id),
+        description: tier(id) === 'Free' ? 'Free trial endpoint' : tier(id) === 'Paid' ? 'Paid model' : 'Unclassified NIM endpoint',
+      }));
+      const picked = await selectListPopup('Search Models', items, {
+        signal,
+        drawFrame: layer,
+        filterable: true,
+        initialFilter: initialQuery,
+        pageSize: 10,
+        hint: 'type to filter · ↑↓ navigate · Enter select · Esc menu',
+      });
+      if (picked !== null) return picked;
+
+      // Esc: retry with a new keyword, use a custom ID, or cancel.
+      const action = await selectListPopup('Search Models', [
+        { label: 'Try another search keyword', value: 'retry', description: 'Reopen the filter popup' },
+        { label: 'Cancel search', value: 'cancel', description: 'Go back without switching' },
+      ], { signal, drawFrame: layer, pageSize: 5 });
+      if (action === 'retry') continue;
+      return '';
+    }
+    return '';
+  }
+
   let currentQuery = initialQuery;
   const rows = process.stdout.rows || 24;
   const maxList = Math.max(5, Math.min(15, rows - 12));
@@ -452,16 +614,29 @@ async function browseOrSearchList(
   layer?: (popupLines: string[]) => void
 ): Promise<string> {
   if (layer) {
-    layerPromptBox(layer, [
-      `\x1b[1m${title}\x1b[0m (${modelIds.length} models)`,
-      'Filter by keyword (e.g. "glm", "flash", "coder"), [Esc] to cancel, or press Enter to list all:',
-    ]);
-    const filter = await askModalChoice('\n> ', { signal });
-    if (filter === 'q') return '';
-    if (filter.trim()) {
-      return searchAndSelect(filter.trim(), modelIds, router, signal, layer);
-    }
-    return pickFromList(title, modelIds, router, signal, layer);
+    // Layer mode: Cline-style interactive filter popup — type-to-filter is
+    // built into the list window itself.
+    const items: PopupListItem[] = modelIds.map((id) => {
+      const meta = router.classifyModel(id);
+      const tier = meta.accessTier;
+      return {
+        label: id,
+        value: id,
+        tag: tier === 'free_trial' ? 'Free' : tier === 'paid' ? 'Paid' : 'NIM',
+        description:
+          tier === 'free_trial'
+            ? 'Free trial endpoint'
+            : tier === 'paid'
+              ? 'Paid model'
+              : 'Unclassified NIM endpoint',
+      };
+    });
+    return (await selectListPopup(title, items, {
+      signal,
+      drawFrame: layer,
+      filterable: true,
+      pageSize: 10,
+    })) ?? '';
   }
 
   process.stdout.write(`\n\x1b[1m${title}\x1b[0m (${modelIds.length} models)\n`);
@@ -510,54 +685,24 @@ async function pickFromList(
   });
 
   if (layer) {
-    // Popup window mode: paginate inside the floating layer — the background
-    // main app window stays as-is because every page redraws the whole frame.
-    const rows = process.stdout.rows || 24;
-    const cols = process.stdout.columns || 80;
-    const boxWidth = Math.min(Math.max(56, Math.min(cols - 4, 72)), cols);
-    const pageSize = Math.max(5, Math.min(20, rows - 12));
-    const totalPages = Math.ceil(choices.length / pageSize);
-    let page = 0;
-
-    while (page < totalPages) {
-      const pageChoices = choices.slice(page * pageSize, (page + 1) * pageSize);
-      const lines = [`${title} (${choices.length} models)`, '---'];
-      for (let i = 0; i < pageChoices.length; i++) {
-        const item = pageChoices[i];
-        const tag = item.tag ? ` \x1b[36m[${item.tag}]\x1b[0m` : '';
-        lines.push(`  \x1b[1m[${i + 1}]\x1b[0m ${item.label}${tag}`);
-      }
-      const pageFooter =
-        page + 1 < totalPages
-          ? `Page ${page + 1} of ${totalPages} — Select [1-${pageChoices.length}], Enter for next page, [Esc] to cancel`
-          : `Page ${page + 1} of ${totalPages} — Select [1-${pageChoices.length}] or [Esc] to cancel`;
-      lines.push('---');
-      lines.push(`\x1b[38;5;244m${pageFooter}\x1b[0m`);
-
-      layer(renderBoxLines(title, lines, boxWidth));
-
-      const answer = await askModalChoice('\n> ', { signal });
-      if (answer === 'q') return '';
-      if (!answer && page + 1 < totalPages) {
-        page++;
-        continue;
-      }
-
-      const num = parseInt(answer, 10);
-      if (!isNaN(num) && num >= 1 && num <= pageChoices.length) {
-        return pageChoices[num - 1].value;
-      }
-
-      // Check if user typed a model name/keyword directly
-      if (answer.trim()) {
-        const matched = modelIds.find((m) => m.toLowerCase().includes(answer.trim().toLowerCase()));
-        if (matched) return matched;
-      }
-
-      break;
-    }
-
-    return '';
+    // Layer mode: Cline-style interactive list popup with type-to-filter.
+    const items: PopupListItem[] = choices.map((c) => ({
+      label: c.label,
+      value: c.value,
+      tag: c.tag,
+      description:
+        c.tag === 'Free'
+          ? 'Free trial endpoint'
+          : c.tag === 'Paid'
+            ? 'Paid model'
+            : 'Unclassified NIM endpoint',
+    }));
+    return (await selectListPopup(title, items, {
+      signal,
+      drawFrame: layer,
+      filterable: true,
+      pageSize: 10,
+    })) ?? '';
   }
 
   // If list is large (> 25), show in pages of 20

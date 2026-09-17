@@ -1,31 +1,26 @@
 # Project Handoff
 
-Updated: 2026-09-17 20:35 UTC  
+Updated: 2026-09-17 21:05 UTC  
 Branch: master  
-Version: v0.1.13+260917k  
+Version: v0.1.14+260917m  
 Status: complete  
 
 ## Summary
 
-Implemented a true Cline/OpenCode-style popup window for `/model` rendered as a **new layer on top of the main app window** (background stays as-is):
-1. **Layered popup rendering**:
-   - New `apps/cli/src/ui/popup.ts`: ANSI-aware `renderBoxLines` (bordered popup box builder), `popupWidth`, `overlayCentered` (composites popup lines centered on top of the current screen at a fixed position), and `layerPromptBox`.
-   - `welcome.ts` `/model` handler passes a `drawFrame` callback: it repaints the background welcome TUI exactly as-is, then overlays the popup window centered on top. The main TUI never scrolls — every step redraws the full frame.
-2. **Whole selection flow runs inside the popup layer**:
-   - `model_selector.ts`: `selectModelOverlay` accepts `drawFrame`; catalog query status, main menu, sub-lists (free/paid/catalog), search results, pagination, confirmations, and save prompts all redraw via the layer. Non-chat callers (`selectModelInteractive`) keep the alternate-screen flow.
-   - `prompt.ts`: `askModalChoice` gained an `echo` option so layer-mode inputs don't paint stray characters over the frame.
-3. **Terminal lock fix ("all lock" symptom)**:
-   - Root cause: interrupted runs left the terminal with hidden cursor (`\x1b[?25l`), active alternate screen (`\x1b[?1049h`), and/or stdin in raw mode — terminal appears frozen.
-   - Fix: `chat.ts` now registers a `process.on('exit')` `restoreTerminal` hook that always restores cursor visibility, sane cursor style, non-raw stdin, and the primary screen buffer on any exit path (only the `exit` event is used — `unhandledRejection` listeners were deliberately avoided because they suppress Node's default fail-closed crash).
+Upgraded `/model` to a **beautiful Cline/OpenCode-style popup layer** (background dimmed, drop shadow, interactive list window):
+1. **Depth & polish** (`popup.ts`): `dimLines` dims the background so the popup floats above it; `shadowUnder` paints a soft `░` drop shadow under/right of the popup.
+2. **Interactive list window** (`popup.ts` → `selectListPopup`): floating window layer with type-to-filter input (block cursor), `❯` cursor + highlighted selection row, selected item's description shown beneath the list, ↑/↓ scroll indicators, and a footer key-hint bar (`↑↓ navigate · Enter select · Esc cancel · count · Page n/m`). Navigation: ↑↓/jk, Home/End, PgUp/PgDn; Enter selects; Esc cancels (null). `selectConfirmPopup` provides Yes/No confirmation windows.
+3. **Rewired flows** (`model_selector.ts` layer mode): the main menu is now an interactive list popup with descriptions and model-count badges; free/paid/all browsing and keyword search use the filterable popup (Esc opens a retry/cancel menu so the custom-ID escape hatch is preserved); save-default uses the confirmation popup. Standalone setup-mode flows unchanged.
+4. **`welcome.ts` `drawFrame`**: dims the background, paints the shadow, then composites the popup centered on top — the main TUI never scrolls.
+
+Previously completed: layered `/model` popup rendering (`overlayCentered`, `renderBoxLines`, `layerPromptBox`), whole selection flow inside the popup layer, `askModalChoice` echo option, and the terminal-lock fix (`process.on('exit')` restore hook in `chat.ts`).
 
 ## Completed
 
-- `apps/cli/src/ui/popup.ts`: New popup window primitives (`renderBoxLines`, `overlayCentered`, `popupWidth`, `layerPromptBox`).
-- `apps/cli/src/ui/model_selector.ts`: Layer-aware `selectModelOverlay` via `drawFrame`; all sub-flows redraw inside the popup layer.
-- `apps/cli/src/ui/welcome.ts`: `/model` handler composites background + popup layer and restores the TUI after selection.
-- `apps/cli/src/ui/prompt.ts`: `echo` option for `askModalChoice`.
-- `apps/cli/src/commands/chat.ts`: `drawFrame` threaded through; guaranteed terminal restore on process exit.
-- `apps/cli/tests/prompt.test.ts`: Unit tests for `askModalChoice` (existing, still green).
+- `apps/cli/src/ui/popup.ts`: `dimLines`, `shadowUnder`, `selectListPopup`, `selectConfirmPopup`, `PopupListItem`, `ListPopupOptions` (plus earlier `renderBoxLines`, `overlayCentered`, `popupPosition`, `popupWidth`, `layerPromptBox`).
+- `apps/cli/src/ui/model_selector.ts`: layer-mode main menu / sub-lists / search / confirm rewritten onto the interactive popup toolkit.
+- `apps/cli/src/ui/welcome.ts`: dimmed backdrop + drop shadow in `drawFrame`.
+- `apps/cli/src/commands/chat.ts`: guaranteed terminal restore on process exit (earlier session).
 
 ## Checks
 
@@ -34,7 +29,7 @@ Implemented a true Cline/OpenCode-style popup window for `/model` rendered as a 
 
 ## Next action
 
-- Ready for user verification via `moderado` (chat → type `/model` → Enter). If a terminal still looks locked from an earlier run, run `reset` or restart the terminal pane.
+- Ready for user verification via `moderado` (chat → type `/model` → Enter): expect dimmed background, drop shadow, `❯`-cursor list window with type-to-filter.
 
 
 
