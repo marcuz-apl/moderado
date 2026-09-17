@@ -1,8 +1,8 @@
 # Project Handoff
 
-Updated: 2026-09-16 22:33 UTC  
+Updated: 2026-09-16 22:40 UTC  
 Branch: master  
-Commit: in progress (v0.1.1+260916a feat(cli): interactive API key prompt, config persistence, and model selection)  
+Commit: c27c260 (v0.1.1+260916b feat(cli): launch interactive menu on root moderado invocation)  
 Status: complete  
 
 ## Summary
