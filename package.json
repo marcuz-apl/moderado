@@ -10,7 +10,8 @@
     "build": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit"
+    "typecheck": "tsc -b --noEmit",
+    "moderado": "node apps/cli/dist/index.js"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",

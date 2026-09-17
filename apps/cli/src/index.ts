@@ -1,0 +1,50 @@
+#!/usr/bin/env node
+
+import { parseCliArgs, getHelpText } from './args.js';
+import { handleModelsCommand } from './commands/models.js';
+import { handleRunCommand } from './commands/run.js';
+
+async function main(): Promise<void> {
+  const args = parseCliArgs();
+
+  if (args.help) {
+    process.stdout.write(getHelpText());
+    process.exit(0);
+  }
+
+  if (args.version) {
+    process.stdout.write('v0.1.0+2609165\n');
+    process.exit(0);
+  }
+
+  const abortController = new AbortController();
+  const handleSigint = () => {
+    process.stdout.write('\n\x1b[33mReceived SIGINT, aborting session gracefully...\x1b[0m\n');
+    abortController.abort();
+  };
+
+  process.on('SIGINT', handleSigint);
+  process.on('SIGTERM', handleSigint);
+
+  let exitCode = 0;
+  try {
+    if (args.command === 'models') {
+      exitCode = await handleModelsCommand(args);
+    } else if (args.command === 'run') {
+      exitCode = await handleRunCommand(args, abortController.signal);
+    } else {
+      process.stdout.write(getHelpText());
+      exitCode = 0;
+    }
+  } finally {
+    process.off('SIGINT', handleSigint);
+    process.off('SIGTERM', handleSigint);
+  }
+
+  process.exit(exitCode);
+}
+
+main().catch((err) => {
+  process.stderr.write(`\x1b[1;31mFatal error:\x1b[0m ${err.message}\n`);
+  process.exit(1);
+});

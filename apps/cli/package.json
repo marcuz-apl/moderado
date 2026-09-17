@@ -1,0 +1,23 @@
+{
+  "name": "moderado",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "moderado": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node ./dist/index.js",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@moderado/contracts": "*",
+    "@moderado/core": "*",
+    "@moderado/providers": "*",
+    "@moderado/tools": "*",
+    "zod": "^3.24.2"
+  }
+}

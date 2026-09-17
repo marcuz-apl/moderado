@@ -1,60 +1,62 @@
 # Project Handoff
 
-Updated: 2026-09-16 22:02 UTC  
+Updated: 2026-09-16 22:05 UTC  
 Branch: master  
-Commit: in progress (Milestone 4 completed, ready to commit)  
+Commit: in progress (Milestone 5 completed, ready to commit)  
 Status: in progress  
 
 ## Summary
 
-Completed **Milestone 4: Core Agent Loop, Free-First Router & Policy Engine (`packages/core`)**. Implemented the multi-step `AgentLoop` orchestrator with Dependency Injection, the 4-stage Free-First `Router` (with fallback cascades and model pinning), and the `PolicyManager` (step bounding, read-only mode, and non-interactive enforcement). Configured project references for workspace-wide `tsc -b`. All 66 tests across 9 test files pass cleanly.
+Completed **Milestone 5: CLI Presentation & Terminal UI (`apps/cli`)**. Implemented the bloat-free CLI argument parser using native Node.js `util.parseArgs`, the interactive terminal approval prompt with diff previews (`TerminalApprovalHandler`), the ANSI terminal event stream renderer (`TerminalRenderer`), and the command entrypoints (`moderado models` and `moderado run`). All 74 tests across 12 test suites pass cleanly.
 
 ## Completed
 
 - **Milestone 1**: Scaffolding, `tsconfig.base.json`, `vitest.config.ts`, pure contracts `@moderado/contracts`.
 - **Milestone 2**: Workspace security jail, path canonicalization, diff generation, and 7 core tools `@moderado/tools`.
 - **Milestone 3**: `FakeProviderAdapter`, SSE parser, and `NvidiaAdapter` in `@moderado/providers`.
-- **Milestone 4**:
-  - `packages/core/src/policy.ts`: Step limit checking, read-only mode validation, and non-interactive mode security checks.
-  - `packages/core/src/router.ts`: Free-first AUTO selection algorithm, capability filtering, paid/unknown model exclusion without user opt-in, pinned model enforcement, and failover candidate cascading (`getNextFallback`).
-  - `packages/core/src/agent.ts`: State machine and multi-step `AgentLoop`:
-    - Dependency Injection: accepts provider, tools, approvals, and event listeners purely via contracts.
-    - Emits structured lifecycle events (`progress`, `model_change`, `assistant_delta`, `tool_call_initiated`, `approval_request`, `approval_resolved`, `tool_result`, `completion`, `cancellation`).
-    - Tool execution cycle: validates schemas, queries policy, delegates approval boundary, executes inside workspace, and feeds tool results back to conversation.
-    - Side-effect protection and error recovery.
-  - Root project references: `tsconfig.json` enabling `tsc -b` to build all packages in dependency order.
+- **Milestone 4**: Core `AgentLoop`, `Router`, and `PolicyManager` in `@moderado/core`.
+- **Milestone 5**:
+  - `apps/cli/src/args.ts`: Native `util.parseArgs` implementation for `models`, `run "<task>"`, `--workspace`, `--model`, `--max-steps`, `--read-only`, `--non-interactive`, `--allow-paid`, and `--verbose`.
+  - `apps/cli/src/ui/terminal_approval.ts`: Interactive CLI approval UI rendering colored diff previews, command arguments, and accepting user confirmation (`[y/N/q]`).
+  - `apps/cli/src/ui/renderer.ts`: Structured event renderer displaying model transitions, tool execution status, token streaming, and session banners.
+  - `apps/cli/src/commands/models.ts`: Command handler querying live NVIDIA NIM model catalogs and rendering capability/access tier tables.
+  - `apps/cli/src/commands/run.ts`: Command handler initializing dependencies and running the core agent loop.
+  - `apps/cli/src/index.ts`: Binary entry point with graceful `SIGINT` (Ctrl+C) handling and exit code management.
 - Authored and verified Vitest test suites:
-  - `packages/core/tests/policy.test.ts` (4 tests passing)
-  - `packages/core/tests/router.test.ts` (5 tests passing)
-  - `packages/core/tests/agent.test.ts` (7 tests passing)
-  - Total across workspace: 9 test files, 66 tests passing in 1.70s.
-- Clean build: `tsc -b` compiles all packages (`contracts`, `tools`, `providers`, `core`) with zero errors.
+  - `apps/cli/tests/args.test.ts` (4 tests passing)
+  - `apps/cli/tests/terminal_approval.test.ts` (3 tests passing)
+  - `apps/cli/tests/renderer.test.ts` (1 test passing)
+  - Total across workspace: 12 test files, 74 tests passing in 1.77s.
+- Clean build: `tsc -b` compiles all 5 packages/apps with zero errors.
 
 ## In progress
 
-- Staging and committing Milestone 4.
+- Staging and committing Milestone 5.
 
 ## Working tree
 
 - Modified:
-  - `VERSION` (`v0.1.0+2609165`)
+  - `VERSION` (`v0.1.0+2609166`)
   - `HANDOFF.md`
+  - `package.json`
   - `package-lock.json`
-  - `tsconfig.base.json`
-- Added:
   - `tsconfig.json`
-  - `packages/core/`
+  - `vitest.config.ts`
+- Added:
+  - `apps/cli/`
 
 ## Checks
 
 - `npm run build` (`tsc -b`) — PASS
-- `npm test` — PASS (66 tests, 9 test files)
+- `npm test` — PASS (74 tests, 12 test files)
+- `node ./apps/cli/dist/index.js --help` — PASS
+- `node ./apps/cli/dist/index.js --version` — PASS
 
 ## Decisions and context
 
-- Pure Dependency Injection: `@moderado/core` does not import `@moderado/providers` or concrete tools in production runtime; dependencies are injected through interfaces.
-- Free-first AUTO routing: Automatically prioritizes verified free/trial models with tool support, blocking paid inference unless explicitly allowed via `--allow-paid`.
-- Approval boundary: Approval requests and decisions are emitted as typed events and tied to sequential/UUID request IDs.
+- Ponytail argument parsing: Leveraged Node.js built-in `util.parseArgs` instead of Commander or Yargs, maintaining zero external CLI dependencies.
+- Terminal approval UX: Diffs rendered with green (`+`) and red (`-`) lines directly in stdout before prompting for confirmation.
+- Signal interception: `SIGINT` and `SIGTERM` trigger `AbortController` cancellation so pending processes and streams shut down cleanly.
 
 ## Blockers
 
@@ -62,5 +64,5 @@ Completed **Milestone 4: Core Agent Loop, Free-First Router & Policy Engine (`pa
 
 ## Next action
 
-1. Commit Milestone 4: `git add . && git commit -m "v0.1.0+2609165 feat(core): implement core agent loop, policy manager, and free-first router"` and push to `origin/master`.
-2. Begin **Milestone 5: CLI Presentation & Terminal UI (`apps/cli`)**.
+1. Commit Milestone 5: `git add . && git commit -m "v0.1.0+2609166 feat(cli): implement command-line application and terminal UI"` and push to `origin/master`.
+2. Begin **Milestone 6: End-to-End Integration, Smoke Tests & Release Polish**.
