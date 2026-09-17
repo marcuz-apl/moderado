@@ -62,17 +62,56 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const right5Raw = options.autoApprove
     ? 'Auto-approve all enabled (Shift+Tab)'
     : 'Auto-approve off (Shift+Tab)';
-
   const spaces5Count = Math.max(1, width - shortWs.length - right5Raw.length);
   const line5 = left5 + ' '.repeat(spaces5Count) + right5;
 
-  return [
+  const cardLines = [
     hr,
     textBox,
     hr,
     line4,
     line5,
-  ].join('\n');
+  ];
+
+  if (options.input && options.input.startsWith('/')) {
+    const matching = getMatchingCommands(options.input);
+    if (matching.length > 0) {
+      cardLines.push(...renderSuggestionsBox(matching));
+    }
+  }
+
+  return cardLines.join('\n');
+}
+
+export interface SlashCommand {
+  name: string;
+  desc: string;
+}
+
+export const SLASH_COMMANDS: SlashCommand[] = [
+  { name: '/model', desc: 'Switch active AI model' },
+  { name: '/clear', desc: 'Reset conversation memory' },
+  { name: '/help', desc: 'Display commands, shortcuts & version' },
+  { name: '/exit', desc: 'Exit Moderado' },
+];
+
+export function getMatchingCommands(input: string): SlashCommand[] {
+  if (!input.startsWith('/')) return [];
+  const q = input.toLowerCase();
+  return SLASH_COMMANDS.filter((cmd) => cmd.name.startsWith(q));
+}
+
+export function renderSuggestionsBox(commands: SlashCommand[]): string[] {
+  if (commands.length === 0) return [];
+  const lines: string[] = [];
+  lines.push('\x1b[38;5;240m  ╭─ Commands (Press Tab to autocomplete) ──────────────╮\x1b[0m');
+  for (const cmd of commands) {
+    const nameStr = `\x1b[1;38;5;75m${cmd.name.padEnd(8)}\x1b[0m`;
+    const descStr = `\x1b[38;5;244m${cmd.desc.padEnd(38)}\x1b[0m`;
+    lines.push(`\x1b[38;5;240m  │\x1b[0m  ${nameStr} ${descStr}\x1b[38;5;240m│\x1b[0m`);
+  }
+  lines.push('\x1b[38;5;240m  ╰─────────────────────────────────────────────────────╯\x1b[0m');
+  return lines;
 }
 
 export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
@@ -143,12 +182,17 @@ export async function promptInteractiveTurn(options: {
   readlineModule.emitKeypressEvents(stdin);
   stdin.setRawMode(true);
 
+  const getExtraLines = () => {
+    if (!input.startsWith('/')) return 0;
+    const matching = getMatchingCommands(input);
+    return matching.length > 0 ? matching.length + 2 : 0;
+  };
+
   // Position cursor on Line 2 with flashing block
   const positionCursorOnInput = () => {
     const cursorCol = 2 + input.length;
-    // \x1b[1 q = flashing block cursor, \x1b[?25h = show cursor
-    // Line 2 is 4 lines above the bottom of the card
-    stdout.write(`\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${cursorCol}C`);
+    const moveUp = 4 + getExtraLines();
+    stdout.write(`\x1b[1 q\x1b[?25h\x1b[${moveUp}A\r\x1b[${cursorCol}C`);
   };
 
   if (options.isFirstTurn) {
@@ -185,7 +229,8 @@ export async function promptInteractiveTurn(options: {
 
     const onAbort = () => {
       cleanup();
-      stdout.write('\x1b[4B\r\n\x1b[0 q\x1b[?25h');
+      const moveDown = 4 + getExtraLines();
+      stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
       resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
     };
 
@@ -196,7 +241,8 @@ export async function promptInteractiveTurn(options: {
     const onKeypress = (str: string, key: any) => {
       if (options.signal?.aborted) {
         cleanup();
-        stdout.write('\x1b[4B\r\n\x1b[0 q');
+        const moveDown = 4 + getExtraLines();
+        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q`);
         resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
         return;
       }
@@ -212,7 +258,8 @@ export async function promptInteractiveTurn(options: {
       // Ctrl+C
       if (key.ctrl && key.name === 'c') {
         cleanup();
-        stdout.write('\x1b[4B\r\n\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n');
+        const moveDown = 4 + getExtraLines();
+        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[33mSession cancelled.\x1b[0m\n\n`);
         process.exit(0);
       }
 
@@ -223,8 +270,21 @@ export async function promptInteractiveTurn(options: {
         return;
       }
 
-      // Tab alone (toggle Plan / Execute)
+      // Tab alone
       if (key.name === 'tab' && !key.shift) {
+        if (input.startsWith('/')) {
+          const matching = getMatchingCommands(input);
+          if (matching.length > 0) {
+            const exactIdx = matching.findIndex((m) => m.name.toLowerCase() === input.toLowerCase());
+            if (exactIdx === -1) {
+              input = matching[0].name;
+            } else {
+              input = matching[(exactIdx + 1) % matching.length].name;
+            }
+            redrawCard();
+            return;
+          }
+        }
         currentMode = currentMode === 'Plan' ? 'Execute' : 'Plan';
         redrawCard();
         return;
@@ -236,8 +296,8 @@ export async function promptInteractiveTurn(options: {
         if (options.signal) {
           options.signal.removeEventListener('abort', onAbort);
         }
-        // Move from Line 2 down 4 lines to bottom, reset cursor to default and visible
-        stdout.write('\x1b[4B\r\n\x1b[0 q\x1b[?25h');
+        const moveDown = 4 + getExtraLines();
+        stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
         resolve({ text: input.trim(), mode: currentMode, autoApprove: currentAutoApprove });
         return;
       }

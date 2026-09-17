@@ -85,4 +85,42 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('❯ Ask anything, I am all ears...');
     expect(plain).toContain('z-ai/glm-5.3-flash');
   });
+
+  it('renders slash command suggestions box when input starts with slash', () => {
+    const output = renderWelcomeCard({
+      model: 'moonshotai/kimi-k3',
+      tokens: 0,
+      cost: '$0.00',
+      workspace: 'd:\\test',
+      mode: 'Execute',
+      autoApprove: false,
+      input: '/',
+      width: 80,
+    });
+
+    const plain = stripAnsi(output);
+    expect(plain).toContain('/model');
+    expect(plain).toContain('/clear');
+    expect(plain).toContain('/help');
+    expect(plain).toContain('/exit');
+    expect(plain).toContain('Commands (Press Tab to autocomplete)');
+  });
+
+  it('filters slash commands suggestions by prefix', () => {
+    const output = renderWelcomeCard({
+      model: 'moonshotai/kimi-k3',
+      tokens: 0,
+      cost: '$0.00',
+      workspace: 'd:\\test',
+      mode: 'Execute',
+      autoApprove: false,
+      input: '/m',
+      width: 80,
+    });
+
+    const plain = stripAnsi(output);
+    expect(plain).toContain('/model');
+    expect(plain).not.toContain('/clear');
+    expect(plain).not.toContain('/help');
+  });
 });

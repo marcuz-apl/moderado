@@ -10,10 +10,11 @@ import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
 import { promptInteractiveTurn } from '../ui/welcome.js';
+import { showHelpModal } from '../ui/help_modal.js';
 
 export async function handleChatSession(
   args: CliParsedArgs,
-  _version: string,
+  version: string,
   signal?: AbortSignal
 ): Promise<number> {
   let canonicalWorkspace: string;
@@ -121,16 +122,10 @@ export async function handleChatSession(
         return 0;
       }
 
-    if (trimmed === '/help') {
-      process.stdout.write(
-        '\n\x1b[1mCommands:\x1b[0m\n' +
-        '  \x1b[38;5;75m/model\x1b[0m    Switch AI model\n' +
-        '  \x1b[38;5;75m/clear\x1b[0m    Reset conversation memory\n' +
-        '  \x1b[38;5;75m/help\x1b[0m     Display command reference\n' +
-        '  \x1b[38;5;75m/exit\x1b[0m     Exit Moderado\n\n'
-      );
-      continue;
-    }
+      if (trimmed === '/help') {
+        await showHelpModal(version, canonicalWorkspace, signal);
+        continue;
+      }
 
     if (trimmed === '/clear') {
       conversationHistory = [];
