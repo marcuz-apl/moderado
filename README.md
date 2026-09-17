@@ -78,6 +78,34 @@ moderado run "Analyze security boundaries" --read-only
 
 ---
 
+## Getting Started & Development
+
+### 1. Build & Test
+```bash
+# Install workspace dependencies
+npm install
+
+# Build all packages via TypeScript project references
+npm run build
+
+# Run full automated test suite (100% offline, zero API keys required)
+npm test
+```
+
+### 2. Manual Live Smoke Test (Optional)
+To test live model discovery and chat against NVIDIA NIM with real credentials:
+```bash
+# PowerShell
+$env:NVIDIA_API_KEY="nvapi-..."
+node scripts/smoke_test.js
+
+# POSIX (bash/zsh)
+export NVIDIA_API_KEY="nvapi-..."
+node scripts/smoke_test.js
+```
+
+---
+
 ## License
 
 This project is licensed under the MIT License.
