@@ -1,40 +1,41 @@
 # Project Handoff
 
-Updated: 2026-09-17 18:50 UTC  
+Updated: 2026-09-17 20:35 UTC  
 Branch: master  
 Version: v0.1.13+260917k  
 Status: complete  
 
 ## Summary
 
-Implemented true Cline-style popup modal windows for `/help` and `/model` with `Esc` and `Enter` key handling:
-1. **Popup Window for `/help`**:
-   - Opens in a dedicated alternate screen buffer with hidden cursor (`\x1b[?1049h\x1b[?25l`).
-   - Renders a centered dialog box on screen showing commands, shortcuts, inline assist, workspace, and version info.
-   - Listens for raw key events: pressing <kbd>Esc</kbd>, <kbd>Enter</kbd>, or `q` immediately closes the popup window, restores cursor visibility and original screen buffer (`\x1b[?25h\x1b[?1049l`).
-2. **Popup Window for `/model`**:
-   - Opens in alternate screen buffer with centered modal layout and clean borders.
-   - Built `askModalChoice` in `prompt.ts` with raw keyboard listener: pressing <kbd>Esc</kbd> at any time immediately closes the modal without changes; pressing <kbd>Enter</kbd> or typing numbers selects the desired option.
-3. **Seamless Screen Restoration**:
-   - Closing either popup modal restores the primary terminal buffer cleanly without corrupting the chat prompt or leaving artifacts.
+Implemented a true Cline/OpenCode-style popup window for `/model` rendered as a **new layer on top of the main app window** (background stays as-is):
+1. **Layered popup rendering**:
+   - New `apps/cli/src/ui/popup.ts`: ANSI-aware `renderBoxLines` (bordered popup box builder), `popupWidth`, `overlayCentered` (composites popup lines centered on top of the current screen at a fixed position), and `layerPromptBox`.
+   - `welcome.ts` `/model` handler passes a `drawFrame` callback: it repaints the background welcome TUI exactly as-is, then overlays the popup window centered on top. The main TUI never scrolls — every step redraws the full frame.
+2. **Whole selection flow runs inside the popup layer**:
+   - `model_selector.ts`: `selectModelOverlay` accepts `drawFrame`; catalog query status, main menu, sub-lists (free/paid/catalog), search results, pagination, confirmations, and save prompts all redraw via the layer. Non-chat callers (`selectModelInteractive`) keep the alternate-screen flow.
+   - `prompt.ts`: `askModalChoice` gained an `echo` option so layer-mode inputs don't paint stray characters over the frame.
+3. **Terminal lock fix ("all lock" symptom)**:
+   - Root cause: interrupted runs left the terminal with hidden cursor (`\x1b[?25l`), active alternate screen (`\x1b[?1049h`), and/or stdin in raw mode — terminal appears frozen.
+   - Fix: `chat.ts` now registers a `process.on('exit')` `restoreTerminal` hook that always restores cursor visibility, sane cursor style, non-raw stdin, and the primary screen buffer on any exit path (only the `exit` event is used — `unhandledRejection` listeners were deliberately avoided because they suppress Node's default fail-closed crash).
 
 ## Completed
 
-- `apps/cli/src/ui/help_modal.ts`: Implemented centered popup dialog with raw keypress listener for <kbd>Esc</kbd> and <kbd>Enter</kbd> closing.
-- `apps/cli/src/ui/model_selector.ts`: Switched to alternate screen popup with centered dialog and <kbd>Esc</kbd>/<kbd>Enter</kbd> support.
-- `apps/cli/src/ui/prompt.ts`: Implemented and exported `askModalChoice` handling raw <kbd>Esc</kbd>, <kbd>Enter</kbd>, and backspace keys.
-- `apps/cli/tests/prompt.test.ts`: Added unit tests for `askModalChoice`.
-- `VERSION`: Updated to `v0.1.13+260917k`.
+- `apps/cli/src/ui/popup.ts`: New popup window primitives (`renderBoxLines`, `overlayCentered`, `popupWidth`, `layerPromptBox`).
+- `apps/cli/src/ui/model_selector.ts`: Layer-aware `selectModelOverlay` via `drawFrame`; all sub-flows redraw inside the popup layer.
+- `apps/cli/src/ui/welcome.ts`: `/model` handler composites background + popup layer and restores the TUI after selection.
+- `apps/cli/src/ui/prompt.ts`: `echo` option for `askModalChoice`.
+- `apps/cli/src/commands/chat.ts`: `drawFrame` threaded through; guaranteed terminal restore on process exit.
+- `apps/cli/tests/prompt.test.ts`: Unit tests for `askModalChoice` (existing, still green).
 
 ## Checks
 
-- `npm run build` (`tsc -b --force`): Clean compilation across all workspaces.
-- `npm test` (`vitest run`): 108 tests passed across 22 test suites offline in 1.88s.
-- `npm link --workspace moderado`: Re-linked global CLI binary.
+- `npm run typecheck` / `npm run build`: Clean compilation across all workspaces.
+- `npm test`: 108 tests passed across 22 test suites offline in ~1.9s.
 
 ## Next action
 
-- Ready for user verification via `moderado`.
+- Ready for user verification via `moderado` (chat → type `/model` → Enter). If a terminal still looks locked from an earlier run, run `reset` or restart the terminal pane.
+
 
 
 

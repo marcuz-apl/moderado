@@ -1,3 +1,5 @@
+import { overlayCentered } from './popup.js';
+
 export interface WelcomeLayoutOptions {
   model: string;
   tokens: number;
@@ -187,8 +189,13 @@ export interface PromptInteractiveTurnOptions {
   initialAutoApprove?: boolean;
   isFirstTurn?: boolean;
   signal?: AbortSignal;
-  /** Called when user selects a model via /model. The callback owns the selection UI and returns the new model id, or undefined if cancelled. */
-  onModelSelect?: () => Promise<string | undefined>;
+  /**
+   * Called when user selects a model via /model. Receives a `drawFrame`
+   * callback that composites popup content as a floating layer on top of the
+   * main TUI window (background stays as-is). The callback owns the selection
+   * UI and returns the new model id, or undefined if cancelled.
+   */
+  onModelSelect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
 }
@@ -349,21 +356,33 @@ export async function promptInteractiveTurn(
 
         // ── /model overlay popup ──────────────────────────────────────────────
         // Triggered when Enter is pressed with "/model" in the input box.
-        // We temporarily detach the main keypress listener so selectModelOverlay
-        // (which uses askModalChoice → raw mode internally) can take full control.
+        // We temporarily detach the main keypress listener and hand the model
+        // selector a drawFrame callback. drawFrame repaints the background TUI
+        // exactly as-is and composites the popup content as a centered floating
+        // layer on top of it (Cline/OpenCode style) — the popup never scrolls
+        // the background because every step redraws the whole frame.
         // After it returns, we repaint the full welcome TUI and reposition cursor.
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/model') {
           input = '';
           stdin.removeListener('keypress', onKeypress); // pause main handler
 
           if (options.onModelSelect) {
-            const newId = await options.onModelSelect();
+            const drawFrame = (popupLines: string[]): void => {
+              // 1. Background: the main TUI window stays as-is underneath.
+              stdout.write('\x1b[H\x1b[J');
+              stdout.write(renderFullWelcomeScreen(getOptions()));
+              // 2. New layer: popup window composited centered on top.
+              const cols = process.stdout.columns || 80;
+              const rows = process.stdout.rows || 24;
+              stdout.write(overlayCentered(popupLines, cols, rows));
+            };
+            const newId = await options.onModelSelect(drawFrame);
             if (newId && newId !== currentModel) {
               currentModel = newId;
             }
           }
 
-          // askModalChoice left stdin in non-raw mode — restore it for our TUI
+          // Selection flow left stdin in non-raw mode — restore it for our TUI
           readlineModule.emitKeypressEvents(stdin);
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');

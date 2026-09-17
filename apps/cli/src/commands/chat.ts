@@ -63,6 +63,23 @@ export async function handleChatSession(
 
   // 3. Enter Chat Terminal (Welcome TUI with OpenCode-style persistent background layout)
   process.stdout.write('\x1b]0;Moderado\x07');
+
+  // Terminal safety: guarantee cursor visibility, sane mode, and primary screen
+  // buffer are restored on ANY exit path (crash, unhandled rejection, signal) so
+  // the terminal can never be left in a "locked" state (hidden cursor / raw
+  // mode / alternate screen) after the session ends.
+  const restoreTerminal = (): void => {
+    try {
+      process.stdout.write('\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m');
+      if (process.stdin.isTTY) {
+        try { process.stdin.setRawMode(false); } catch { /* ignore */ }
+      }
+    } catch {
+      // ignore — stdout may already be gone
+    }
+  };
+  process.on('exit', restoreTerminal);
+
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
   let activeAutoApprove = false;
   let sessionTokens = 0;
@@ -103,14 +120,16 @@ export async function handleChatSession(
       isFirstTurn: isFirst,
       signal,
 
-      // /model popup: selectModelOverlay draws inline (no alternate screen) so the
-      // welcome TUI background stays visible behind the model menu box.
-      onModelSelect: async () => {
+      // /model popup: selectModelOverlay runs as a floating popup window layered
+      // on top of the main TUI (drawFrame repaints the background as-is and
+      // composites the popup centered on top — Cline/OpenCode style).
+      onModelSelect: async (drawFrame) => {
         const selection = await selectModelOverlay({
           apiKey,
           currentModel,
           signal,
           saveSelectionByDefault: true,
+          drawFrame,
         });
         if (selection.modelId && selection.modelId !== currentModel) {
           currentModel = selection.modelId;

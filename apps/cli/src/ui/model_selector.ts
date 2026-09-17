@@ -1,6 +1,7 @@
 import { NvidiaAdapter } from '@moderado/providers';
 import { Router } from '@moderado/core';
 import { askQuestion, askSelect, askModalChoice, SelectOption } from './prompt.js';
+import { renderBoxLines, layerPromptBox } from './popup.js';
 import { loadConfig, saveConfig, resolveApiKey } from '../config.js';
 
 export interface ModelSelectionResult {
@@ -15,6 +16,14 @@ export interface ModelSelectorOptions {
   currentModel?: string;
   signal?: AbortSignal;
   saveSelectionByDefault?: boolean;
+  /**
+   * When provided, the selection flow runs as a Cline/OpenCode-style popup
+   * window: `drawFrame(popupLines)` composites the popup content as a floating
+   * layer centered on top of the main app window (which stays as-is in the
+   * background). Every step redraws the frame, so the popup never scrolls the
+   * background. When omitted (standalone setup flows), rendering is inline.
+   */
+  drawFrame?: (popupLines: string[]) => void;
 }
 
 let cachedInventory: { id: string }[] | null = null;
@@ -36,9 +45,9 @@ export async function selectModelInteractive(
 }
 
 /**
- * Same model selection flow as selectModelInteractive, but rendered as a floating
- * overlay on top of whatever is currently on screen (no alternate screen buffer swap).
- * Used by the TUI /model popup so the welcome background stays visible.
+ * Same model selection flow as selectModelInteractive, but rendered as a
+ * floating popup window layered on top of the main app window (background
+ * stays as-is). Used by the TUI /model popup via the drawFrame callback.
  */
 export async function selectModelOverlay(
   options: ModelSelectorOptions = {}
@@ -72,7 +81,12 @@ async function executeModelSelection(
   if (cachedInventory && cachedInventory.length > 0) {
     discoveredEntries = cachedInventory;
   } else {
-    process.stdout.write('\n\x1b[36mQuerying NVIDIA NIM model catalog...\x1b[0m\n');
+    if (options.drawFrame) {
+      // Layer mode: show the query status inside the popup window itself.
+      layerPromptBox(options.drawFrame, '\x1b[36mQuerying NVIDIA NIM model catalog...\x1b[0m');
+    } else {
+      process.stdout.write('\n\x1b[36mQuerying NVIDIA NIM model catalog...\x1b[0m\n');
+    }
     try {
       discoveredEntries = await provider.discoverModels(signal);
       cachedInventory = discoveredEntries;
@@ -144,35 +158,28 @@ async function executeModelSelection(
 
   const cols = process.stdout.columns || 80;
   const boxWidth = Math.min(Math.max(62, Math.min(cols - 4, 72)), cols);
-  const leftPad = Math.max(0, Math.floor((cols - boxWidth) / 2));
+  const popupLines = renderBoxLines('Model Selection Window', menuLines, boxWidth);
 
-  // Draw inline below the current cursor — no screen wipe so background TUI stays visible.
-  let out = '\n';
-  const pad = ' '.repeat(leftPad);
-
-  const titleStr = 'Model Selection Window';
-  const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
-  out += pad + '\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m\n';
-
-  for (const line of menuLines) {
-    if (line === '---') {
-      out += pad + '\x1b[38;5;240m├─' + '─'.repeat(Math.max(0, boxWidth - 4)) + '─┤\x1b[0m\n';
-      continue;
-    }
-    const plain = line.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-    const spaces = Math.max(0, boxWidth - 4 - plain.length);
-    out += pad + '\x1b[38;5;240m│\x1b[0m  ' + line + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m\n';
+  if (options.drawFrame) {
+    // Popup window mode: composite the box as a centered floating layer on top
+    // of the main app window — the background stays as-is underneath.
+    options.drawFrame(popupLines);
+  } else {
+    // Standalone setup mode: draw inline below the current cursor.
+    const leftPad = Math.max(0, Math.floor((cols - boxWidth) / 2));
+    const pad = ' '.repeat(leftPad);
+    process.stdout.write('\n' + popupLines.map((l) => pad + l).join('\n') + '\n');
   }
 
-  out += pad + '\x1b[38;5;240m╰' + '─'.repeat(Math.max(0, boxWidth - 2)) + '╯\x1b[0m\n';
-  process.stdout.write(out);
-
   const maxOption = activeModel ? 6 : 5;
-  const promptMsg = pad + `\x1b[38;5;244mSelect [1-${maxOption}], [Esc]/[Enter] to close, or type keyword:\x1b[0m `;
+  const promptMsg =
+    (options.drawFrame ? '\n' : '') +
+    `\x1b[38;5;244mSelect [1-${maxOption}], [Esc]/[Enter] to close, or type keyword:\x1b[0m `;
   const input = await askModalChoice(promptMsg, { signal });
 
   let chosenModelId: string | undefined = undefined;
   let isPaid = false;
+  const layer = options.drawFrame;
 
   const normalized = input.trim().toLowerCase();
 
@@ -188,15 +195,15 @@ async function executeModelSelection(
     isPaid = false;
   } else if (normalized === '2' || normalized === 'free') {
     // Browse all free models
-    chosenModelId = await pickFromList('Choose Free Model:', freeModels.map((m) => m.id), router, signal);
+    chosenModelId = await pickFromList('Choose Free Model:', freeModels.map((m) => m.id), router, signal, layer);
     isPaid = false;
   } else if (normalized === '3' || normalized === 'paid') {
     // Browse paid models with search or list
-    chosenModelId = await browseOrSearchList('Paid & Frontier Models:', paidModels.map((m) => m.id), router, signal);
+    chosenModelId = await browseOrSearchList('Paid & Frontier Models:', paidModels.map((m) => m.id), router, signal, layer);
     isPaid = true;
   } else if (normalized === '4' || normalized === 'all') {
     // Browse all models with search or list
-    chosenModelId = await browseOrSearchList('All NVIDIA NIM Models:', discoveredEntries.map((m) => m.id), router, signal);
+    chosenModelId = await browseOrSearchList('All NVIDIA NIM Models:', discoveredEntries.map((m) => m.id), router, signal, layer);
     if (chosenModelId) {
       const meta = router.classifyModel(chosenModelId);
       isPaid = meta.accessTier === 'paid' || meta.accessTier === 'unknown';
@@ -205,7 +212,12 @@ async function executeModelSelection(
     // Keyword search or direct selection (e.g. "1", "glm", "flash", "z-ai/glm-5.3-flash")
     let searchTerm = input.trim();
     if (searchTerm === '1' || !searchTerm) {
-      searchTerm = await askQuestion('Enter search term or model ID (e.g. "glm", "flash", "llama"): ', { signal });
+      if (layer) {
+        layerPromptBox(layer, 'Enter search term or model ID (e.g. "glm", "flash", "llama"):');
+        searchTerm = await askModalChoice('\n> ', { signal });
+      } else {
+        searchTerm = await askQuestion('Enter search term or model ID (e.g. "glm", "flash", "llama"): ', { signal });
+      }
     }
 
     if (!searchTerm) {
@@ -216,7 +228,7 @@ async function executeModelSelection(
         savedAsDefault: false,
       };
     } else {
-      chosenModelId = await searchAndSelect(searchTerm, discoveredEntries.map((m) => m.id), router, signal);
+      chosenModelId = await searchAndSelect(searchTerm, discoveredEntries.map((m) => m.id), router, signal, layer);
       if (chosenModelId) {
         const meta = router.classifyModel(chosenModelId);
         isPaid = meta.accessTier === 'paid' || meta.accessTier === 'unknown';
@@ -235,18 +247,31 @@ async function executeModelSelection(
 
   let savedAsDefault = false;
   if (options.saveSelectionByDefault !== false && chosenModelId) {
-    process.stdout.write(`\n\x1b[32m✔ Selected model:\x1b[0m \x1b[1m${chosenModelId}\x1b[0m\n`);
-    const shouldSave = await askQuestion(
-      `Save ${chosenModelId} as persistent default model in ~/.moderado/config.json? [Y/n]: `,
-      { signal }
-    );
+    if (layer) {
+      layerPromptBox(layer, [
+        `\x1b[32m✔ Selected model:\x1b[0m \x1b[1m${chosenModelId}\x1b[0m`,
+        `Save as persistent default model in ~/.moderado/config.json? [Y/n]`,
+      ]);
+    } else {
+      process.stdout.write(`\n\x1b[32m✔ Selected model:\x1b[0m \x1b[1m${chosenModelId}\x1b[0m\n`);
+    }
+    const shouldSave = layer
+      ? await askModalChoice('\n> ', { signal })
+      : await askQuestion(
+          `Save ${chosenModelId} as persistent default model in ~/.moderado/config.json? [Y/n]: `,
+          { signal }
+        );
     if (shouldSave.toLowerCase() !== 'n' && shouldSave.toLowerCase() !== 'no') {
       saveConfig({
         defaultModel: chosenModelId,
         allowPaid: isPaid ? true : config.allowPaid,
         allowUnknown: isPaid ? true : config.allowUnknown,
       });
-      process.stdout.write(`\x1b[32m✔ Saved ${chosenModelId} as default model.\x1b[0m\n\n`);
+      if (layer) {
+        layerPromptBox(layer, `\x1b[32m✔ Saved ${chosenModelId} as default model.\x1b[0m`);
+      } else {
+        process.stdout.write(`\x1b[32m✔ Saved ${chosenModelId} as default model.\x1b[0m\n\n`);
+      }
       savedAsDefault = true;
     }
   }
@@ -263,9 +288,12 @@ async function searchAndSelect(
   initialQuery: string,
   allModelIds: string[],
   router: Router,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  layer?: (popupLines: string[]) => void
 ): Promise<string> {
   let currentQuery = initialQuery;
+  const rows = process.stdout.rows || 24;
+  const maxList = Math.max(5, Math.min(15, rows - 12));
 
   while (!signal?.aborted) {
     const q = currentQuery.trim().toLowerCase();
@@ -274,7 +302,15 @@ async function searchAndSelect(
     const exact = allModelIds.find((id) => id.toLowerCase() === q);
     if (exact) {
       const meta = router.classifyModel(exact);
-      const conf = await askQuestion(`\nSelected: ${exact} [${meta.accessTier}]. Confirm? [Y/n, or type new keyword]: `, { signal });
+      if (layer) {
+        layerPromptBox(layer, [
+          `Selected: \x1b[1m${exact}\x1b[0m [${meta.accessTier}]`,
+          'Confirm? [Y/n, or type new keyword]',
+        ]);
+      } else {
+        process.stdout.write(`\nSelected: ${exact} [${meta.accessTier}]. Confirm? [Y/n, or type new keyword]: `);
+      }
+      const conf = layer ? await askModalChoice('\n> ', { signal }) : await askQuestion('', { signal });
       const confNorm = conf.trim().toLowerCase();
       if (!confNorm || confNorm === 'y' || confNorm === 'yes') {
         return exact;
@@ -289,18 +325,30 @@ async function searchAndSelect(
     const matches = allModelIds.filter((id) => id.toLowerCase().includes(q));
 
     if (matches.length === 0) {
-      process.stdout.write(`\n\x1b[33mNo catalog model found matching "${currentQuery}".\x1b[0m\n`);
-      process.stdout.write('  \x1b[1m[1]\x1b[0m Try another search keyword\n');
-      process.stdout.write(`  \x1b[1m[2]\x1b[0m Use "${currentQuery}" as custom Model ID\n`);
-      process.stdout.write('  \x1b[1m[3]\x1b[0m Cancel search\n');
-      const action = await askQuestion('Select [1-3] or type a new search keyword: ', { signal });
+      if (layer) {
+        layerPromptBox(layer, [
+          `\x1b[33mNo catalog model found matching "${currentQuery}".\x1b[0m`,
+          '---',
+          '  [1] Try another search keyword',
+          `  [2] Use "${currentQuery}" as custom Model ID`,
+          '  [3] Cancel search',
+        ]);
+      } else {
+        process.stdout.write(`\n\x1b[33mNo catalog model found matching "${currentQuery}".\x1b[0m\n`);
+        process.stdout.write('  \x1b[1m[1]\x1b[0m Try another search keyword\n');
+        process.stdout.write(`  \x1b[1m[2]\x1b[0m Use "${currentQuery}" as custom Model ID\n`);
+        process.stdout.write('  \x1b[1m[3]\x1b[0m Cancel search\n');
+      }
+      const action = layer
+        ? await askModalChoice('\n> ', { signal })
+        : await askQuestion('Select [1-3] or type a new search keyword: ', { signal });
       const actNorm = action.trim().toLowerCase();
       if (actNorm === '2') {
         return currentQuery.trim();
-      } else if (actNorm === '3' || actNorm === 'cancel' || actNorm === 'exit') {
+      } else if (actNorm === '3' || actNorm === 'cancel' || actNorm === 'exit' || actNorm === 'q') {
         return '';
       } else if (actNorm === '1') {
-        const next = await askQuestion('Enter new search keyword: ', { signal });
+        const next = await askFlowText(layer, 'Enter new search keyword: ', { signal });
         if (!next) return '';
         currentQuery = next;
         continue;
@@ -313,8 +361,15 @@ async function searchAndSelect(
 
     if (matches.length === 1) {
       const meta = router.classifyModel(matches[0]);
-      process.stdout.write(`\n\x1b[32mFound 1 matching model:\x1b[0m \x1b[1m${matches[0]}\x1b[0m [${meta.accessTier}]\n`);
-      const conf = await askQuestion('Select this model? [Y/n, or type a new search keyword]: ', { signal });
+      if (layer) {
+        layerPromptBox(layer, [
+          `\x1b[32mFound 1 matching model:\x1b[0m \x1b[1m${matches[0]}\x1b[0m [${meta.accessTier}]`,
+          'Select this model? [Y/n, or type a new keyword]',
+        ]);
+      } else {
+        process.stdout.write(`\n\x1b[32mFound 1 matching model:\x1b[0m \x1b[1m${matches[0]}\x1b[0m [${meta.accessTier}]\n`);
+      }
+      const conf = layer ? await askModalChoice('\n> ', { signal }) : await askQuestion('', { signal });
       const confNorm = conf.trim().toLowerCase();
       if (!confNorm || confNorm === 'y' || confNorm === 'yes') {
         return matches[0];
@@ -323,41 +378,58 @@ async function searchAndSelect(
         currentQuery = conf.trim();
         continue;
       }
-      const next = await askQuestion('Enter new search keyword (or press Enter to cancel): ', { signal });
+      const next = await askFlowText(layer, 'Enter new search keyword (or press Enter to cancel): ', { signal });
       if (!next) return '';
       currentQuery = next;
       continue;
     }
 
     // Multiple matches
-    process.stdout.write(`\n\x1b[1mFound ${matches.length} models matching "${currentQuery}":\x1b[0m\n`);
-    process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
-    for (let i = 0; i < matches.length; i++) {
-      const m = matches[i];
-      const meta = router.classifyModel(m);
-      const tag = meta.accessTier === 'free_trial' ? 'Free Trial' : 'Paid';
-      process.stdout.write(`  \x1b[1m[${i + 1}]\x1b[0m ${m} \x1b[36m[${tag}]\x1b[0m\n`);
+    if (layer) {
+      const lines = [`\x1b[1mFound ${matches.length} models matching "${currentQuery}":\x1b[0m`, '---'];
+      for (let i = 0; i < Math.min(matches.length, maxList); i++) {
+        const meta = router.classifyModel(matches[i]);
+        const tag = meta.accessTier === 'free_trial' ? 'Free Trial' : 'Paid';
+        lines.push(`  \x1b[1m[${i + 1}]\x1b[0m ${matches[i]} \x1b[36m[${tag}]\x1b[0m`);
+      }
+      if (matches.length > maxList) {
+        lines.push(`  \x1b[90m... and ${matches.length - maxList} more — refine the keyword\x1b[0m`);
+      }
+      lines.push('  [s] Search again with a different keyword');
+      lines.push('  [b] Back to main menu');
+      layerPromptBox(layer, lines);
+    } else {
+      process.stdout.write(`\n\x1b[1mFound ${matches.length} models matching "${currentQuery}":\x1b[0m\n`);
+      process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
+      for (let i = 0; i < matches.length; i++) {
+        const m = matches[i];
+        const meta = router.classifyModel(m);
+        const tag = meta.accessTier === 'free_trial' ? 'Free Trial' : 'Paid';
+        process.stdout.write(`  \x1b[1m[${i + 1}]\x1b[0m ${m} \x1b[36m[${tag}]\x1b[0m\n`);
+      }
+      process.stdout.write('  \x1b[1m[s]\x1b[0m Search again with a different keyword\n');
+      process.stdout.write('  \x1b[1m[b]\x1b[0m Back to main menu\n');
+      process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
     }
-    process.stdout.write('  \x1b[1m[s]\x1b[0m Search again with a different keyword\n');
-    process.stdout.write('  \x1b[1m[b]\x1b[0m Back to main menu\n');
-    process.stdout.write('\x1b[90m─────────────────────────────────────────────────────────────\x1b[0m\n');
 
-    const choice = await askQuestion(`Select [1-${matches.length}], "s" to search again, or type a new keyword: `, { signal });
+    const choice = layer
+      ? await askModalChoice('\n> ', { signal })
+      : await askQuestion(`Select [1-${matches.length}], "s" to search again, or type a new keyword: `, { signal });
     const choiceNorm = choice.trim().toLowerCase();
 
-    if (choiceNorm === 'b' || choiceNorm === 'back') {
+    if (choiceNorm === 'b' || choiceNorm === 'back' || choiceNorm === 'q') {
       return '';
     }
 
     if (choiceNorm === 's' || choiceNorm === 'search') {
-      const next = await askQuestion('Enter new search keyword: ', { signal });
+      const next = await askFlowText(layer, 'Enter new search keyword: ', { signal });
       if (!next) return '';
       currentQuery = next;
       continue;
     }
 
     const num = parseInt(choice, 10);
-    if (!isNaN(num) && num >= 1 && num <= matches.length) {
+    if (!isNaN(num) && num >= 1 && num <= (layer ? Math.min(matches.length, maxList) : matches.length)) {
       return matches[num - 1];
     }
 
@@ -376,8 +448,22 @@ async function browseOrSearchList(
   title: string,
   modelIds: string[],
   router: Router,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  layer?: (popupLines: string[]) => void
 ): Promise<string> {
+  if (layer) {
+    layerPromptBox(layer, [
+      `\x1b[1m${title}\x1b[0m (${modelIds.length} models)`,
+      'Filter by keyword (e.g. "glm", "flash", "coder"), [Esc] to cancel, or press Enter to list all:',
+    ]);
+    const filter = await askModalChoice('\n> ', { signal });
+    if (filter === 'q') return '';
+    if (filter.trim()) {
+      return searchAndSelect(filter.trim(), modelIds, router, signal, layer);
+    }
+    return pickFromList(title, modelIds, router, signal, layer);
+  }
+
   process.stdout.write(`\n\x1b[1m${title}\x1b[0m (${modelIds.length} models)\n`);
   const filter = await askModalChoice('Filter by keyword (e.g. "glm", "flash", "coder"), [Esc] to cancel, or press Enter to list all: ', { signal });
 
@@ -390,11 +476,28 @@ async function browseOrSearchList(
   return pickFromList(title, modelIds, router, signal);
 }
 
+/**
+ * Text input that works in both modes: inside the popup layer (raw keys, the
+ * prompt box above is redrawn by the layer) or inline (line-based readline).
+ */
+async function askFlowText(
+  layer: ((popupLines: string[]) => void) | undefined,
+  promptMsg: string,
+  options: { signal?: AbortSignal }
+): Promise<string> {
+  if (layer) {
+    layerPromptBox(layer, promptMsg.replace(/:\s*$/, ':'));
+    return askModalChoice('\n> ', options);
+  }
+  return askQuestion(promptMsg, options);
+}
+
 async function pickFromList(
   title: string,
   modelIds: string[],
   router: Router,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  layer?: (popupLines: string[]) => void
 ): Promise<string> {
   const choices: SelectOption[] = modelIds.map((id) => {
     const meta = router.classifyModel(id);
@@ -405,6 +508,57 @@ async function pickFromList(
       tag,
     };
   });
+
+  if (layer) {
+    // Popup window mode: paginate inside the floating layer — the background
+    // main app window stays as-is because every page redraws the whole frame.
+    const rows = process.stdout.rows || 24;
+    const cols = process.stdout.columns || 80;
+    const boxWidth = Math.min(Math.max(56, Math.min(cols - 4, 72)), cols);
+    const pageSize = Math.max(5, Math.min(20, rows - 12));
+    const totalPages = Math.ceil(choices.length / pageSize);
+    let page = 0;
+
+    while (page < totalPages) {
+      const pageChoices = choices.slice(page * pageSize, (page + 1) * pageSize);
+      const lines = [`${title} (${choices.length} models)`, '---'];
+      for (let i = 0; i < pageChoices.length; i++) {
+        const item = pageChoices[i];
+        const tag = item.tag ? ` \x1b[36m[${item.tag}]\x1b[0m` : '';
+        lines.push(`  \x1b[1m[${i + 1}]\x1b[0m ${item.label}${tag}`);
+      }
+      const pageFooter =
+        page + 1 < totalPages
+          ? `Page ${page + 1} of ${totalPages} — Select [1-${pageChoices.length}], Enter for next page, [Esc] to cancel`
+          : `Page ${page + 1} of ${totalPages} — Select [1-${pageChoices.length}] or [Esc] to cancel`;
+      lines.push('---');
+      lines.push(`\x1b[38;5;244m${pageFooter}\x1b[0m`);
+
+      layer(renderBoxLines(title, lines, boxWidth));
+
+      const answer = await askModalChoice('\n> ', { signal });
+      if (answer === 'q') return '';
+      if (!answer && page + 1 < totalPages) {
+        page++;
+        continue;
+      }
+
+      const num = parseInt(answer, 10);
+      if (!isNaN(num) && num >= 1 && num <= pageChoices.length) {
+        return pageChoices[num - 1].value;
+      }
+
+      // Check if user typed a model name/keyword directly
+      if (answer.trim()) {
+        const matched = modelIds.find((m) => m.toLowerCase().includes(answer.trim().toLowerCase()));
+        if (matched) return matched;
+      }
+
+      break;
+    }
+
+    return '';
+  }
 
   // If list is large (> 25), show in pages of 20
   if (choices.length > 25) {

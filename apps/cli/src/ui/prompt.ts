@@ -4,6 +4,11 @@ export interface PromptOptions {
   stdin?: NodeJS.ReadableStream;
   stdout?: NodeJS.WritableStream;
   signal?: AbortSignal;
+  /**
+   * When false, askModalChoice does not echo typed characters or backspaces to
+   * stdout. Used inside popup-layer frames where the layer itself manages display.
+   */
+  echo?: boolean;
 }
 
 export async function askQuestion(
@@ -103,14 +108,18 @@ export async function askModalChoice(
       if (key && (key.name === 'backspace' || key.name === 'delete')) {
         if (buffer.length > 0) {
           buffer = buffer.slice(0, -1);
-          stdout.write('\b \b');
+          if (options.echo !== false) {
+            stdout.write('\b \b');
+          }
         }
         return;
       }
 
       if (str && !key.ctrl && !key.meta) {
         buffer += str;
-        stdout.write(str);
+        if (options.echo !== false) {
+          stdout.write(str);
+        }
       }
     };
 
