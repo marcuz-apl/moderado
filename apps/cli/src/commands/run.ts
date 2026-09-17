@@ -23,6 +23,18 @@ export async function handleRunCommand(
     return 1;
   }
 
+  const isLocal = args.profile.includes('local');
+  if (!isLocal && !process.env.NVIDIA_API_KEY) {
+    process.stderr.write(
+      '\x1b[1;31mAuthentication Error:\x1b[0m NVIDIA_API_KEY environment variable is not set.\n\n' +
+      'Please set your API key to run tasks against NVIDIA NIM:\n' +
+      '  PowerShell: $env:NVIDIA_API_KEY = "nvapi-..."\n' +
+      '  POSIX:      export NVIDIA_API_KEY="nvapi-..."\n\n' +
+      'Get a free API trial key at: https://build.nvidia.com\n'
+    );
+    return 1;
+  }
+
   const provider = new NvidiaAdapter();
   const tools = createDefaultToolRegistry();
   const approvalHandler = new TerminalApprovalHandler();

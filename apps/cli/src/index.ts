@@ -32,12 +32,14 @@ async function main(): Promise<void> {
 
   if (args.help) {
     process.stdout.write(getHelpText());
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
 
   if (args.version) {
     process.stdout.write(`${getVersion()}\n`);
-    process.exit(0);
+    process.exitCode = 0;
+    return;
   }
 
   const abortController = new AbortController();
@@ -64,10 +66,10 @@ async function main(): Promise<void> {
     process.off('SIGTERM', handleSigint);
   }
 
-  process.exit(exitCode);
+  process.exitCode = exitCode;
 }
 
 main().catch((err) => {
   process.stderr.write(`\x1b[1;31mFatal error:\x1b[0m ${err.message}\n`);
-  process.exit(1);
+  process.exitCode = 1;
 });
