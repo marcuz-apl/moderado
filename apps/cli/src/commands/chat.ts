@@ -123,9 +123,7 @@ export async function handleChatSession(
 
       if (trimmed === '/help') {
         await showHelpModal(version, canonicalWorkspace, signal);
-        if (!isFirst) {
-          process.stdout.write('\x1b[6A\r\x1b[J');
-        }
+        isFirst = false;
         continue;
       }
 
@@ -145,10 +143,9 @@ export async function handleChatSession(
         if (selection.modelId && selection.modelId !== currentModel) {
           currentModel = selection.modelId;
           config = loadConfig();
+          process.stdout.write(`\x1b[32m✔ Active model updated:\x1b[0m \x1b[1;38;5;75m${currentModel}\x1b[0m\n\n`);
         }
-        if (!isFirst) {
-          process.stdout.write('\x1b[6A\r\x1b[J');
-        }
+        isFirst = false;
         continue;
       }
 
