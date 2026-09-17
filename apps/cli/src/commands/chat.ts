@@ -2,17 +2,18 @@ import path from 'node:path';
 import { AgentLoop, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot } from '@moderado/tools';
-import { ChatMessage } from '@moderado/contracts';
+import { ChatMessage, ApprovalDecision, ApprovalRequest, IApprovalHandler } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
 import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
+import { promptInteractiveTurn } from '../ui/welcome.js';
 
 export async function handleChatSession(
   args: CliParsedArgs,
-  version: string,
+  _version: string,
   signal?: AbortSignal
 ): Promise<number> {
   let canonicalWorkspace: string;
@@ -60,78 +61,49 @@ export async function handleChatSession(
     config = loadConfig();
   }
 
-  // 3. Enter Chat Terminal (REPL like OpenCode / Cline)
-  // 3. Enter Chat Terminal (Cline / OpenCode style)
-  const displayModel = currentModel ?? 'Auto (Free-First)';
-  const shortWs = canonicalWorkspace.length > 38
-    ? '...' + canonicalWorkspace.slice(-35)
-    : canonicalWorkspace;
-
-  const modeBadge = args.readOnly ? 'read-only' : 'plan-act';
-  const approvalBadge = args.nonInteractive ? 'auto-deny' : 'manual-approval';
-
-  // Cline-style clean horizontal status bar
-  process.stdout.write(
-    `\n\x1b[38;5;75m● moderado\x1b[0m \x1b[38;5;242m${version}\x1b[0m  \x1b[38;5;240m·\x1b[0m  ` +
-    `\x1b[38;5;180m${displayModel}\x1b[0m  \x1b[38;5;240m·\x1b[0m  ` +
-    `\x1b[38;5;244m${shortWs}\x1b[0m  \x1b[38;5;240m·\x1b[0m  ` +
-    `\x1b[38;5;242m${modeBadge} (${approvalBadge})\x1b[0m\n` +
-    `\x1b[38;5;242mType /help for commands, /exit to quit.\x1b[0m\n\n`
-  );
+  // 3. Enter Chat Terminal (Welcome TUI with OpenCode-style layout)
+  let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
+  let activeAutoApprove = false;
+  let sessionTokens = 0;
+  let isFirst = true;
 
   const provider = new NvidiaAdapter({ apiKey });
   const tools = createDefaultToolRegistry();
-  const approvalHandler = new TerminalApprovalHandler();
+  const terminalApproval = new TerminalApprovalHandler();
+  const approvalHandler: IApprovalHandler = {
+    requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> => {
+      if (activeAutoApprove) {
+        return { requestId: req.requestId, status: 'approved' as const };
+      }
+      return terminalApproval.requestApproval(req, sig);
+    },
+  };
   const renderer = new TerminalRenderer({ verbose: args.verbose, isChatMode: true });
-  const policy = new PolicyManager({
-    maxSteps: args.maxSteps,
-    readOnly: args.readOnly,
-    nonInteractive: args.nonInteractive,
-    timeoutSeconds: args.timeout,
-  });
   const router = new Router();
   const loop = new AgentLoop();
 
   let conversationHistory: ChatMessage[] = [];
 
-  // Persistent readline interface to prevent stdin detachment and ghost newlines
-  const readlineModule = await import('node:readline');
-  const rl = readlineModule.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    terminal: process.stdin.isTTY,
-  });
+  // 4. Continuous interactive loop - stay until /exit
+  while (!signal?.aborted) {
+      const displayModel = currentModel ?? 'Auto (Free-First)';
+      const costDisplay = '$0.00';
 
-  const closeRl = () => {
-    try {
-      rl.close();
-    } catch {
-      // ignore
-    }
-  };
-
-  if (signal) {
-    signal.addEventListener('abort', closeRl, { once: true });
-  }
-
-  // Helper for prompt
-  const askPrompt = (query: string): Promise<string> => {
-    return new Promise((resolve) => {
-      if (signal?.aborted) {
-        resolve('');
-        return;
-      }
-      rl.question(query, (answer) => {
-        resolve(answer.trim());
+      const turn = await promptInteractiveTurn({
+        model: displayModel,
+        tokens: Math.round(sessionTokens),
+        cost: costDisplay,
+        workspace: canonicalWorkspace,
+        initialMode: activeMode,
+        initialAutoApprove: activeAutoApprove,
+        isFirstTurn: isFirst,
+        signal,
       });
-    });
-  };
 
-  try {
-    // 4. Continuous interactive loop - stay until /exit
-    while (!signal?.aborted) {
-      const promptLine = await askPrompt('\x1b[1;38;5;75m❯\x1b[0m ');
-      const trimmed = promptLine.trim();
+      isFirst = false;
+      activeMode = turn.mode;
+      activeAutoApprove = turn.autoApprove;
+      const trimmed = turn.text.trim();
 
       if (!trimmed) {
         continue;
@@ -177,6 +149,13 @@ export async function handleChatSession(
 
     // Execute user coding task / question
     process.stdout.write('\n');
+    const policy = new PolicyManager({
+      maxSteps: args.maxSteps,
+      readOnly: activeMode === 'Plan' || args.readOnly,
+      nonInteractive: args.nonInteractive,
+      timeoutSeconds: args.timeout,
+    });
+
     try {
       const result = await loop.run(trimmed, {
         workspaceRoot: canonicalWorkspace,
@@ -197,16 +176,18 @@ export async function handleChatSession(
       });
 
       conversationHistory = result.messages;
+      const turnChars = result.messages.reduce(
+        (sum, m) => sum + (m.content ? m.content.length : 0),
+        0
+      );
+      sessionTokens += Math.round(turnChars / 4);
       process.stdout.write('\n');
     } catch (err: any) {
       process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`);
     }
 
     // Once the question gets answered, DON'T exit! Stay here for next input.
-    }
-
-    return 0;
-  } finally {
-    closeRl();
   }
+
+  return 0;
 }

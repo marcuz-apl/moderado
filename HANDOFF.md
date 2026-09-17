@@ -1,37 +1,41 @@
 # Project Handoff
 
-Updated: 2026-09-17 16:36 UTC  
+Updated: 2026-09-17 17:07 UTC  
 Branch: master  
-Version: v0.1.3+260917a  
+Version: v0.1.4+260917b  
 Status: complete  
 
 ## Summary
 
-Implemented full Cline-inspired TUI architecture referencing `cline/cline` (`apps/cli/src/tui/`):
-1. **Cline Horizontal Status Bar (`status-bar.tsx`)**:
-   - Replaced bulky 4-line ASCII rectangle with a sleek single-line horizontal status bar (`● moderado v0.1.3 · model · workspace · mode`).
-   - Clean color tokens and dot separators.
-2. **Persistent Readline Loop**:
-   - Eliminated the per-question `readline.createInterface()` teardown bug that was detaching stdin and dumping 25 ghost newlines into the screen.
-   - Now maintains a single persistent, responsive input stream.
-3. **Cline Action Tree (`tool-output.tsx`)**:
-   - Replaced heavy ASCII brackets with Cline's indented bullet tree (`⏺ tool_name args` and `  └ ✔ output`).
-4. **Instant Response & Zero Thinking Monologue**:
-   - Reasoning tokens remain completely silent with a transient spinner `⠋ Thinking...` that clears instantly upon token arrival.
+Implemented the exact OpenCode-style Welcome TUI layout:
+1. **Big Pure-Text Logo**:
+   - Renders `MODERADO` in modern slant ASCII font with cyan/steel ANSI 256 gradient.
+2. **Command Hint Line**:
+   - `Use / for slash commands, @ for file mentions, Ctrl+P for menu`.
+3. **Command Taking Text Box (Guarded by 2 Dash-Lines)**:
+   - Top dash-line: `--------------------------------------------------------------------------------`
+   - Prompt text box: `> What can I service for you, bro/sis?` (placeholder before typing, replaced by live text as user types).
+   - Bottom dash-line: `--------------------------------------------------------------------------------`
+4. **Model & Mode Status Line**:
+   - Left: `<model_name>  <token_count> tokens / <cost>`
+   - Right: `Plan / [Execute] (Tab)` (toggles live between Plan and Execute with `Tab`).
+5. **Working Directory & Auto-Approve Status Line**:
+   - Left: `<working_directory>`
+   - Right: `Auto-approve off (Shift+Tab)` / `Auto-approve all enabled (Shift+Tab)` (toggles live with `Shift+Tab` or `\x1b[Z`).
 
 ## Completed
 
-- `apps/cli/src/commands/chat.ts`: Horizontal Cline status bar, persistent readline loop, and clean slash commands.
-- `apps/cli/src/ui/renderer.ts`: Cline action tree (`⏺` / `└`) and direct markdown response streaming.
-- `apps/cli/tests/renderer.test.ts` & `apps/cli/tests/chat.test.ts`: Verified test coverage.
-- `VERSION`: Advanced to `v0.1.3+260917a`.
+- `apps/cli/src/ui/welcome.ts`: Complete OpenCode-style Welcome TUI card and interactive keypress prompt loop (`promptInteractiveTurn`).
+- `apps/cli/src/commands/chat.ts`: Wired `promptInteractiveTurn` into chat session, dynamic `PolicyManager` tied to Plan/Execute mode, auto-approval toggling, and cumulative session token tracking.
+- `apps/cli/tests/welcome.test.ts`: Added unit tests verifying ASCII logo, hint, dash borders, placeholder, model line, and auto-approve states.
+- `VERSION`: Advanced to `v0.1.4+260917b`.
 
 ## Checks
 
 - `npm run build` (`tsc -b --force`): Clean compilation across all workspaces.
-- `npm test` (`vitest run`): 99 tests passed across 20 test suites offline in 1.95s.
+- `npm test` (`vitest run`): 103 tests passed across 21 test suites offline in 1.93s.
 - `npm link --workspace moderado`: Re-linked global CLI binary.
 
 ## Next action
 
-- User can launch `moderado` and test the refreshed Cline-style interface.
+- User can test `moderado` in their terminal.
