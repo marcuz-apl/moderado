@@ -1,53 +1,56 @@
 # Project Handoff
 
-Updated: 2026-09-16 21:41 UTC  
+Updated: 2026-09-16 21:49 UTC  
 Branch: master  
-Commit: d7ae91f (v0.1.0+2609161 feat: initial project specifications, architecture docs, and Alfazen standards)  
+Commit: in progress (Milestone 1 completed, ready to commit)  
 Status: in progress  
 
 ## Summary
 
-Moderado is an original, lightweight CLI coding agent built with a TypeScript Node.js npm workspace, provider-independent core, live NVIDIA model discovery, free-first AUTO routing, and a strict approval security boundary. The foundational specifications (`PRD.md`, `AGENTS.md`, and `VERSION`) have been established adhering to `alfazen-coding` standards (`ponytail`, `versioning-alfazen`, `handoff`).
+Completed **Milestone 1: Workspace Scaffolding & Contracts (`packages/contracts`)**. The root npm workspace, strict TypeScript configuration, and Vitest test environment are operational. The pure contracts package `@moderado/contracts` is implemented, strictly compiled, and backed by a comprehensive Vitest test suite with 16 passing unit tests.
 
 ## Completed
 
-- Cloned and installed all 20 skills from `https://github.com/marcuz-apl/alfazen-skills.git` into the global Gemini directory (`~/.gemini/config/skills` and `~/.gemini/skills`).
-- Verified that project workspace `d:\projects\moderado` remains clean of localized skills folders as instructed.
-- Created root `VERSION` file initialized to `v0.1.0+2609161` following `versioning-alfazen`.
-- Created comprehensive `PRD.md` defining system architecture, personas, CLI commands, routing policies, tool suites, approval boundaries, and Vitest testing matrices.
-- Created `AGENTS.md` operational guide establishing the Ponytail Decision Ladder, package responsibilities, security rules, subagent workflows, and coding standards.
+- Initialized root npm workspace with `apps/*` and `packages/*` (`package.json`).
+- Configured root strict TypeScript compilation (`tsconfig.base.json`) targeting Node.js ESM.
+- Configured root test runner (`vitest.config.ts`).
+- Created `packages/contracts` workspace package:
+  - `src/models.ts`: Model inventory schemas, classification contracts, access tiers (`free_trial`, `paid`, `local`, `unknown`), and tool capabilities (`supported`, `unsupported`, `unknown`).
+  - `src/messages.ts`: Normalized chat messages (`system`, `user`, `assistant`, `tool`), tool calls, and streaming chunks.
+  - `src/provider.ts`: Typed error hierarchy (`AuthenticationError`, `RateLimitError`, `ModelUnavailableError`, `MalformedResponseError`), streaming chunk schemas, and `IProviderAdapter` contract.
+  - `src/tools.ts`: Tool execution contexts, `IToolDefinition`, `IToolRegistry`, and parameter schemas for the 7 workspace tools (`read_file`, `write_file`, `edit_file`, `list_files`, `search_files`, `run_command`, `git_diff`).
+  - `src/approvals.ts`: Approval payloads, `ApprovalRequest`, `ApprovalDecision`, and `IApprovalHandler` interface.
+  - `src/events.ts`: Strongly typed, discriminated union `AgentEvent` for all agent lifecycle states.
+  - `src/index.ts`: Comprehensive barrel export.
+- Authored and verified Vitest test suite (`packages/contracts/tests/contracts.test.ts`): 16 tests passing in 6ms.
+- Built package (`npm --workspace=@moderado/contracts run build`): zero type errors.
 
 ## In progress
 
-- Authoring detailed technical architecture and subsystem documentation in `docs/`:
-  - `docs/ARCHITECTURE.md`: Module boundaries, DI, core event model, desktop expansion.
-  - `docs/TOOLS.md`: Parameter schemas, validation, limits, and error handling for the 7 core tools.
-  - `docs/ROUTING.md`: Dynamic `/v1/models` discovery, access classification, free-first ranking, and fallback logic.
-  - `docs/SECURITY.md`: Threat model, file jail, command isolation, env cleansing, and prompt injection defense.
+- Milestone 1 verification complete and staged for git commit.
 
 ## Working tree
 
-- Tracked/created files:
-  - `Moderado-design.md` (original design proposal)
-  - `VERSION`
-  - `PRD.md`
-  - `AGENTS.md`
+- Modified:
+  - `VERSION` (`v0.1.0+2609162`)
   - `HANDOFF.md`
+- Added:
+  - `package.json`, `package-lock.json`
+  - `tsconfig.base.json`
+  - `vitest.config.ts`
+  - `packages/contracts/`
 
 ## Checks
 
-- `skills installation check` — PASS (20 skills verified in `~/.gemini/config/skills` and `~/.gemini/skills`)
-- `VERSION format check` — PASS (`v0.1.0+2609161` conforms to `^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-z]$`)
-- `npm test` — NOT RUN (scaffolding phase; implementation code not yet created)
+- `npm run typecheck` / `tsc` — PASS
+- `npm --workspace=@moderado/contracts run build` — PASS
+- `npm test` — PASS (16 tests, 1 test file)
 
 ## Decisions and context
 
-- Adopted TypeScript with strict type checking and Node.js >= 20 LTS.
-- Workspaces: `apps/cli`, `packages/contracts`, `packages/core`, `packages/providers`, `packages/tools`.
-- Built-in stdlib first: Node.js native `fetch`, `AbortController`, `child_process.spawn`. No bloated framework dependencies (`ponytail`).
-- Pure contracts package: `packages/contracts` contains only types, schemas, and events; imports zero runtime dependencies outside schema validator.
-- Dependency injection: `packages/core` receives providers, tools, approvals, and event listeners via DI; never imports concrete adapters directly.
-- Desktop UI readiness: Defer desktop UI and IPC transport until desktop development begins, but build in-process contracts in v0.1 so core logic is 100% reusable.
+- Pure contracts: `packages/contracts` depends only on `zod` for runtime validation. Zero provider SDKs or heavy runtime dependencies.
+- Node.js ESM native: Native `fetch` and `AbortController` types enabled via `tsconfig.base.json` (`DOM` + Node types).
+- Vitest configuration in root sweeps all package test directories (`packages/*/tests/**/*.test.ts`).
 
 ## Blockers
 
@@ -55,11 +58,5 @@ Moderado is an original, lightweight CLI coding agent built with a TypeScript No
 
 ## Next action
 
-1. Create `docs/ARCHITECTURE.md`, `docs/TOOLS.md`, `docs/ROUTING.md`, and `docs/SECURITY.md`.
-2. Scaffold root `package.json` and `tsconfig.base.json` for npm workspace once documentation is finalized.
-
-## Resume notes
-
-- Global skills reside at `~/.gemini/config/skills` and `~/.gemini/skills`.
-- Follow `versioning-alfazen` for all future git commits and version bumps.
-- When scaffolding code, enforce `ponytail` minimal dependency ladder.
+1. Commit Milestone 1: `git add . && git commit -m "v0.1.0+2609162 feat(contracts): scaffold workspace and implement pure contracts package"` and push to `origin/master`.
+2. Begin **Milestone 2: Workspace Security Jail & Tools Engine (`packages/tools`)**.
