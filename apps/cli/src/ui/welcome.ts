@@ -128,8 +128,7 @@ export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
     renderModeradoHeader(),
     '',
     renderWelcomeCard(options),
-    '',
-  ].join('\n');
+  ].join('\n') + '\n';
 }
 
 export interface InteractiveTurnResult {

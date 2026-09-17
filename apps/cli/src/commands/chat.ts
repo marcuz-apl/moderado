@@ -88,9 +88,12 @@ export async function handleChatSession(
 
   // 4. Continuous interactive loop - stay until /exit
   while (!signal?.aborted) {
-      const displayModel = currentModel ?? 'Auto (Free-First)';
-      const costDisplay = '$0.00';
+    const displayModel = currentModel ?? 'Auto (Free-First)';
+    const costDisplay = '$0.00';
 
+    let trimmed: string;
+
+    if (isFirst) {
       const turn = await promptInteractiveTurn({
         model: displayModel,
         tokens: Math.round(sessionTokens),
@@ -98,60 +101,62 @@ export async function handleChatSession(
         workspace: canonicalWorkspace,
         initialMode: activeMode,
         initialAutoApprove: activeAutoApprove,
-        isFirstTurn: isFirst,
+        isFirstTurn: true,
         signal,
       });
 
       activeMode = turn.mode;
       activeAutoApprove = turn.autoApprove;
-      const trimmed = turn.text.trim();
-
-      if (!trimmed) {
-        continue;
-      }
-
-      // Handle slash commands
-      if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
-        process.stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Welcome using Moderado!\x1b[0m\n\n');
-        try {
-          process.stdin.pause();
-        } catch {
-          // ignore
-        }
-        return 0;
-      }
-
-      if (trimmed === '/help') {
-        await showHelpModal(version, canonicalWorkspace, signal);
-        isFirst = false;
-        continue;
-      }
-
-      if (trimmed === '/clear') {
-        conversationHistory = [];
-        isFirst = true;
-        continue;
-      }
-
-      if (trimmed === '/model') {
-        const selection = await selectModelInteractive({
-          apiKey,
-          currentModel,
-          signal,
-          saveSelectionByDefault: true,
-        });
-        if (selection.modelId && selection.modelId !== currentModel) {
-          currentModel = selection.modelId;
-          config = loadConfig();
-          process.stdout.write(`\x1b[32m✔ Active model updated:\x1b[0m \x1b[1;38;5;75m${currentModel}\x1b[0m\n\n`);
-        }
-        isFirst = false;
-        continue;
-      }
-
-      // Execute user coding task / question
+      trimmed = turn.text.trim();
       isFirst = false;
-      process.stdout.write('\n');
+    } else {
+      const promptLine = await askQuestion('\x1b[1;38;5;75m❯\x1b[0m ', { signal });
+      trimmed = promptLine.trim();
+    }
+
+    if (!trimmed) {
+      continue;
+    }
+
+    // Handle slash commands
+    if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
+      process.stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Welcome using Moderado!\x1b[0m\n\n');
+      try {
+        process.stdin.pause();
+      } catch {
+        // ignore
+      }
+      return 0;
+    }
+
+    if (trimmed === '/help') {
+      await showHelpModal(version, canonicalWorkspace, signal);
+      continue;
+    }
+
+    if (trimmed === '/clear') {
+      conversationHistory = [];
+      process.stdout.write('\x1b[32m✔ Conversation memory cleared.\x1b[0m\n\n');
+      continue;
+    }
+
+    if (trimmed === '/model') {
+      const selection = await selectModelInteractive({
+        apiKey,
+        currentModel,
+        signal,
+        saveSelectionByDefault: true,
+      });
+      if (selection.modelId && selection.modelId !== currentModel) {
+        currentModel = selection.modelId;
+        config = loadConfig();
+        process.stdout.write(`\x1b[32m✔ Active model updated:\x1b[0m \x1b[1;38;5;75m${currentModel}\x1b[0m\n\n`);
+      }
+      continue;
+    }
+
+    // Execute user coding task / question
+    process.stdout.write('\n');
     const policy = new PolicyManager({
       maxSteps: args.maxSteps,
       readOnly: activeMode === 'Plan' || args.readOnly,

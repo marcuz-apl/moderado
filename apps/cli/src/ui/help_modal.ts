@@ -36,7 +36,7 @@ export async function showHelpModal(
         borderColor: '\x1b[38;5;240m',
         titleColor: '\x1b[1;38;5;75m',
       }) +
-      '\n\x1b[38;5;242mPress Enter to return to chat...\x1b[0m '
+      '\n\x1b[38;5;242mPress Enter to return to terminal...\x1b[0m '
   );
 
   await askQuestion('', { signal });
