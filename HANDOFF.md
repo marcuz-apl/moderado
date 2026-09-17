@@ -1,19 +1,17 @@
 # Project Handoff
 
-Updated: 2026-09-17 15:18 UTC  
+Updated: 2026-09-17 15:25 UTC  
 Branch: master  
-Version: v0.1.2+2609174  
+Version: v0.1.2+2609175  
 Status: complete  
 
 ## Summary
 
-Delivered the full 4-step onboarding and continuous chat terminal REPL:
-1. **API Key Setup**: Automatically checks and configures `build.nvidia.com` key, skipping if already set.
-2. **Default Free Model Selection**: Prompts to select a default free model on initial setup, or continues with the existing configuration.
-3. **Interactive Chat Terminal (OpenCode / Cline style)**: Direct terminal launch with banner, workspace display, and `moderado> ` prompt.
-4. **Continuous Multi-Turn Session**: Remains active after answering each prompt, preserving conversation context across turns until the user explicitly types `/exit` (or `/quit`).
-- **Slash Command Support**: `/exit`, `/model` (in-session model switcher), `/clear` (reset context), `/help`.
-- **100% Offline Test Coverage**: 93 unit and integration tests passing across 19 test suites in ~1.8s.
+Delivered critical model search usability and CC-Switch-aligned classification heuristics:
+1. **Model Re-Searching**: Users can search again (`[s]`), go back (`[b]`), or type new keywords directly at any search prompt. Single-match results confirm before selecting, preventing trapped selections.
+2. **CC-Switch Classification Heuristics**: Eliminated generic "Unclassified" labels across the 82 NVIDIA NIM models. Categorizes chat/instruct models (`glm`, `kimi`, `yi`, `dbrx`, `gemma`, `granite`, `starcoder`, `llama`, `mistral`) as `free_trial` with `toolSupport: 'supported'`, and utility/embedding models as `unsupported`.
+3. **Continuous Chat REPL**: 4-step onboarding, `/exit`, `/model`, `/clear`, `/help`.
+- **100% Offline Test Coverage**: 93 unit and integration tests passing in ~1.9s.
 
 ## Completed
 
