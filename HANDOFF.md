@@ -1,8 +1,8 @@
 # Project Handoff
 
-Updated: 2026-09-16 22:40 UTC  
+Updated: 2026-09-16 22:44 UTC  
 Branch: master  
-Commit: c27c260 (v0.1.1+260916b feat(cli): launch interactive menu on root moderado invocation)  
+Commit: 683820b (v0.1.1+260916c fix(core): guide agent to answer conversational queries without unnecessary tool invocations)  
 Status: complete  
 
 ## Summary
