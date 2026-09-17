@@ -59,7 +59,7 @@ export async function handleInteractiveMenu(
   const selection = await askSelect('What would you like to do?', choices, 0, { signal });
 
   if (selection.value === 'exit') {
-    process.stdout.write('\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
+    process.stdout.write('Goodbye!\n');
     return 0;
   }
 

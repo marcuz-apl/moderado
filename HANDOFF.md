@@ -1,38 +1,35 @@
 # Project Handoff
 
-Updated: 2026-09-17 19:05 UTC  
+Updated: 2026-09-17 18:50 UTC  
 Branch: master  
-Version: v0.1.14+260917l  
+Version: v0.1.13+260917k  
 Status: complete  
 
 ## Summary
 
-Implemented true OpenCode / Cline TUI popup modal windows for `/help` and `/model` with background persistence, exact cursor restoration, and updated exiting message:
-1. **Persistent Main App Window as Background**:
-   - The main app window (Ascii logo, command hints, and guided command box `❯ Ask anything, I am all ears...`) remains visibly anchored in the background when `/help` or `/model` popup windows are open.
-   - Zero alternate screen blanking (`\x1b[?1049h` eliminated from TUI interactive turns).
-2. **Popup Modal Windows on Top**:
-   - `/help`: Renders a boxed popup window on top of the main app window displaying all commands, shortcuts, workspace root, and canonical version.
-   - `/model`: Renders a boxed popup window on top of the main app window with options [1-5], indicating `(Active)` on the current model.
-3. **Cursor Restoration (<kbd>Esc</kbd> / <kbd>Enter</kbd>)**:
-   - Pressing <kbd>Esc</kbd> or <kbd>Enter</kbd> (or `q`) dismisses the popup window immediately.
-   - Cursor returns directly to where it was (Line 2 inside `❯ Ask anything, I am all ears...` with flashing block `\x1b[1 q\x1b[?25h`). No new terminal line or prompt is printed.
-4. **Updated Exiting Message**:
-   - Updated exit message across `welcome.ts`, `chat.ts`, and `interactive_menu.ts` to:
-     `Goodbye! Stay Tuned with Moderado!`
+Implemented true Cline-style popup modal windows for `/help` and `/model` with `Esc` and `Enter` key handling:
+1. **Popup Window for `/help`**:
+   - Opens in a dedicated alternate screen buffer with hidden cursor (`\x1b[?1049h\x1b[?25l`).
+   - Renders a centered dialog box on screen showing commands, shortcuts, inline assist, workspace, and version info.
+   - Listens for raw key events: pressing <kbd>Esc</kbd>, <kbd>Enter</kbd>, or `q` immediately closes the popup window, restores cursor visibility and original screen buffer (`\x1b[?25h\x1b[?1049l`).
+2. **Popup Window for `/model`**:
+   - Opens in alternate screen buffer with centered modal layout and clean borders.
+   - Built `askModalChoice` in `prompt.ts` with raw keyboard listener: pressing <kbd>Esc</kbd> at any time immediately closes the modal without changes; pressing <kbd>Enter</kbd> or typing numbers selects the desired option.
+3. **Seamless Screen Restoration**:
+   - Closing either popup modal restores the primary terminal buffer cleanly without corrupting the chat prompt or leaving artifacts.
 
 ## Completed
 
-- `apps/cli/src/ui/welcome.ts`: Exported `renderHelpPopupBox`, `renderModelPopupBox`, and integrated `activeModal: 'help' | 'model' | null` state machine directly into `promptInteractiveTurn`.
-- `apps/cli/src/commands/chat.ts`: Wired `promptInteractiveTurn` across all turns with `onModelChange`, `onClear`, and updated exiting message.
-- `apps/cli/src/commands/interactive_menu.ts`: Updated exiting message to `Goodbye! Stay Tuned with Moderado!`.
-- `apps/cli/tests/welcome.test.ts`: Added unit tests for `renderHelpPopupBox` and `renderModelPopupBox`.
-- `VERSION`: Updated to `v0.1.14+260917l`.
+- `apps/cli/src/ui/help_modal.ts`: Implemented centered popup dialog with raw keypress listener for <kbd>Esc</kbd> and <kbd>Enter</kbd> closing.
+- `apps/cli/src/ui/model_selector.ts`: Switched to alternate screen popup with centered dialog and <kbd>Esc</kbd>/<kbd>Enter</kbd> support.
+- `apps/cli/src/ui/prompt.ts`: Implemented and exported `askModalChoice` handling raw <kbd>Esc</kbd>, <kbd>Enter</kbd>, and backspace keys.
+- `apps/cli/tests/prompt.test.ts`: Added unit tests for `askModalChoice`.
+- `VERSION`: Updated to `v0.1.13+260917k`.
 
 ## Checks
 
 - `npm run build` (`tsc -b --force`): Clean compilation across all workspaces.
-- `npm test` (`vitest run`): 110 tests passed across 22 test suites offline in 1.88s.
+- `npm test` (`vitest run`): 108 tests passed across 22 test suites offline in 1.88s.
 - `npm link --workspace moderado`: Re-linked global CLI binary.
 
 ## Next action
