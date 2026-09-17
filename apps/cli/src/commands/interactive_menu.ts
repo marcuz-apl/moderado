@@ -2,7 +2,8 @@ import { CliParsedArgs, getHelpText } from '../args.js';
 import { askQuestion, askSecret, askSelect, SelectOption } from '../ui/prompt.js';
 import { handleModelsCommand } from './models.js';
 import { handleRunCommand } from './run.js';
-import { resolveApiKey, saveConfig } from '../config.js';
+import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
+import { selectModelInteractive } from '../ui/model_selector.js';
 
 export async function handleInteractiveMenu(
   args: CliParsedArgs,
@@ -10,15 +11,24 @@ export async function handleInteractiveMenu(
   signal?: AbortSignal
 ): Promise<number> {
   const cwd = process.cwd();
+  const config = loadConfig();
+  const currentModelDisplay = config.defaultModel ? config.defaultModel : 'Auto (Free-First)';
+
   process.stdout.write(`\n\x1b[1mModerado ${version}\x1b[0m | Workspace: \x1b[36m${cwd}\x1b[0m\n`);
-  process.stdout.write('Lightweight CLI coding agent with NVIDIA NIM free-first routing.\n');
+  process.stdout.write(`Model: \x1b[35m${currentModelDisplay}\x1b[0m | NVIDIA NIM free-first routing\n`);
 
   const choices: SelectOption[] = [
     {
       label: 'Start a coding task',
       value: 'task',
       tag: 'Interactive',
-      description: 'Enter a task prompt and select model routing strategy',
+      description: 'Enter a task prompt and run autonomous coding agent',
+    },
+    {
+      label: `Select Model (Free or Paid)`,
+      value: 'model_select',
+      tag: currentModelDisplay.includes('Auto') ? 'Auto' : 'Configured',
+      description: `Current: ${currentModelDisplay} - switch to Free or Paid models`,
     },
     {
       label: 'Discover models (moderado models)',
@@ -51,6 +61,12 @@ export async function handleInteractiveMenu(
   if (selection.value === 'exit') {
     process.stdout.write('Goodbye!\n');
     return 0;
+  }
+
+  if (selection.value === 'model_select') {
+    await selectModelInteractive({ signal, saveSelectionByDefault: true });
+    // Re-display menu with updated model
+    return handleInteractiveMenu(args, version, signal);
   }
 
   if (selection.value === 'help') {

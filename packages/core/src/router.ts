@@ -29,14 +29,21 @@ const BUILTIN_MODEL_CLASSIFICATIONS: Record<string, Partial<ModelClassification>
   'mock/free-tool-model': { accessTier: 'free_trial', toolSupport: 'supported' },
   'mock/paid-tool-model': { accessTier: 'paid', toolSupport: 'supported' },
   'mock/text-only-model': { accessTier: 'free_trial', toolSupport: 'unsupported' },
+  'nvidia/llama-3.1-nemotron-70b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'meta/llama-3.3-70b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
-  'meta/llama-3.2-11b-vision-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'meta/llama-3.2-90b-vision-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
+  'meta/llama-3.2-11b-vision-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'meta/llama-3.1-70b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'meta/llama-3.1-8b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
-  'nvidia/llama-3.1-nemotron-70b-instruct': { accessTier: 'free_trial', toolSupport: 'supported' },
   'mistralai/mixtral-8x7b-instruct-v0.1': { accessTier: 'free_trial', toolSupport: 'supported' },
+  'mistralai/mistral-large-2-instruct': { accessTier: 'paid', toolSupport: 'supported' },
+  'mistralai/codestral-22b-instruct-v0.1': { accessTier: 'paid', toolSupport: 'supported' },
+  'deepseek-ai/deepseek-coder-6.7b-instruct': { accessTier: 'paid', toolSupport: 'supported' },
+  'deepseek-ai/deepseek-v4-flash-0731': { accessTier: 'paid', toolSupport: 'supported' },
   'deepseek-ai/deepseek-r1': { accessTier: 'free_trial', toolSupport: 'unsupported' },
+  'google/codegemma-7b': { accessTier: 'paid', toolSupport: 'supported' },
+  'ibm/granite-34b-code-instruct': { accessTier: 'paid', toolSupport: 'supported' },
+  'openai/gpt-oss-20b': { accessTier: 'paid', toolSupport: 'supported' },
 };
 
 export class Router {
@@ -191,6 +198,12 @@ export class Router {
       if (c.toolSupport === 'supported') score += 200;
       else if (c.toolSupport === 'unknown') score += 50;
     }
+
+    // Capacity & reasoning preference within the same access tier
+    const id = c.modelId.toLowerCase();
+    if (id.includes('nemotron-70b') || id.includes('llama-3.3-70b')) score += 30;
+    else if (id.includes('llama-3.1-70b') || id.includes('llama-3.2-90b')) score += 20;
+    else if (id.includes('mixtral')) score += 10;
 
     return score;
   }

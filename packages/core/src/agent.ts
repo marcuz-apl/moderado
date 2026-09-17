@@ -40,12 +40,13 @@ const DEFAULT_SYSTEM_PROMPT = `You are Moderado, a lightweight, pragmatic, bloat
 You follow the Ponytail Decision Ladder: YAGNI, standard library first, zero unnecessary dependencies, and minimal code.
 Use the provided workspace tools to inspect, read, search, modify, and test files within the workspace.
 
-TOOL USAGE RULES:
-- ONLY invoke tools when you actually need to inspect or modify the workspace.
-- Do NOT invent tool names. Do NOT call tools like "answer_directly" or "respond".
-- For questions, explanations, greetings, or conversational prompts, output regular markdown text directly without any tool calls.
-- Never write or overwrite workspace files (such as README.md) unless explicitly commanded to create or edit that file.
-- Always inspect existing code before editing. Keep edits focused, clean, and test-driven.`;
+CORE OPERATIONAL RULES:
+- If the user prompt is a greeting, question, explanation request, or conversational query, output regular markdown text directly without calling any tools.
+- ONLY invoke tools when explicitly needed to inspect or modify the workspace as requested by the user.
+- NEVER create, write, or overwrite any files (including documentation, project summaries, or boilerplate) unless the user explicitly commanded you to create or modify that file in their prompt.
+- Do NOT create unsolicited files on your own initiative.
+- Always inspect existing code (with list_files, read_file, search_files) before editing. Keep edits focused, clean, and test-driven.
+- Do NOT invent tool names.`;
 
 const PSEUDO_ANSWER_TOOLS = new Set([
   'answer_directly',
@@ -350,6 +351,31 @@ export class AgentLoop {
             status: 'error',
           });
           continue;
+        }
+
+        // Intercept unsolicited README/documentation write operations before approval gate
+        if (call.name === 'write_file' || call.name === 'edit_file') {
+          const rawPath = String((call.arguments as any)?.path ?? '').trim();
+          const normPath = rawPath.toLowerCase().replace(/\\/g, '/');
+          const isReadmeTarget = normPath === 'readme.md' || normPath.endsWith('/readme.md');
+          const taskLower = task.toLowerCase();
+
+          if (isReadmeTarget && !taskLower.includes('readme')) {
+            const rejectedResult: ToolResult = {
+              toolName: call.name,
+              status: 'error',
+              output: `Unsolicited file modification rejected: Do not create or edit README.md unless explicitly commanded by the user's prompt. Please answer the user directly or address their actual request.`,
+            };
+            emit({ type: 'tool_result', toolCallId: call.id, result: rejectedResult, timestamp: Date.now() });
+            messages.push({
+              role: 'tool',
+              toolCallId: call.id,
+              name: call.name,
+              content: rejectedResult.output,
+              status: 'error',
+            });
+            continue;
+          }
         }
 
         // Check policy constraints (read-only, non-interactive)

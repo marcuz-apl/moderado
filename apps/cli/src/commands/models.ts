@@ -53,6 +53,16 @@ export async function handleModelsCommand(args: CliParsedArgs): Promise<number> 
     }
 
     process.stdout.write('\n');
+
+    if (!args.json && !args.nonInteractive) {
+      const { askQuestion } = await import('../ui/prompt.js');
+      const { selectModelInteractive } = await import('../ui/model_selector.js');
+      const wantSelect = await askQuestion('Would you like to select and configure a default model? [y/N]: ');
+      if (wantSelect.toLowerCase() === 'y' || wantSelect.toLowerCase() === 'yes') {
+        await selectModelInteractive({ saveSelectionByDefault: true });
+      }
+    }
+
     return 0;
   } catch (err: any) {
     process.stderr.write(`\x1b[1;31mFailed to discover models:\x1b[0m ${err.message}\n`);

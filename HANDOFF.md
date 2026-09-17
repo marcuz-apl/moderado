@@ -1,49 +1,45 @@
 # Project Handoff
 
-Updated: 2026-09-16 22:48 UTC  
+Updated: 2026-09-17 14:55 UTC  
 Branch: master  
-Commit: 0c95a38 (v0.1.1+260916d fix(core): intercept and handle pseudo conversational tools with graceful completion)  
+Version: v0.1.2+2609171  
 Status: complete  
 
 ## Summary
 
-Successfully delivered all 6 milestones of the **Moderado v0.1 Specification & Implementation Plan** plus interactive CLI onboarding:
-- Original, lightweight CLI coding agent in TypeScript / Node.js (>= 20 LTS).
-- Provider-independent core with dynamic NVIDIA NIM discovery and Free-First AUTO routing.
-- Human-in-the-loop approval security boundary, workspace jail, and process execution engine.
-- Interactive onboarding: prompts for API key when missing and persists it to `~/.moderado/config.json`.
-- Interactive model selection menu: clearly distinguishes Free Trial vs Paid options, defaulting to Auto Free-First (`meta/llama-3.2-11b-vision-instruct`).
-- Upgraded HTTP 404/410 handling in `NvidiaAdapter` to throw `ModelUnavailableError` for automatic failover.
-- Strict adherence to the **Ponytail Decision Ladder** (stdlib first, zero external framework bloat) and **Alfazen Versioning** (`v0.1.1+260916a`).
-- 100% automated test coverage running offline (86 tests across 17 suites).
+Delivered critical usability and agent behavioral fixes:
+- **Intercepted Unsolicited README Writes**: Fixed prompt phrasing in `DEFAULT_SYSTEM_PROMPT` to remove negative priming on README.md, and added an active guard in `AgentLoop` to intercept and reject unrequested documentation/README creation before triggering the human approval boundary.
+- **OpenCode-Style Interactive Model Selection**: Introduced `selectModelInteractive` allowing users to seamlessly browse and switch between **Free Models** and **Paid Models** discovered live from NVIDIA NIM, defaulting to top-capacity reasoning models (`nvidia/llama-3.1-nemotron-70b-instruct`, `meta/llama-3.3-70b-instruct`).
+- **Main Menu Integration & Persistence**: Added a top-level `Select Model (Free or Paid)` option to `moderado` interactive menu, displaying the currently configured model and saving choices to `~/.moderado/config.json`.
+- **Expanded Model Classifications**: Added verified catalog items (`nemotron-70b`, `llama-3.3-70b`, `mistral-large-2`, `deepseek-coder`, `codestral`, `codegemma`, `granite`) with capacity ranking in `Router`.
+- **100% Offline Test Coverage**: 91 unit and integration tests passing offline across 18 test suites in ~1.8s.
 
 ## Completed
 
-- **Milestones 1 - 6**: Core architecture, tools jail, NVIDIA provider, core agent loop, CLI commands, and E2E integration tests.
-- **Interactive Onboarding & Config Persistence**:
-  - `apps/cli/src/config.ts`: Loads/saves user configuration (`apiKey`, `defaultModel`, `allowPaid`) in `~/.moderado/config.json`.
-  - `apps/cli/src/ui/prompt.ts`: Terminal prompt utilities (`askQuestion`, `askSecret`, `askSelect`) using `node:readline`.
-  - `apps/cli/src/commands/run.ts`: Prompts for `NVIDIA_API_KEY` on first run, saves to config, and presents an interactive model selection menu.
-- **Active Model Verification & Router Update**:
-  - Added `meta/llama-3.2-11b-vision-instruct` and `meta/llama-3.2-90b-vision-instruct` as active free-trial tool-calling models in `Router`.
-  - Mapped HTTP 404/410 in `NvidiaAdapter` to `ModelUnavailableError` so missing/deprecated models trigger fallback in AUTO mode.
+- `packages/core/src/agent.ts`: Eliminated negative README priming from system prompt; added unsolicited README guard in loop.
+- `packages/core/src/router.ts`: Updated builtin classifications and capacity scoring preference for 70B models.
+- `apps/cli/src/ui/model_selector.ts`: Created OpenCode-style categorized model selection component (Free Trial vs Paid).
+- `apps/cli/src/commands/interactive_menu.ts`: Added direct model selection menu option with active model display.
+- `apps/cli/src/commands/run.ts`: Integrated model selector to seamlessly prompt and configure model and paid access.
+- `apps/cli/src/commands/models.ts`: Added interactive model selection prompt after catalog display.
+- `packages/core/tests/agent.test.ts`: Added tests verifying unprompted README write interception and explicit README creation.
+- `apps/cli/tests/model_selection.test.ts`: Added unit tests for model selection and config persistence.
 
 ## Checks
 
 - `npm run build` (`tsc -b`): Clean compilation across all workspaces.
-- `npm test` (`vitest run`): 86 tests passed across 17 test suites offline in 1.84s.
+- `npm test` (`vitest run`): 91 tests passed across 18 test suites offline in 1.83s.
 
 ## Decisions and context
 
-- Complete decoupling: Core depends strictly on `@moderado/contracts`; adapters and tools are injected via contracts.
-- Offline-first CI: All 86 tests run without external network access or real API keys using in-memory adapters and local HTTP test servers.
-- Ponytail engineering: Zero unnecessary dependencies across the repository. Standard library first everywhere.
+- Ponytail engineering: Zero new runtime dependencies; built on standard library and existing `@moderado/*` contracts.
+- Safety: Explicit user requests for README files still pass through to the approval boundary; only unprompted writes are intercepted.
 
 ## Blockers
 
-- None. Moderado v0.1.1 is fully implemented, tested, and verified.
+- None.
 
 ## Next action
 
-1. Commit Milestone 6: `git add . && git commit -m "v0.1.0+2609167 feat: complete Milestone 6 end-to-end integration and release verification"` and push to `origin/master`.
-2. Present the completed deliverable walkthrough to the user.
+1. Commit and push the changes: `git add . && git commit -m "v0.1.2+2609171 feat: add OpenCode-style model selection and intercept unsolicited README writes"`.
+

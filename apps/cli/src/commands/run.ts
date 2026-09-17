@@ -5,8 +5,9 @@ import { createDefaultToolRegistry, canonicalizeRoot } from '@moderado/tools';
 import { CliParsedArgs } from '../args.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
-import { resolveApiKey, saveConfig } from '../config.js';
-import { askQuestion, askSecret, askSelect, SelectOption } from '../ui/prompt.js';
+import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
+import { askQuestion, askSecret } from '../ui/prompt.js';
+import { selectModelInteractive } from '../ui/model_selector.js';
 
 export async function handleRunCommand(
   args: CliParsedArgs,
@@ -64,59 +65,21 @@ export async function handleRunCommand(
     }
   }
 
-  let selectedModel = args.model;
-  let allowPaid = args.allowPaid;
-  let allowUnknown = args.allowUnknown;
+  const config = loadConfig();
+  let selectedModel = args.model ?? config.defaultModel;
+  let allowPaid = args.allowPaid ?? config.allowPaid;
+  let allowUnknown = args.allowUnknown ?? config.allowUnknown;
 
-  if (!selectedModel && !args.nonInteractive) {
-    const choices: SelectOption[] = [
-      {
-        label: 'Auto (Recommended Free-First)',
-        value: 'auto',
-        tag: 'Free Trial',
-        description: 'Automatically routes to free-trial models with tool support (default: meta/llama-3.2-11b-vision-instruct)',
-      },
-      {
-        label: 'meta/llama-3.2-11b-vision-instruct',
-        value: 'meta/llama-3.2-11b-vision-instruct',
-        tag: 'Free Trial',
-        description: 'Fast multimodal instruction model with verified tool calling support',
-      },
-      {
-        label: 'meta/llama-3.2-90b-vision-instruct',
-        value: 'meta/llama-3.2-90b-vision-instruct',
-        tag: 'Free Trial',
-        description: 'High-capacity reasoning model with tool support',
-      },
-      {
-        label: 'Allow Paid / All Models',
-        value: 'all_paid',
-        tag: 'Paid + Free',
-        description: 'Enables access to paid models and unclassified catalog items',
-      },
-      {
-        label: 'Custom Model ID',
-        value: 'custom',
-        tag: 'Custom',
-        description: 'Specify any custom NVIDIA NIM model identifier manually',
-      },
-    ];
-
-    const pick = await askSelect('Select Model Routing Strategy:', choices, 0, { signal });
-    if (pick.value === 'auto') {
-      selectedModel = undefined;
-    } else if (pick.value === 'all_paid') {
-      selectedModel = undefined;
-      allowPaid = true;
-      allowUnknown = true;
-    } else if (pick.value === 'custom') {
-      const customId = await askQuestion('Enter Model ID (e.g. meta/llama-3.2-11b-vision-instruct): ', { signal });
-      if (customId) {
-        selectedModel = customId;
-      }
-    } else {
-      selectedModel = pick.value;
-    }
+  if (!args.model && !args.nonInteractive) {
+    const selection = await selectModelInteractive({
+      apiKey,
+      currentModel: selectedModel,
+      signal,
+      saveSelectionByDefault: true,
+    });
+    selectedModel = selection.modelId;
+    if (selection.allowPaid) allowPaid = true;
+    if (selection.allowUnknown) allowUnknown = true;
   }
 
   const provider = new NvidiaAdapter({ apiKey });

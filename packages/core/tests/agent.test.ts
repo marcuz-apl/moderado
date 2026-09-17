@@ -222,4 +222,65 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(result.status).toBe('completed');
     expect(result.finalMessage).toContain('I am Moderado AI coding agent.');
   });
+
+  it('intercepts unsolicited write_file("README.md") during a conversational task without triggering approval', async () => {
+    let approvalCalled = false;
+    const trackingHandler: IApprovalHandler = {
+      async requestApproval(req) {
+        approvalCalled = true;
+        return { requestId: req.requestId, status: 'approved' };
+      },
+    };
+
+    // Turn 1: Model errantly tries to write README.md for a conversational query
+    provider.queueToolCallResponse('write_file', { path: 'README.md', content: '# My Project' });
+    // Turn 2: After loop rejects it, model answers with conversational text
+    provider.queueTextResponse('Hello! I am Moderado, your coding assistant. How can I help?');
+
+    const result = await loop.run('Hello, what can you do?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: trackingHandler,
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(approvalCalled).toBe(false);
+    expect(fs.existsSync(path.join(tempDir, 'README.md'))).toBe(false);
+    expect(result.status).toBe('completed');
+    expect(result.finalMessage).toContain('Hello! I am Moderado');
+
+    const toolResultEvent = events.find((e) => e.type === 'tool_result');
+    expect(toolResultEvent).toBeDefined();
+    if (toolResultEvent && toolResultEvent.type === 'tool_result') {
+      expect(toolResultEvent.result.status).toBe('error');
+      expect(toolResultEvent.result.output).toContain('Do not create or edit README');
+    }
+  });
+
+  it('allows write_file("README.md") when user explicitly asks for README in prompt', async () => {
+    let approvalCalled = false;
+    const trackingHandler: IApprovalHandler = {
+      async requestApproval(req) {
+        approvalCalled = true;
+        return { requestId: req.requestId, status: 'approved' };
+      },
+    };
+
+    provider.queueToolCallResponse('write_file', { path: 'README.md', content: '# Documentation' });
+    provider.queueTextResponse('Created the requested README.md.');
+
+    const result = await loop.run('Please create a README.md for this repo', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: trackingHandler,
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(approvalCalled).toBe(true);
+    expect(fs.existsSync(path.join(tempDir, 'README.md'))).toBe(true);
+    expect(result.status).toBe('completed');
+  });
 });
+
