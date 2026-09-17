@@ -120,7 +120,7 @@ export async function handleChatSession(
 
     // Handle slash commands
     if (trimmed === '/exit' || trimmed === '/quit' || trimmed.toLowerCase() === 'exit') {
-      process.stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Welcome using Moderado!\x1b[0m\n\n');
+      process.stdout.write('\x1b[0 q\x1b[?25h\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n');
       try {
         process.stdin.pause();
       } catch {
