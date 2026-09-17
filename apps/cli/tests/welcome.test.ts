@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  renderModeradoHeader,
   renderFullWelcomeScreen,
   renderWelcomeCard,
   MODERADO_ASCII_LOGO,
@@ -14,6 +15,9 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plainHint).toContain('Use / for slash commands');
     expect(plainHint).toContain('@ for file mentions');
     expect(plainHint).toContain('Ctrl+P for menu');
+
+    const header = renderModeradoHeader();
+    expect(header).toContain(COMMAND_HINT);
   });
 
   it('renders the welcome card with 5 lines and dash boundaries', () => {

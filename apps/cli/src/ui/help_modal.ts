@@ -1,5 +1,6 @@
 import { renderBox } from './box.js';
 import { askQuestion } from './prompt.js';
+import { renderModeradoHeader } from './welcome.js';
 
 export async function showHelpModal(
   version: string,
@@ -36,14 +37,16 @@ export async function showHelpModal(
     ];
 
     process.stdout.write(
-      '\n' +
+      '\x1b[2J\x1b[3J\x1b[H' +
+        renderModeradoHeader() +
+        '\n\n' +
         renderBox(lines, {
           title: 'Moderado Commands & Reference',
           minWidth: 64,
           borderColor: '\x1b[38;5;240m',
           titleColor: '\x1b[1;38;5;75m',
         }) +
-        '\n\x1b[38;5;242mPress Enter or [q] to return to chat...\x1b[0m '
+        '\n\x1b[38;5;242mPress Enter or [q] to return to Moderado...\x1b[0m '
     );
 
     await askQuestion('', { signal });

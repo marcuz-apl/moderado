@@ -3,6 +3,7 @@ import { Router } from '@moderado/core';
 import { askQuestion, askSelect, SelectOption } from './prompt.js';
 import { renderBox } from './box.js';
 import { loadConfig, saveConfig, resolveApiKey } from '../config.js';
+import { renderModeradoHeader } from './welcome.js';
 
 export interface ModelSelectionResult {
   modelId?: string;
@@ -62,7 +63,7 @@ async function executeModelSelection(
   if (cachedInventory && cachedInventory.length > 0) {
     discoveredEntries = cachedInventory;
   } else {
-    process.stdout.write('\n\x1b[36mQuerying NVIDIA NIM model catalog...\x1b[0m\n');
+    process.stdout.write('\x1b[2J\x1b[3J\x1b[H' + renderModeradoHeader() + '\n\n\x1b[36mQuerying NVIDIA NIM model catalog...\x1b[0m\n');
     try {
       discoveredEntries = await provider.discoverModels(signal);
       cachedInventory = discoveredEntries;
@@ -133,7 +134,9 @@ async function executeModelSelection(
   menuLines.push(`\x1b[1;38;5;245m[q]\x1b[0m Cancel & Close Window    \x1b[38;5;244m(No changes)\x1b[0m`);
 
   process.stdout.write(
-    '\n' +
+    '\x1b[2J\x1b[3J\x1b[H' +
+      renderModeradoHeader() +
+      '\n\n' +
       renderBox(menuLines, {
         title: 'Model Selection Window',
         minWidth: 58,

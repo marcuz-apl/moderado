@@ -114,12 +114,18 @@ export function renderSuggestionsBox(commands: SlashCommand[]): string[] {
   return lines;
 }
 
-export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
+export function renderModeradoHeader(): string {
   return [
     '',
     ...MODERADO_ASCII_LOGO,
     '',
     COMMAND_HINT,
+  ].join('\n');
+}
+
+export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
+  return [
+    renderModeradoHeader(),
     '',
     renderWelcomeCard(options),
     '',
@@ -197,6 +203,7 @@ export async function promptInteractiveTurn(options: {
 
   if (options.isFirstTurn) {
     stdout.write('\x1b]0;Moderado\x07');
+    stdout.write('\x1b[2J\x1b[3J\x1b[H');
     stdout.write(renderFullWelcomeScreen(getOptions()));
   } else {
     stdout.write(renderWelcomeCard(getOptions()) + '\n');
