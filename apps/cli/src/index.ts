@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { parseCliArgs, getHelpText } from './args.js';
 import { handleModelsCommand } from './commands/models.js';
 import { handleRunCommand } from './commands/run.js';
-import { handleInteractiveMenu } from './commands/interactive_menu.js';
+import { handleChatSession } from './commands/chat.js';
 
 function getVersion(): string {
   try {
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
         process.stdout.write(getHelpText());
         exitCode = 0;
       } else {
-        exitCode = await handleInteractiveMenu(args, getVersion(), abortController.signal);
+        exitCode = await handleChatSession(args, getVersion(), abortController.signal);
       }
     }
   } finally {

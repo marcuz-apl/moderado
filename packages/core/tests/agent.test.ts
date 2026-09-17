@@ -282,5 +282,33 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(fs.existsSync(path.join(tempDir, 'README.md'))).toBe(true);
     expect(result.status).toBe('completed');
   });
+
+  it('retains multi-turn context when conversationHistory is supplied', async () => {
+    // Turn 1: User says my name is Alice
+    provider.queueTextResponse('Hello Alice!');
+    const turn1 = await loop.run('My name is Alice', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+    });
+    expect(turn1.status).toBe('completed');
+    expect(turn1.messages).toBeDefined();
+
+    // Turn 2: User asks what is my name?
+    provider.queueTextResponse('Your name is Alice.');
+    const turn2 = await loop.run('What is my name?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      conversationHistory: turn1.messages,
+    });
+    expect(turn2.status).toBe('completed');
+    expect(turn2.finalMessage).toContain('Alice');
+    // Ensure history contains turns from both messages
+    expect(turn2.messages.length).toBeGreaterThan(turn1.messages.length);
+  });
 });
+
 

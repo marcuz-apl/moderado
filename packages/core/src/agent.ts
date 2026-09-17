@@ -27,6 +27,7 @@ export interface AgentRunOptions {
   routeOptions?: RouteSelectionOptions;
   eventListener?: AgentEventListener;
   signal?: AbortSignal;
+  conversationHistory?: ChatMessage[];
 }
 
 export interface AgentRunResult {
@@ -34,6 +35,7 @@ export interface AgentRunResult {
   totalSteps: number;
   finalMessage: string | null;
   selectedModel: DiscoveredModel;
+  messages: ChatMessage[];
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
@@ -82,6 +84,7 @@ export class AgentLoop {
             source: 'heuristic',
           },
         },
+        messages: options.conversationHistory ? [...options.conversationHistory] : [],
       };
     }
 
@@ -110,10 +113,13 @@ export class AgentLoop {
     });
 
     // 2. Initialize Conversation Context
-    const messages: ChatMessage[] = [
-      { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
-      { role: 'user', content: task },
-    ];
+    const messages: ChatMessage[] =
+      options.conversationHistory && options.conversationHistory.length > 0
+        ? [...options.conversationHistory, { role: 'user', content: task }]
+        : [
+            { role: 'system', content: DEFAULT_SYSTEM_PROMPT },
+            { role: 'user', content: task },
+          ];
 
     let step = 0;
     let finalAssistantText: string | null = null;
@@ -126,6 +132,7 @@ export class AgentLoop {
           totalSteps: step,
           finalMessage: finalAssistantText,
           selectedModel: currentModel,
+          messages,
         };
       }
 
@@ -158,6 +165,7 @@ export class AgentLoop {
               totalSteps: step,
               finalMessage: finalAssistantText,
               selectedModel: currentModel,
+              messages,
             };
           }
 
@@ -214,6 +222,7 @@ export class AgentLoop {
           totalSteps: step,
           finalMessage: null,
           selectedModel: currentModel,
+          messages,
         };
       }
 
@@ -259,6 +268,7 @@ export class AgentLoop {
           totalSteps: step,
           finalMessage: assistantText,
           selectedModel: currentModel,
+          messages,
         };
       }
 
@@ -266,12 +276,13 @@ export class AgentLoop {
       for (const call of completedToolCalls) {
         if (signal?.aborted) {
           emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
-          return {
-            status: 'cancelled',
-            totalSteps: step,
-            finalMessage: finalAssistantText,
-            selectedModel: currentModel,
-          };
+            return {
+              status: 'cancelled',
+              totalSteps: step,
+              finalMessage: finalAssistantText,
+              selectedModel: currentModel,
+              messages,
+            };
         }
 
         emit({
@@ -491,6 +502,7 @@ export class AgentLoop {
           totalSteps: step,
           finalMessage: assistantText,
           selectedModel: currentModel,
+          messages,
         };
       }
     }
@@ -509,6 +521,7 @@ export class AgentLoop {
       totalSteps: step,
       finalMessage: finalAssistantText,
       selectedModel: currentModel,
+      messages,
     };
   }
 }
