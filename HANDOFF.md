@@ -1,17 +1,18 @@
 # Project Handoff
 
-Updated: 2026-09-17 15:25 UTC  
+Updated: 2026-09-17 15:35 UTC  
 Branch: master  
-Version: v0.1.2+2609175  
+Version: v0.1.2+2609176  
 Status: complete  
 
 ## Summary
 
-Delivered critical model search usability and CC-Switch-aligned classification heuristics:
-1. **Model Re-Searching**: Users can search again (`[s]`), go back (`[b]`), or type new keywords directly at any search prompt. Single-match results confirm before selecting, preventing trapped selections.
-2. **CC-Switch Classification Heuristics**: Eliminated generic "Unclassified" labels across the 82 NVIDIA NIM models. Categorizes chat/instruct models (`glm`, `kimi`, `yi`, `dbrx`, `gemma`, `granite`, `starcoder`, `llama`, `mistral`) as `free_trial` with `toolSupport: 'supported'`, and utility/embedding models as `unsupported`.
-3. **Continuous Chat REPL**: 4-step onboarding, `/exit`, `/model`, `/clear`, `/help`.
-- **100% Offline Test Coverage**: 93 unit and integration tests passing in ~1.9s.
+Delivered OpenCode/Cline-grade visual presentation and aesthetic enhancements:
+1. **Interactive Chat Terminal Styling**: Unicode box-drawing banner (`╭─╮`, `╰─╯`), model status badges (`● Active`), workspace path shortening, and two-line prompt `╭─ (model) workspace\n╰─❯ `.
+2. **Action Cards**: Tool calls rendered as structured cards with Unicode icons (`📖`, `✎`, `✂`, `📁`, `🔍`, `$`, `⎇`), truncated parameters, and colored result statuses (`✔ SUCCESS`, `⚠ DENIED`, `✖ ERROR`).
+3. **High-Contrast Permission Dialog**: Upgraded human approval prompts to enclosed permission cards with colored diff syntax highlighting (`+` green, `-` red).
+4. **Command Palette & Session Feedback**: Formatted `/help` command palette, clean session termination messages, and `◆ Moderado:` streaming headers.
+- **100% Offline Test Coverage**: 93 unit and integration tests passing in ~1.8s.
 
 ## Completed
 
