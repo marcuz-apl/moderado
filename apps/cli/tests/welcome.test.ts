@@ -6,6 +6,7 @@ import {
   renderWelcomePopupLayer,
   renderFullWelcomeScreen,
   renderWelcomeCard,
+  renderHelpPopupBox,
   MODERADO_ASCII_LOGO,
   COMMAND_HINT,
   stripAnsi,
@@ -207,6 +208,12 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/model');
     expect(plain).not.toContain('/clear');
     expect(plain).not.toContain('/help');
+  });
+
+  it('includes session management in the help popup without an extra content indent', () => {
+    const plain = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n'));
+    expect(plain).toContain('/session   Create, list, resume, export, or compact sessions');
+    expect(plain).not.toContain('│   /session');
   });
 
   it('selects and completes slash command candidates by index', () => {
