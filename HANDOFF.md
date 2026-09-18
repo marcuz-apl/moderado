@@ -1,11 +1,13 @@
 # Project Handoff
 
-Updated: 2026-09-17 21:05 UTC  
+Updated: 2026-09-18 16:49 UTC
 Branch: master  
 Version: v0.1.14+260917r  
 Status: complete  
 
 ## Summary
+
+The chat TUI now opens on a fresh installation without a forced NVIDIA setup flow. It shows **No model connected — use `/connect`** until a provider is configured. `/connect` supports NVIDIA NIM with free-first AUTO routing and a profile for OpenAI-compatible endpoints with an explicit model ID. Profiles persist under `~/.moderado/config.json` and existing NVIDIA-only configuration remains compatible.
 
 Upgraded `/model` to a **beautiful Cline/OpenCode-style popup layer** (background dimmed, drop shadow, interactive list window):
 1. **Depth & polish** (`popup.ts`): `dimLines` dims the background so the popup floats above it; `shadowUnder` paints a soft `░` drop shadow under/right of the popup.

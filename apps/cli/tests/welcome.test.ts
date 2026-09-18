@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   renderModeradoHeader,
+  renderCenteredWelcomeScreen,
   renderFullWelcomeScreen,
   renderWelcomeCard,
   MODERADO_ASCII_LOGO,
@@ -95,6 +96,22 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('z-ai/glm-5.3-flash');
   });
 
+  it('centers the welcome screen vertically in the available terminal rows', () => {
+    const rendered = renderCenteredWelcomeScreen({
+      model: 'z-ai/glm-5.3-flash',
+      tokens: 0,
+      cost: '$0.00',
+      workspace: 'd:\\test',
+      mode: 'Execute',
+      autoApprove: false,
+      width: 100,
+    }, 30);
+
+    const firstContentRow = rendered.split('\n').findIndex((line) => stripAnsi(line).includes('Use / for slash commands'));
+    expect(firstContentRow).toBeGreaterThan(12);
+    expect(firstContentRow).toBeLessThan(18);
+  });
+
   it('renders slash command suggestions box when input starts with slash', () => {
     const output = renderWelcomeCard({
       model: 'moonshotai/kimi-k3',
@@ -108,6 +125,7 @@ describe('OpenCode-style Welcome TUI', () => {
     });
 
     const plain = stripAnsi(output);
+    expect(plain).toContain('/connect');
     expect(plain).toContain('/model');
     expect(plain).toContain('/clear');
     expect(plain).toContain('/help');

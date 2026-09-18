@@ -33,6 +33,17 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     });
   });
 
+  it('uses supplied identity for an OpenAI-compatible provider profile', () => {
+    const adapter = new NvidiaAdapter({
+      apiKey: 'test-key',
+      baseUrl: serverUrl,
+      providerId: 'openrouter',
+      providerName: 'OpenRouter',
+    });
+    expect(adapter.id).toBe('openrouter');
+    expect(adapter.name).toBe('OpenRouter');
+  });
+
   it('discovers live models from GET /v1/models', async () => {
     nextHandler = (req, res) => {
       expect(req.method).toBe('GET');

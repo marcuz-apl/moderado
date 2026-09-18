@@ -80,6 +80,23 @@ moderado run "Analyze security boundaries" --read-only
 
 ## Getting Started & Development
 
+### Connect a provider in the TUI
+
+Run `moderado` to open the TUI immediately. A fresh installation does not require
+an API key or a preselected model. The welcome card shows **No model connected —
+use `/connect`** until you add one.
+
+Use `/connect` to add NVIDIA NIM. NVIDIA NIM starts with `AUTO` free-first
+routing, so choosing a model is optional; use `/model` later to pin one. Obtain
+an NVIDIA key from [build.nvidia.com](https://build.nvidia.com), or set it as
+`NVIDIA_API_KEY` before launching Moderado.
+
+`/connect` also accepts an OpenAI-compatible base URL, API key, and explicit
+model ID for providers such as OpenRouter, Z.AI, DeepSeek, Moonshot, and
+Mistral. Compatibility depends on each provider supporting `/v1/models` and
+streaming `/v1/chat/completions` with tool calls. Provider credentials are saved
+in `~/.moderado/config.json`; protect that file and never commit it.
+
 ### 1. Build & Test
 ```bash
 # Install workspace dependencies

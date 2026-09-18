@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -eu
+
+version=$(cat VERSION)
+subject=$(sed -n '1p' "$1")
+
+case "$subject" in
+  "$version "*) ;;
+  *)
+    echo "Alfazen: commit subject must start with '$version '." >&2
+    exit 1
+    ;;
+esac

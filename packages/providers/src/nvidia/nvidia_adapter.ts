@@ -14,11 +14,14 @@ import { parseSseStream } from './sse_parser.js';
 export interface NvidiaAdapterConfig {
   apiKey?: string;
   baseUrl?: string;
+  /** Provider identity for OpenAI-compatible services using this transport. */
+  providerId?: string;
+  providerName?: string;
 }
 
 export class NvidiaAdapter implements IProviderAdapter {
-  public readonly id = 'nvidia';
-  public readonly name = 'NVIDIA NIM';
+  public readonly id: string;
+  public readonly name: string;
 
   private readonly apiKey: string;
   private readonly baseUrl: string;
@@ -27,6 +30,8 @@ export class NvidiaAdapter implements IProviderAdapter {
   private readonly cacheTtlMs = 15 * 60 * 1000;
 
   constructor(config: NvidiaAdapterConfig = {}) {
+    this.id = config.providerId || 'nvidia';
+    this.name = config.providerName || 'NVIDIA NIM';
     this.apiKey = config.apiKey || process.env.NVIDIA_API_KEY || '';
     this.baseUrl = (config.baseUrl || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
   }

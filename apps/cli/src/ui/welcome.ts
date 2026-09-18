@@ -119,6 +119,7 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
+  { name: '/connect', desc: 'Connect a model provider' },
   { name: '/model', desc: 'Switch active AI model' },
   { name: '/clear', desc: 'Reset conversation memory' },
   { name: '/help', desc: 'Display commands, shortcuts & version' },
@@ -217,6 +218,27 @@ export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
   ].join('\n') + '\n';
 }
 
+/** Keep the initial welcome screen centered as the terminal viewport changes. */
+export function getWelcomeBottomPadding(options: WelcomeLayoutOptions, height?: number): number {
+  if (options.chatQuestion !== undefined) return 0;
+  const terminalHeight = height ?? process.stdout.rows ?? 24;
+  const contentLines = renderFullWelcomeScreen(options).trimEnd().split('\n').length;
+  return Math.max(0, Math.ceil((terminalHeight - contentLines) / 2));
+}
+
+export function renderCenteredWelcomeScreen(options: WelcomeLayoutOptions, height?: number): string {
+  if (options.chatQuestion !== undefined) return renderFullWelcomeScreen(options);
+
+  const terminalHeight = height ?? process.stdout.rows ?? 24;
+  const content = renderFullWelcomeScreen(options).trimEnd();
+  const contentLines = content.split('\n').length;
+  const remainingRows = Math.max(0, terminalHeight - contentLines);
+  const topPadding = Math.floor(remainingRows / 2);
+  const bottomPadding = Math.ceil(remainingRows / 2);
+
+  return '\n'.repeat(topPadding) + content + '\n'.repeat(bottomPadding + 1);
+}
+
 export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {
   const terminalWidth = width ?? (process.stdout.columns || 80);
   const boxWidth = Math.min(terminalWidth, 74);
@@ -231,6 +253,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
   const content: string[] = [
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
     '  \x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
+    '  \x1b[1m/connect\x1b[0m     Connect NVIDIA NIM or another compatible provider',
     '  \x1b[1m/clear\x1b[0m       Reset conversation memory and context history',
     '  \x1b[1m/help\x1b[0m        Display this commands, shortcuts & version guide',
     '  \x1b[1m/exit\x1b[0m        Exit Moderado session cleanly',
@@ -312,6 +335,8 @@ export interface PromptInteractiveTurnOptions {
    * UI and returns the new model id, or undefined if cancelled.
    */
   onModelSelect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
+  /** Called when user issues /connect. Returns the model label to display. */
+  onConnect?: () => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
 }
@@ -371,22 +396,24 @@ export async function promptInteractiveTurn(
   const positionCursorOnInput = () => {
     const cardIndent = getWelcomeIndent(getWelcomeCardWidth());
     const cursorCol = cardIndent + 2 + input.length;
-    const moveUp = 4 + getExtraLines();
+    const moveUp = getWelcomeBottomPadding(getOptions(), stdout.rows) + 4 + getExtraLines();
     stdout.write(`\x1b[1 q\x1b[?25h\x1b[${moveUp}A\r\x1b[${cursorCol}C`);
   };
 
   /** Full-screen redraw: clear everything, repaint welcome TUI, reposition cursor. */
   const redrawFull = () => {
     stdout.write('\x1b[H\x1b[J');
-    stdout.write(renderFullWelcomeScreen(getOptions()));
+    stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
     positionCursorOnInput();
   };
 
-  /** Lightweight card-only redraw (while typing). */
+  /** Repaint the welcome view so it remains centered after every edit or resize. */
   const redrawCard = () => {
-    stdout.write('\x1b[1A\r\x1b[J' + renderWelcomeCard(getOptions()) + '\n');
-    positionCursorOnInput();
+    redrawFull();
   };
+
+  const onResize = () => redrawFull();
+  stdout.on('resize', onResize);
 
   // Initial paint
   if (options.isFirstTurn) {
@@ -396,12 +423,13 @@ export async function promptInteractiveTurn(
     // After an AI response the screen has content below — clear and repaint the full TUI.
     stdout.write('\x1b[H\x1b[J');
   }
-  stdout.write(renderFullWelcomeScreen(getOptions()));
+  stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
   positionCursorOnInput();
 
   return new Promise((resolve) => {
     const cleanup = () => {
       stdin.removeListener('keypress', onKeypress);
+      stdout.removeListener('resize', onResize);
       stdout.write('\x1b[0 q\x1b[?25h');
       if (stdin.isTTY) {
         try { stdin.setRawMode(false); } catch { /* ignore */ }
@@ -446,7 +474,7 @@ export async function promptInteractiveTurn(
 
           // Paint: full welcome TUI (background) + help box on top
           stdout.write('\x1b[H\x1b[J');
-          stdout.write(renderFullWelcomeScreen(getOptions()));
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           const helpLines = renderHelpPopupBox(options.version ?? 'v0.1', options.workspace);
           stdout.write('\n' + helpLines.join('\n') + '\n');
           stdout.write('\x1b[?25l'); // hide cursor while modal is open
@@ -468,7 +496,7 @@ export async function promptInteractiveTurn(
 
           // Restore: repaint the full welcome TUI, show cursor, position on input line
           stdout.write('\x1b[H\x1b[J');
-          stdout.write(renderFullWelcomeScreen(getOptions()));
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();
 
           stdin.on('keypress', onKeypress); // re-attach main handler
@@ -493,7 +521,7 @@ export async function promptInteractiveTurn(
               //    dimmed so the popup layer visually floats above it.
               stdout.write('\x1b[H\x1b[J');
               stdout.write(
-                dimLines(renderFullWelcomeScreen(getOptions()).split('\n')).join('\n')
+                dimLines(renderCenteredWelcomeScreen(getOptions(), stdout.rows).split('\n')).join('\n')
               );
               const cols = process.stdout.columns || 80;
               const rows = process.stdout.rows || 24;
@@ -512,10 +540,30 @@ export async function promptInteractiveTurn(
           readlineModule.emitKeypressEvents(stdin);
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');
-          stdout.write(renderFullWelcomeScreen(getOptions()));
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();
 
           stdin.on('keypress', onKeypress); // re-attach main handler
+          return;
+        }
+
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/connect') {
+          input = '';
+          stdin.removeListener('keypress', onKeypress);
+          try { stdin.setRawMode(false); } catch { /* prompt fallback */ }
+
+          if (options.onConnect) {
+            const newModel = await options.onConnect();
+            if (newModel) currentModel = newModel;
+          }
+
+          readlineModule.emitKeypressEvents(stdin);
+          stdin.resume();
+          stdin.setRawMode(true);
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
+          positionCursorOnInput();
+          stdin.on('keypress', onKeypress);
           return;
         }
 

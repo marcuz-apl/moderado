@@ -2,7 +2,14 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { loadConfig, saveConfig, resolveApiKey, getConfigPath } from '../src/config.js';
+import {
+  getActiveConnection,
+  getConfigPath,
+  loadConfig,
+  resolveApiKey,
+  saveConfig,
+  saveConnection,
+} from '../src/config.js';
 
 describe('CLI Configuration Storage', () => {
   let tempDir: string;
@@ -51,5 +58,36 @@ describe('CLI Configuration Storage', () => {
     saveConfig({ apiKey: 'nvapi-from-config' }, tempDir);
     const resolved = resolveApiKey(tempDir);
     expect(resolved).toBe('nvapi-from-config');
+  });
+
+  it('stores an active provider connection without losing existing settings', () => {
+    saveConfig({ allowPaid: true, defaultModel: 'legacy-model' }, tempDir);
+    saveConnection({
+      id: 'openrouter',
+      displayName: 'OpenRouter',
+      kind: 'openai-compatible',
+      baseUrl: 'https://openrouter.ai/api/v1',
+      apiKey: 'sk-test',
+      defaultModel: 'openrouter/free',
+    }, tempDir);
+
+    const loaded = loadConfig(tempDir);
+    expect(loaded.allowPaid).toBe(true);
+    expect(loaded.connections?.openrouter?.displayName).toBe('OpenRouter');
+    expect(getActiveConnection(loaded)).toMatchObject({
+      id: 'openrouter',
+      kind: 'openai-compatible',
+      defaultModel: 'openrouter/free',
+    });
+  });
+
+  it('uses legacy NVIDIA credentials as an implicit NVIDIA connection', () => {
+    saveConfig({ apiKey: 'nvapi-legacy', defaultModel: 'meta/llama' }, tempDir);
+    expect(getActiveConnection(loadConfig(tempDir))).toMatchObject({
+      id: 'nvidia-nim',
+      kind: 'nvidia-nim',
+      apiKey: 'nvapi-legacy',
+      defaultModel: 'meta/llama',
+    });
   });
 });
