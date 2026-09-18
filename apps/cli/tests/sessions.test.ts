@@ -6,6 +6,7 @@ import {
   SessionStore,
   calculateOutputTokenRate,
   calculateSessionCost,
+  formatSessionCost,
   compactSessionMessages,
   createSession,
   exportSessionMarkdown,
@@ -50,6 +51,12 @@ describe('SessionStore', () => {
     )).toEqual({ costKnown: true, costUsd: 0.005 });
     expect(calculateSessionCost(undefined, { prompt: '0', completion: '0' }))
       .toEqual({ costKnown: false });
+  });
+
+  it('labels cost as unknown until both reported usage and pricing are available', () => {
+    expect(formatSessionCost({ promptTokens: 0, completionTokens: 0, totalTokens: 0, costKnown: false, available: false })).toBe('Cost unknown');
+    expect(formatSessionCost({ promptTokens: 100, completionTokens: 50, totalTokens: 150, costKnown: true, costUsd: 0, available: true })).toBe('$0.00');
+    expect(formatSessionCost({ promptTokens: 100, completionTokens: 50, totalTokens: 150, costKnown: true, costUsd: 0.001234, available: true })).toBe('$0.001234');
   });
 
   it('calculates output token speed from completion tokens and stream duration', () => {

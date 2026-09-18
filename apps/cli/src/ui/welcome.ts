@@ -4,6 +4,7 @@ export interface WelcomeLayoutOptions {
   model: string;
   tokens: number;
   cost: string;
+  usageAvailable?: boolean;
   workspace: string;
   mode: 'Plan' | 'Execute';
   autoApprove: boolean;
@@ -71,8 +72,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
   const outputRate = options.outputTokenRate === undefined ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
-  const left4Raw = `${options.model}  ${options.tokens} tokens / ${options.cost}${outputRate}`;
-  const left4 = `\x1b[38;5;180m${options.model}\x1b[0m  \x1b[38;5;244m${options.tokens} tokens / ${options.cost}${outputRate}\x1b[0m`;
+  const usageLabel = options.usageAvailable === false ? 'Usage unavailable' : `${options.tokens} tokens`;
+  const left4Raw = `${options.model}  ${usageLabel} / ${options.cost}${outputRate}`;
+  const left4 = `\x1b[38;5;180m${options.model}\x1b[0m  \x1b[38;5;244m${usageLabel} / ${options.cost}${outputRate}\x1b[0m`;
   
   const right4 =
     options.mode === 'Plan'
@@ -360,6 +362,7 @@ export interface PromptInteractiveTurnOptions {
   model: string;
   tokens: number;
   cost: string;
+  usageAvailable?: boolean;
   workspace: string;
   version?: string;
   initialMode?: 'Plan' | 'Execute';
@@ -401,6 +404,7 @@ export async function promptInteractiveTurn(
     model: currentModel,
     tokens: options.tokens,
     cost: options.cost,
+    usageAvailable: options.usageAvailable,
     workspace: options.workspace,
     mode: currentMode,
     autoApprove: currentAutoApprove,

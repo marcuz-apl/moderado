@@ -5,13 +5,13 @@ import path from 'node:path';
 import { z } from 'zod';
 import { ChatMessageSchema, type ChatMessage, type ChatUsage } from '@moderado/contracts';
 
-const UsageSchema = z.object({ promptTokens: z.number().int().nonnegative(), completionTokens: z.number().int().nonnegative(), totalTokens: z.number().int().nonnegative(), costUsd: z.number().nonnegative().optional(), costKnown: z.boolean() });
+const UsageSchema = z.object({ promptTokens: z.number().int().nonnegative(), completionTokens: z.number().int().nonnegative(), totalTokens: z.number().int().nonnegative(), costUsd: z.number().nonnegative().optional(), costKnown: z.boolean(), available: z.boolean().default(false) });
 export const StoredSessionSchema = z.object({ schemaVersion: z.literal(1), id: z.string().uuid(), workspaceRoot: z.string().min(1), createdAt: z.string().datetime(), updatedAt: z.string().datetime(), providerId: z.string().optional(), providerName: z.string().optional(), modelId: z.string().optional(), mode: z.enum(['Plan', 'Execute']), messages: z.array(ChatMessageSchema), usage: UsageSchema });
 export type StoredSession = z.infer<typeof StoredSessionSchema>;
 
 export function createSession(workspaceRoot: string, details: Partial<Pick<StoredSession, 'providerId' | 'providerName' | 'modelId' | 'mode'>> = {}): StoredSession {
   const now = new Date().toISOString();
-  return { schemaVersion: 1, id: crypto.randomUUID(), workspaceRoot, createdAt: now, updatedAt: now, providerId: details.providerId, providerName: details.providerName, modelId: details.modelId, mode: details.mode ?? 'Execute', messages: [], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, costKnown: false } };
+  return { schemaVersion: 1, id: crypto.randomUUID(), workspaceRoot, createdAt: now, updatedAt: now, providerId: details.providerId, providerName: details.providerName, modelId: details.modelId, mode: details.mode ?? 'Execute', messages: [], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0, costKnown: false, available: false } };
 }
 
 export class SessionStore {
@@ -47,6 +47,12 @@ export function calculateSessionCost(usage: ChatUsage | undefined, pricing?: Rec
 export function calculateOutputTokenRate(completionTokens: number, streamDurationMs: number): number | undefined {
   if (!Number.isFinite(completionTokens) || completionTokens <= 0 || !Number.isFinite(streamDurationMs) || streamDurationMs <= 0) return undefined;
   return completionTokens / (streamDurationMs / 1_000);
+}
+
+export function formatSessionCost(usage: StoredSession['usage']): string {
+  if (!usage.available || !usage.costKnown || usage.costUsd === undefined) return 'Cost unknown';
+  if (usage.costUsd === 0) return '$0.00';
+  return `$${usage.costUsd < 0.01 ? usage.costUsd.toFixed(6) : usage.costUsd.toFixed(4)}`;
 }
 function redact(text: string): string { return text.replace(/(?:nvapi-|sk-)[A-Za-z0-9_-]+/g, '[redacted]'); }
 export function exportSessionMarkdown(session: StoredSession): string {

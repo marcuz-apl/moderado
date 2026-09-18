@@ -53,7 +53,7 @@ answer.
 - Offline tests cover empty output, unsupported tools, retry, fallback, and
   provider-neutral diagnostics.
 
-## Milestone 2 — Persistent sessions, context, and actual usage
+## Milestone 2 — Persistent sessions, context, and actual usage ✅
 
 **Goal:** A coding conversation survives process restarts and remains useful as
 it grows.
@@ -61,12 +61,13 @@ it grows.
 ### Scope
 
 - Store sessions locally per workspace using atomic writes and redacted data.
-- Add `/new`, `/sessions`, `/resume`, `/export`, and `/compact`.
+- Add the `/session` command family for new, list, resume, export, and compact.
 - Restore conversation history and the selected provider/model when resuming.
 - Consume actual usage information returned by providers when available.
 - Compute displayed cost from recorded provider pricing metadata when known;
   otherwise show that cost is unavailable rather than `$0.00`.
-- Track context usage and compact safely before a model limit is exceeded.
+- Provide safe, deterministic manual compaction; automatic compaction awaits
+  reliable provider context-limit metadata.
 
 ### Done when
 
@@ -165,6 +166,6 @@ For each milestone:
 5. Review the user-facing CLI flow manually.
 6. Commit using the repository's Alfazen versioning hook only after verification.
 
-The current recommended implementation target is **Milestone 1**. It addresses
-the blank-response failure observed with an OpenRouter free model and is a
-prerequisite for trusting every later workflow.
+The current recommended implementation target is **Milestone 3**. It adds the
+reviewable coding workflow built on M1's trustworthy responses and M2's durable
+session state.

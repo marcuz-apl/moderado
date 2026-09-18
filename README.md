@@ -91,6 +91,14 @@ routing, so choosing a model is optional; use `/model` later to pin one. Obtain
 an NVIDIA key from [build.nvidia.com](https://build.nvidia.com), or set it as
 `NVIDIA_API_KEY` before launching Moderado.
 
+### Sessions and usage
+
+Moderado stores sessions per workspace in `~/.moderado/sessions/`. Use
+`/session` to create, resume, export, or compact a local conversation. Session
+exports redact recognized API-key prefixes. The status line uses only
+provider-reported token usage. It shows the calculated cost when the selected
+model exposes prompt and completion prices, and **Cost unknown** otherwise.
+
 `/connect` also accepts an OpenAI-compatible base URL, API key, and explicit
 model ID for providers such as OpenRouter, Z.AI, DeepSeek, Moonshot, and
 Mistral. Compatibility depends on each provider supporting `/v1/models` and

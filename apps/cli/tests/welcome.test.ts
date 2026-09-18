@@ -100,6 +100,15 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('z-ai/glm-5.3-flash');
   });
 
+  it('does not present zero tokens or zero cost when provider usage is unavailable', () => {
+    const output = renderWelcomeCard({
+      model: 'Auto (Free-First)', tokens: 0, cost: 'Cost unknown', usageAvailable: false,
+      workspace: 'd:\\projects\\moderado', mode: 'Execute', autoApprove: false, width: 100,
+    });
+
+    expect(stripAnsi(output)).toContain('Usage unavailable / Cost unknown');
+  });
+
   it('renders a wide post-question chat layout with logo, elapsed time, answer, and anchored composer details', () => {
     const rendered = renderChatScreen({
       model: 'z-ai/glm-5.3-flash',

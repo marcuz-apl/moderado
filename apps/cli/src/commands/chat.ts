@@ -10,8 +10,9 @@ import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive } from '../ui/provider_connect.js';
 import { promptInteractiveTurn, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
-import { calculateOutputTokenRate, compactSessionMessages, createSession, exportSessionMarkdown, SessionStore, StoredSession } from '../sessions.js';
+import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { renderBoxLines, selectListPopup } from '../ui/popup.js';
+import { findModelPricing } from '../model_pricing.js';
 
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
   let canonicalWorkspace: string;
@@ -64,11 +65,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let lastAnswer = '';
   let lastThoughtTime = 0;
   let lastOutputTokenRate: number | undefined;
+  const costLabel = (): string => formatSessionCost(activeSession.usage);
 
   while (!signal?.aborted) {
     const turn = await promptInteractiveTurn({
-      model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: '$0.00', workspace: canonicalWorkspace, version,
-      initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate,
+      model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
+      usageAvailable: activeSession.usage.available, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate,
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
           await showModelConnectionRequired(drawFrame, signal);
@@ -174,7 +176,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         process.stdout.write(renderFullWelcomeScreen({
           model: currentModel ?? 'No model connected — use /connect',
           tokens: Math.round(sessionTokens),
-          cost: '$0.00',
+          cost: costLabel(),
+          usageAvailable: activeSession.usage.available,
           workspace: canonicalWorkspace,
           mode: activeMode,
           autoApprove: activeAutoApprove,
@@ -200,7 +203,13 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       });
       conversationHistory = result.messages;
       if (result.usage) {
-        activeSession.usage = { ...result.usage, costKnown: false };
+        let pricing: Record<string, string> | undefined;
+        try {
+          pricing = findModelPricing(await provider!.discoverModels(signal), result.selectedModel.id);
+        } catch {
+          // A valid answer remains usable when the provider catalog is unavailable.
+        }
+        activeSession.usage = { ...result.usage, ...calculateSessionCost(result.usage, pricing), available: true };
         sessionTokens = result.usage.totalTokens;
         if (firstAssistantDeltaAt) outputTokenRate = calculateOutputTokenRate(result.usage.completionTokens, Date.now() - firstAssistantDeltaAt);
       }
