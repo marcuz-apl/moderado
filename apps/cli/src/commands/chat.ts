@@ -105,6 +105,8 @@ export async function handleChatSession(
   const loop = new AgentLoop();
 
   let conversationHistory: ChatMessage[] = [];
+  let lastQuestion = '';
+  let lastAnswer = '';
 
   // 4. Continuous interactive loop — the full TUI is the persistent background on every turn.
   //    /help, /model, /clear, and /exit are handled inside promptInteractiveTurn via callbacks;
@@ -123,6 +125,8 @@ export async function handleChatSession(
       initialAutoApprove: activeAutoApprove,
       isFirstTurn: isFirst,
       signal,
+      chatQuestion: lastQuestion || undefined,
+      chatAnswer: lastAnswer || undefined,
 
       // /model popup: selectModelOverlay runs as a floating popup window layered
       // on top of the main TUI (drawFrame repaints the background as-is and
@@ -142,9 +146,11 @@ export async function handleChatSession(
         return selection.modelId;
       },
 
-      // /clear: reset conversation history; welcome.ts redraws the TUI automatically.
+      // /clear: reset conversation history and chat transcript; welcome.ts redraws the TUI automatically.
       onClear: () => {
         conversationHistory = [];
+        lastQuestion = '';
+        lastAnswer = '';
       },
     });
 
@@ -186,6 +192,15 @@ export async function handleChatSession(
       });
 
       conversationHistory = result.messages;
+      // Capture the model's final answer so the next prompt paints the full chat window.
+      for (let i = result.messages.length - 1; i >= 0; i--) {
+        const msg = result.messages[i];
+        if (msg.role === 'assistant' && msg.content && msg.content.trim().length > 0) {
+          lastAnswer = msg.content;
+          break;
+        }
+      }
+      lastQuestion = trimmed;
       const turnChars = result.messages.reduce(
         (sum, m) => sum + (m.content ? m.content.length : 0),
         0

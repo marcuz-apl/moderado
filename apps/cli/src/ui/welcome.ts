@@ -9,6 +9,9 @@ export interface WelcomeLayoutOptions {
   autoApprove: boolean;
   input?: string;
   width?: number;
+  /** When set, render the full chat window (question row 1 + answer) instead of the logo header. */
+  chatQuestion?: string;
+  chatAnswer?: string;
 }
 
 export const MODERADO_ASCII_LOGO = [
@@ -150,7 +153,63 @@ export function renderModeradoHeader(): string {
   ].join('\n');
 }
 
+/** Word-wrap plain text to `maxWidth` visible columns. */
+function wrapText(text: string, maxWidth: number): string[] {
+  const out: string[] = [];
+  for (const rawLine of text.split('\n')) {
+    if (rawLine.length <= maxWidth) {
+      out.push(rawLine);
+      continue;
+    }
+    let current = '';
+    for (const word of rawLine.split(' ')) {
+      if (current.length === 0) {
+        current = word;
+      } else if (current.length + 1 + word.length <= maxWidth) {
+        current += ' ' + word;
+      } else {
+        out.push(current);
+        current = word;
+      }
+    }
+    if (current.length > 0) out.push(current);
+  }
+  return out;
+}
+
+/**
+ * Full chat window (after a question is submitted): no logo — the question is
+ * displayed on the first row, the multi-line model answer below it, then the
+ * same input card as the welcome window at the bottom.
+ */
+export function renderChatScreen(options: WelcomeLayoutOptions): string {
+  const terminalWidth = options.width ?? (process.stdout.columns || 80);
+  const maxWidth = Math.max(40, terminalWidth - 4);
+
+  const lines: string[] = [];
+
+  // Row 1: the user's question
+  lines.push(`\x1b[1;38;5;75m❯\x1b[0m ${options.chatQuestion ?? ''}`);
+
+  // Answer section: multi-line model answer
+  if (options.chatAnswer && options.chatAnswer.trim().length > 0) {
+    lines.push('');
+    for (const answerLine of wrapText(options.chatAnswer.trim(), maxWidth)) {
+      lines.push(`\x1b[38;5;253m${answerLine}\x1b[0m`);
+    }
+  }
+
+  // Lower part: the same input card as the welcome window
+  lines.push('');
+  lines.push(...renderWelcomeCard(options).split('\n'));
+
+  return lines.join('\n') + '\n';
+}
+
 export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
+  if (options.chatQuestion !== undefined) {
+    return renderChatScreen(options);
+  }
   return [
     renderModeradoHeader(),
     '',
@@ -243,6 +302,9 @@ export interface PromptInteractiveTurnOptions {
   initialAutoApprove?: boolean;
   isFirstTurn?: boolean;
   signal?: AbortSignal;
+  /** Previous turn's question/answer — when question is set, render the full chat window (no logo). */
+  chatQuestion?: string;
+  chatAnswer?: string;
   /**
    * Called when user selects a model via /model. Receives a `drawFrame`
    * callback that composites popup content as a floating layer on top of the
@@ -273,6 +335,8 @@ export async function promptInteractiveTurn(
     mode: currentMode,
     autoApprove: currentAutoApprove,
     input,
+    chatQuestion: options.chatQuestion,
+    chatAnswer: options.chatAnswer,
   });
 
   // ── Non-TTY fallback ──────────────────────────────────────────────────────
