@@ -200,7 +200,9 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   // Row 1: the user's question
   lines.push(`\x1b[1;38;5;75m❯\x1b[0m ${options.chatQuestion ?? ''}`);
   lines.push(hr);
-  lines.push(`\x1b[38;5;244mThought for ${options.chatThoughtTime ?? 0}s\x1b[0m`);
+  const thoughtTime = options.chatThoughtTime ?? 0;
+  const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
+  lines.push(`\x1b[38;5;244mThought for ${thoughtTimeLabel}\x1b[0m`);
 
   // Answer section: multi-line model answer
   if (options.chatAnswer && options.chatAnswer.trim().length > 0) {

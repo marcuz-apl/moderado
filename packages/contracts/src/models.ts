@@ -24,6 +24,8 @@ export const ModelInventoryEntrySchema = z.object({
   parent: z.string().optional(),
   /** Optional OpenAI-compatible per-token pricing, supplied as decimal strings. */
   pricing: z.record(z.string(), z.string()).optional(),
+  /** Optional provider-advertised request parameters, used for capability checks. */
+  supported_parameters: z.array(z.string()).optional(),
 });
 export type ModelInventoryEntry = z.infer<typeof ModelInventoryEntrySchema>;
 

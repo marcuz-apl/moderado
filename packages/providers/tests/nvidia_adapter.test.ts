@@ -57,6 +57,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
             {
               id: 'meta/llama-3.3-70b-instruct', object: 'model', created: 1700000000, owned_by: 'nvidia',
               pricing: { prompt: '0', completion: '0', request: '0' },
+              supported_parameters: ['tools', 'tool_choice'],
             },
             { id: 'mistralai/mixtral-8x7b-instruct-v0.1', object: 'model', created: 1700000000, owned_by: 'nvidia' },
           ],
@@ -70,6 +71,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(models.length).toBe(2);
     expect(models[0].id).toBe('meta/llama-3.3-70b-instruct');
     expect(models[0].pricing).toEqual({ prompt: '0', completion: '0', request: '0' });
+    expect(models[0].supported_parameters).toEqual(['tools', 'tool_choice']);
     expect(models[1].id).toBe('mistralai/mixtral-8x7b-instruct-v0.1');
 
     // Second call should hit memory cache and NOT call HTTP server again
@@ -88,6 +90,22 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
 
     const adapter = new NvidiaAdapter({ apiKey: 'invalid-key', baseUrl: serverUrl });
     await expect(adapter.discoverModels()).rejects.toThrow(AuthenticationError);
+  });
+
+  it('uses the configured provider name in authentication errors', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ detail: 'Invalid API key' }));
+    };
+
+    const adapter = new NvidiaAdapter({
+      apiKey: 'invalid-key',
+      baseUrl: serverUrl,
+      providerId: 'openrouter',
+      providerName: 'OpenRouter',
+    });
+
+    await expect(adapter.discoverModels()).rejects.toThrow('OpenRouter authentication failed');
   });
 
   it('maps 503 error to ModelUnavailableError on discovery', async () => {

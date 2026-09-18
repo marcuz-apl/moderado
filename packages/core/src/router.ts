@@ -72,7 +72,26 @@ export class Router {
     }
   }
 
-  classifyModel(modelId: string, isLocalProfile = false): ModelClassification {
+  classifyModel(
+    modelId: string,
+    isLocalProfile = false,
+    supportedParameters?: string[]
+  ): ModelClassification {
+    if (supportedParameters) {
+      const toolSupport = supportedParameters.some(
+        (parameter) => parameter === 'tools' || parameter === 'tool_choice'
+      )
+        ? 'supported'
+        : 'unsupported';
+      return {
+        modelId,
+        accessTier: isLocalProfile ? 'local' : 'free_trial',
+        toolSupport,
+        source: 'official_metadata',
+        notes: `Provider advertises ${toolSupport === 'supported' ? '' : 'no '}tool calling`,
+      };
+    }
+
     const found = this.classifications.get(modelId);
     if (found) {
       return { ...found };
@@ -138,12 +157,16 @@ export class Router {
     // 1. Explicit Model Pinning
     if (options.pinnedModelId) {
       const pinnedId = options.pinnedModelId;
-      const classification = this.classifyModel(pinnedId, options.isLocalProfile);
       const entry = inventory.find((m) => m.id === pinnedId) ?? {
         id: pinnedId,
         object: 'model' as const,
         owned_by: 'nvidia',
       };
+      const classification = this.classifyModel(
+        pinnedId,
+        options.isLocalProfile,
+        entry.supported_parameters
+      );
 
       const pinnedModel: DiscoveredModel = {
         id: pinnedId,
@@ -163,7 +186,11 @@ export class Router {
       id: entry.id,
       created: entry.created,
       ownedBy: entry.owned_by,
-      classification: this.classifyModel(entry.id, options.isLocalProfile),
+      classification: this.classifyModel(
+        entry.id,
+        options.isLocalProfile,
+        entry.supported_parameters
+      ),
     }));
 
     // 3. Stage 1: Capability Filtering

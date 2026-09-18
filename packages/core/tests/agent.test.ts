@@ -57,6 +57,97 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(completionEvent).toBeDefined();
   });
 
+  it('fails visibly instead of completing when a model returns no content or tool calls', async () => {
+    provider.queueResponse([{ finishReason: 'stop' }]);
+
+    const result = await loop.run('Who are you?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('failed');
+    expect(result.finalMessage).toBeNull();
+    expect(events.some((event) => event.type === 'completion' && event.status === 'completed')).toBe(false);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'error',
+      code: 'ERR_EMPTY_RESPONSE',
+      recoverable: false,
+    }));
+  });
+
+  it('retries an empty AUTO response with the next eligible model', async () => {
+    provider.models = [
+      { id: 'model-a', object: 'model', owned_by: 'test' },
+      { id: 'model-b', object: 'model', owned_by: 'test' },
+    ];
+    provider.queueResponse([{ finishReason: 'stop' }]);
+    provider.queueTextResponse('A fallback model answered this request.');
+    const router = new Router({
+      'model-a': { accessTier: 'free_trial', toolSupport: 'supported' },
+      'model-b': { accessTier: 'free_trial', toolSupport: 'supported' },
+    });
+
+    const result = await loop.run('Who are you?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      router,
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.selectedModel.id).toBe('model-b');
+    expect(result.finalMessage).toContain('fallback model');
+    expect(provider.recordedCalls.map((call) => call.modelId)).toEqual(['model-a', 'model-b']);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'model_change',
+      previousModelId: 'model-a',
+      newModelId: 'model-b',
+      reason: 'fallback_unavailable',
+    }));
+  });
+
+  it('does not send tools to a model classified as tool-unsupported', async () => {
+    provider.queueTextResponse('I can answer without tools.');
+
+    const result = await loop.run('Who are you?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      routeOptions: { pinnedModelId: 'mock/text-only-model' },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(provider.recordedCalls).toHaveLength(1);
+    expect(provider.recordedCalls[0].tools).toBeUndefined();
+  });
+
+  it('honours provider-advertised lack of tool support for an otherwise unknown model', async () => {
+    provider.models = [{
+      id: 'z-ai/glm-5.2-free',
+      object: 'model',
+      owned_by: 'openrouter',
+      supported_parameters: ['temperature', 'max_tokens'],
+    }];
+    provider.queueTextResponse('I can answer this as plain chat.');
+
+    const result = await loop.run('Who are you?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      routeOptions: { pinnedModelId: 'z-ai/glm-5.2-free' },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(provider.recordedCalls[0].tools).toBeUndefined();
+  });
+
   it('executes tool call and follows up with assistant summary', async () => {
     fs.writeFileSync(path.join(tempDir, 'data.txt'), 'Secret 42');
 
@@ -335,5 +426,3 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect((assistantEvents[0] as any).delta).toBe('Here is the direct answer.');
   });
 });
-
-

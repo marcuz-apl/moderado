@@ -200,7 +200,7 @@ export class NvidiaAdapter implements IProviderAdapter {
 
     if (response.status === 401 || response.status === 403) {
       throw new AuthenticationError(
-        `NVIDIA NIM authentication failed (${response.status}) during ${action}: ${errorText || 'Check your NVIDIA_API_KEY'}`
+        `${this.name} authentication failed (${response.status}) during ${action}: ${errorText || 'Check the provider API key'}`
       );
     }
 
@@ -214,7 +214,7 @@ export class NvidiaAdapter implements IProviderAdapter {
         }
       }
       throw new RateLimitError(
-        `NVIDIA NIM rate limit exceeded (429) during ${action}: ${errorText}`,
+        `${this.name} rate limit exceeded (429) during ${action}: ${errorText}`,
         retryAfterSeconds
       );
     }
@@ -228,13 +228,13 @@ export class NvidiaAdapter implements IProviderAdapter {
       response.status === 504
     ) {
       throw new ModelUnavailableError(
-        `NVIDIA NIM service or model unavailable (${response.status}) during ${action}: ${errorText}`,
+        `${this.name} service or model unavailable (${response.status}) during ${action}: ${errorText}`,
         response.status
       );
     }
 
     throw new ProviderError(
-      `NVIDIA NIM request failed with status ${response.status} during ${action}: ${errorText}`,
+      `${this.name} request failed with status ${response.status} during ${action}: ${errorText}`,
       'ERR_HTTP_ERROR',
       response.status
     );

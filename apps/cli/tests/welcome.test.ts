@@ -123,6 +123,23 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('Auto-approve off (Shift+Tab)');
   });
 
+  it('shows a sub-second response time without reporting a misleading zero seconds', () => {
+    const rendered = renderChatScreen({
+      model: 'z-ai/glm-5.3-flash',
+      tokens: 0,
+      cost: '$0.00',
+      workspace: 'd:\\projects\\moderado',
+      mode: 'Execute',
+      autoApprove: false,
+      chatQuestion: 'Who are you?',
+      chatAnswer: 'I am Moderado.',
+      chatThoughtTime: 0.2,
+      width: 100,
+    }, 30);
+
+    expect(stripAnsi(rendered)).toContain('Thought for <1s');
+  });
+
   it('centers the welcome screen vertically in the available terminal rows', () => {
     const rendered = renderCenteredWelcomeScreen({
       model: 'z-ai/glm-5.3-flash',

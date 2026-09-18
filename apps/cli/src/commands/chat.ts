@@ -118,7 +118,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       conversationHistory = result.messages;
       lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
       lastQuestion = trimmed;
-      lastThoughtTime = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
+      lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       sessionTokens += Math.round(result.messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0) / 4);
       process.stdout.write('\n');
     } catch (err: any) { process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }

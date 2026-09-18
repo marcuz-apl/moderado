@@ -36,6 +36,13 @@ export class ModelUnavailableError extends ProviderError {
   }
 }
 
+export class EmptyResponseError extends ProviderError {
+  constructor(message = 'Provider returned no assistant content or tool calls') {
+    super(message, 'ERR_EMPTY_RESPONSE');
+    this.name = 'EmptyResponseError';
+  }
+}
+
 export class MalformedResponseError extends ProviderError {
   constructor(message = 'Provider returned malformed or unparseable response') {
     super(message, 'ERR_MALFORMED_RESPONSE');

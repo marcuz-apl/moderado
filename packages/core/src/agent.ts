@@ -6,6 +6,7 @@ import {
   AssistantMessage,
   ChatMessage,
   DiscoveredModel,
+  EmptyResponseError,
   IApprovalHandler,
   IProviderAdapter,
   IToolRegistry,
@@ -102,7 +103,13 @@ export class AgentLoop {
     let inventory = options.modelInventory;
     if (!inventory || inventory.length === 0) {
       if (options.routeOptions?.pinnedModelId) {
-        inventory = [{ id: options.routeOptions.pinnedModelId, object: 'model', owned_by: 'nvidia' }];
+        try {
+          inventory = await options.provider.discoverModels(signal);
+        } catch {
+          // A pinned model can still be usable when its provider does not
+          // expose a model catalogue. Continue without dynamic metadata.
+          inventory = [{ id: options.routeOptions.pinnedModelId, object: 'model', owned_by: options.provider.id }];
+        }
       } else {
         emit({
           type: 'progress',
@@ -170,7 +177,10 @@ export class AgentLoop {
         const stream = options.provider.streamChat({
           modelId: currentModel.id,
           messages,
-          tools: options.tools.getDeclarations(),
+          tools:
+            currentModel.classification.toolSupport === 'unsupported'
+              ? undefined
+              : options.tools.getDeclarations(),
           signal,
         });
 
@@ -269,6 +279,45 @@ export class AgentLoop {
             arguments: parsedArgs,
           });
         }
+      }
+
+      if (!assistantText.trim() && completedToolCalls.length === 0) {
+        const emptyResponse = new EmptyResponseError(
+          `${options.provider.name} returned no assistant content or tool calls for ${currentModel.id}.`
+        );
+        const isAutoMode = !options.routeOptions?.pinnedModelId;
+        const fallback = isAutoMode
+          ? router.getNextFallback(rankedCandidates, currentModel.id)
+          : undefined;
+
+        if (fallback) {
+          emit({
+            type: 'model_change',
+            previousModelId: currentModel.id,
+            newModelId: fallback.id,
+            reason: 'fallback_unavailable',
+            accessClass: fallback.classification.accessTier,
+            timestamp: Date.now(),
+          });
+          currentModel = fallback;
+          step--;
+          continue;
+        }
+
+        emit({
+          type: 'error',
+          code: emptyResponse.code,
+          message: emptyResponse.message,
+          recoverable: false,
+          timestamp: Date.now(),
+        });
+        return {
+          status: 'failed',
+          totalSteps: step,
+          finalMessage: null,
+          selectedModel: currentModel,
+          messages,
+        };
       }
 
       // Record Assistant message
