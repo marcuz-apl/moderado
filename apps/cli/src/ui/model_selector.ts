@@ -32,7 +32,187 @@ export interface ModelSelectorOptions {
   drawFrame?: (popupLines: string[]) => void;
 }
 
+export interface CompatibleModelSelectorOptions {
+  apiKey?: string;
+  baseUrl: string;
+  providerId: string;
+  providerName: string;
+  currentModel?: string;
+  allModelsFree?: boolean;
+  signal?: AbortSignal;
+  drawFrame: (popupLines: string[]) => void;
+}
+
+export interface CompatibleModelEntry {
+  id: string;
+  pricing?: Record<string, string>;
+}
+
 let cachedInventory: { id: string }[] | null = null;
+
+export function buildModelConnectionRequiredItems(): PopupListItem[] {
+  return [
+    {
+      label: 'Connect NVIDIA NIM first',
+      value: 'connect',
+      description: 'Use /connect to add an NVIDIA NIM API key, then choose a model here.',
+    },
+    {
+      label: 'Close Window',
+      value: 'close',
+      description: 'Return to the welcome window without changing anything.',
+    },
+  ];
+}
+
+export async function showModelConnectionRequired(
+  drawFrame: (popupLines: string[]) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  await selectListPopup('Model Selection Window', buildModelConnectionRequiredItems(), {
+    drawFrame,
+    signal,
+    hint: 'Enter or Esc close',
+  });
+}
+
+export function buildCompatibleModelMenuItems(
+  providerName: string,
+  models: CompatibleModelEntry[],
+  currentModel?: string,
+  allModelsFree = false
+): PopupListItem[] {
+  const items: PopupListItem[] = [];
+  if (allModelsFree && models.length > 0) {
+    items.push({
+      label: 'Browse available models',
+      value: 'browse',
+      tag: `${models.length} Free`,
+      description: `Filter the live ${providerName} model catalog.`,
+    });
+  } else {
+    const freeCount = models.filter(isFreeCompatibleModel).length;
+    const paidCount = models.length - freeCount;
+    if (freeCount > 0) {
+      items.push({ label: 'Browse Free Models', value: 'free', tag: `${freeCount} Free`, description: 'No-cost OpenRouter endpoints.' });
+    }
+    if (paidCount > 0) {
+      items.push({ label: 'Browse Paid Models', value: 'paid', tag: `${paidCount} Paid`, description: 'Priced OpenRouter endpoints.' });
+    }
+  }
+  items.push({
+    label: 'Enter a model ID',
+    value: 'custom',
+    tag: allModelsFree ? 'Free' : undefined,
+    description: `Use any ${providerName} model ID, including one not returned by discovery.`,
+  });
+  if (currentModel) {
+    items.push({
+      label: 'Keep Current Model',
+      value: 'keep',
+      tag: currentModel,
+      description: 'Close the window without switching models.',
+    });
+  }
+  items.push({
+    label: 'Cancel & Close Window',
+    value: 'cancel',
+    description: 'No changes will be made.',
+  });
+  return items;
+}
+
+function isFreeCompatibleModel(model: CompatibleModelEntry): boolean {
+  const prices = Object.values(model.pricing ?? {});
+  return prices.length > 0 && prices.every((price) => Number.isFinite(Number(price)) && Number(price) === 0);
+}
+
+function compatibleModelPopupItem(model: CompatibleModelEntry, allModelsFree: boolean, providerName: string): PopupListItem {
+  const isFree = allModelsFree || isFreeCompatibleModel(model);
+  const price = model.pricing?.prompt;
+  return {
+    label: model.id,
+    value: model.id,
+    tag: isFree ? 'Free' : 'Paid',
+    description: isFree
+      ? `${providerName} free model`
+      : price
+        ? `${providerName} paid model · input $${Number(price) * 1_000_000}/M tokens`
+        : `${providerName} paid model`,
+  };
+}
+
+export async function selectCompatibleModelOverlay(
+  options: CompatibleModelSelectorOptions
+): Promise<string | undefined> {
+  const { apiKey, baseUrl, providerId, providerName, currentModel, allModelsFree, signal, drawFrame } = options;
+  let models: CompatibleModelEntry[] = [];
+  try {
+    layerPromptBox(drawFrame, `\x1b[36mQuerying ${providerName} model catalog...\x1b[0m`);
+    const provider = new NvidiaAdapter({ apiKey, baseUrl, providerId, providerName });
+    models = (await provider.discoverModels(signal))
+      .map((model) => ({ id: model.id, pricing: model.pricing }))
+      .sort((a, b) => a.id.localeCompare(b.id));
+  } catch {
+    // Explicit model entry remains available when a provider does not expose /models.
+  }
+
+  const picked = await selectListPopup(
+    `${providerName} Models`,
+    buildCompatibleModelMenuItems(providerName, models, currentModel, allModelsFree),
+    { drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close' }
+  );
+  if (picked === null || picked === 'keep' || picked === 'cancel') return currentModel;
+  if (picked === 'browse' || picked === 'free' || picked === 'paid') {
+    const visibleModels = picked === 'free'
+      ? models.filter(isFreeCompatibleModel)
+      : picked === 'paid'
+        ? models.filter((model) => !isFreeCompatibleModel(model))
+        : models;
+    return (await selectListPopup(
+      `${providerName} Models`,
+      visibleModels.map((model) => compatibleModelPopupItem(model, allModelsFree ?? false, providerName)),
+      { drawFrame, signal, filterable: true, pageSize: 10, hint: 'type to filter · ↑↓ navigate · Enter select · Esc close' }
+    )) ?? currentModel;
+  }
+  return askCompatibleModelId(providerName, currentModel, drawFrame, signal);
+}
+
+async function askCompatibleModelId(
+  providerName: string,
+  currentModel: string | undefined,
+  drawFrame: (popupLines: string[]) => void,
+  signal?: AbortSignal
+): Promise<string | undefined> {
+  const stdin = process.stdin;
+  let value = currentModel ?? '';
+  const redraw = (): void => drawFrame(renderBoxLines(`${providerName} Models`, [
+    '\x1b[1;38;5;75mModel ID\x1b[0m',
+    '',
+    `  \x1b[1;38;5;75m❯\x1b[0m ${value}\x1b[7m \x1b[0m`,
+    '',
+    '\x1b[38;5;244mEnter save · Esc cancel\x1b[0m',
+  ], 64));
+
+  return new Promise((resolve) => {
+    const finish = (modelId: string | undefined): void => {
+      stdin.removeListener('keypress', onKeypress);
+      signal?.removeEventListener('abort', onAbort);
+      resolve(modelId);
+    };
+    const onAbort = (): void => finish(undefined);
+    const onKeypress = (str: string, key: { name?: string; ctrl?: boolean; meta?: boolean } | undefined): void => {
+      if (key?.name === 'escape' || (key?.ctrl && key.name === 'c')) return finish(undefined);
+      if (key?.name === 'return' || key?.name === 'enter') return finish(value.trim() || undefined);
+      if (key?.name === 'backspace') { value = value.slice(0, -1); redraw(); return; }
+      if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key?.ctrl && !key?.meta) { value += str; redraw(); }
+    };
+    if (signal?.aborted) return finish(undefined);
+    signal?.addEventListener('abort', onAbort, { once: true });
+    stdin.on('keypress', onKeypress);
+    redraw();
+  });
+}
 
 export function buildOverlayMenuItems(
   freeModelIds: string[], freeCount: number, paidCount: number, activeModel?: string
@@ -246,7 +426,7 @@ async function executeModelSelection(
 
     const picked = await selectListPopup('Model Selection Window', menuItems, {
       signal,
-      drawFrame: (popupLines) => options.drawFrame!(popupLines.map((line) => `\x1b[48;5;234m${line}\x1b[0m`)),
+      drawFrame: options.drawFrame,
       pageSize: 9,
       hint: '↑↓ navigate · Enter select · Esc close',
     });

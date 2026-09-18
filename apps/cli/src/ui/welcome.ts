@@ -23,7 +23,7 @@ export const MODERADO_ASCII_LOGO = [
 ];
 
 export const COMMAND_HINT =
-  '\x1b[38;5;242mUse \x1b[38;5;75m/\x1b[38;5;242m for slash commands, \x1b[38;5;75m@\x1b[38;5;242m for file mentions, \x1b[38;5;75mCtrl+P\x1b[38;5;242m for menu\x1b[0m';
+  '\x1b[38;5;242mUse \x1b[38;5;75m/\x1b[38;5;242m for slash commands, \x1b[38;5;75m@\x1b[38;5;242m for file mentions\x1b[0m';
 
 export function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
@@ -249,7 +249,11 @@ export function renderWelcomePopupLayer(
   const cols = width ?? process.stdout.columns ?? 80;
   const rows = height ?? process.stdout.rows ?? 24;
   const background = dimLines(renderCenteredWelcomeScreen(options, rows).split('\n')).join('\n');
-  return background + shadowUnder(popupLines, cols, rows) + overlayCentered(popupLines, cols, rows);
+  const surface = '\x1b[48;5;236m\x1b[38;5;255m';
+  const lightPopup = popupLines.map((line) =>
+    surface + line.replace(/\x1b\[0m/g, `\x1b[0m${surface}`) + '\x1b[0m'
+  );
+  return background + shadowUnder(lightPopup, cols, rows) + overlayCentered(lightPopup, cols, rows);
 }
 
 export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {

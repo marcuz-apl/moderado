@@ -15,6 +15,22 @@ export interface PopupConnectionOptions {
   drawFrame?: (popupLines: string[]) => void;
 }
 
+export interface ProviderPreset {
+  label: string;
+  value: 'nvidia-nim' | 'openrouter' | 'agnes-ai' | 'openai-compatible';
+  description: string;
+  tag?: string;
+  displayName?: string;
+  baseUrl?: string;
+}
+
+export const PROVIDER_PRESETS: ProviderPreset[] = [
+  { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
+  { label: 'OpenRouter', value: 'openrouter', tag: 'OpenAI-compatible', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key and choose a model ID.' },
+  { label: 'Agnes AI', value: 'agnes-ai', tag: 'OpenAI-compatible', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key and choose a model ID.' },
+  { label: 'Other OpenAI-compatible provider', value: 'openai-compatible', description: 'Connect any compatible endpoint with its base URL, key, and model ID.' },
+];
+
 export function renderConnectionPrompt(label: string, value: string, secret = false): string[] {
   const shown = secret ? '*'.repeat(value.length) : value;
   return renderBoxLines('Connect Provider', [
@@ -94,10 +110,7 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
 
 /** Interactive setup used by /connect and by the first attempted prompt. */
 export async function connectProviderInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
-  const choices = [
-    { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
-    { label: 'OpenAI-compatible endpoint', value: 'openai-compatible', description: 'OpenRouter, Z.AI, DeepSeek, Moonshot, Mistral, or another compatible API.' },
-  ];
+  const choices = PROVIDER_PRESETS;
   const selectedValue = options.drawFrame
     ? await selectListPopup('Connect Provider', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
     : (await askSelect('Connect a provider', choices, 0, { signal: options.signal })).value;
@@ -110,9 +123,10 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
     return buildConnection({ kind: 'nvidia-nim', apiKey });
   }
 
-  const displayName = await askPopupText('Provider name (for example, OpenRouter)', options);
+  const preset = PROVIDER_PRESETS.find((item) => item.value === selectedValue);
+  const displayName = preset?.displayName ?? await askPopupText('Provider name (for example, OpenRouter)', options);
   if (!displayName) return undefined;
-  const baseUrl = await askPopupText('OpenAI-compatible base URL', options);
+  const baseUrl = preset?.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
   const apiKey = await askPopupText('API key', options, true);
   const defaultModel = await askPopupText('Default model ID', options);
   if (!baseUrl || !apiKey || !defaultModel) return undefined;

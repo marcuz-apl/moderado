@@ -7,7 +7,7 @@ import { CliParsedArgs } from '../args.js';
 import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, saveConnection } from '../config.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
-import { selectModelOverlay } from '../ui/model_selector.js';
+import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive } from '../ui/provider_connect.js';
 import { promptInteractiveTurn, terminalCleanExitDone } from '../ui/welcome.js';
 
@@ -59,7 +59,29 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: '$0.00', workspace: canonicalWorkspace, version,
       initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined,
       onModelSelect: async (drawFrame) => {
-        if (!activeConnection || activeConnection.kind !== 'nvidia-nim') return undefined;
+        if (!activeConnection) {
+          await showModelConnectionRequired(drawFrame, signal);
+          return undefined;
+        }
+        if (activeConnection.kind === 'openai-compatible') {
+          const modelId = await selectCompatibleModelOverlay({
+            apiKey: activeConnection.apiKey,
+            baseUrl: activeConnection.baseUrl,
+            providerId: activeConnection.id,
+            providerName: activeConnection.displayName,
+            currentModel,
+            allModelsFree: activeConnection.id === 'agnes-ai',
+            signal,
+            drawFrame,
+          });
+          if (modelId && modelId !== currentModel) {
+            currentModel = modelId;
+            activeConnection = { ...activeConnection, defaultModel: modelId };
+            saveConnection(activeConnection);
+            config = loadConfig();
+          }
+          return modelId;
+        }
         const selection = await selectModelOverlay({ apiKey: activeConnection.apiKey, currentModel, signal, saveSelectionByDefault: true, drawFrame });
         if (selection.modelId) currentModel = selection.modelId;
         return selection.modelId;

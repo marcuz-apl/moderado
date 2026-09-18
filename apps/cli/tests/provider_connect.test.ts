@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { buildConnection, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { buildConnection, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
 
 describe('provider connection setup', () => {
+  it('offers NVIDIA NIM, OpenRouter, and Agnes AI presets', () => {
+    expect(PROVIDER_PRESETS.map((preset) => preset.value)).toEqual([
+      'nvidia-nim', 'openrouter', 'agnes-ai', 'openai-compatible',
+    ]);
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')?.baseUrl)
+      .toBe('https://openrouter.ai/api/v1');
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'agnes-ai')?.baseUrl)
+      .toBe('https://apihub.agnes-ai.com/v1');
+  });
+
   it('renders credential entry as a popup, masking secrets', () => {
     const plain = renderConnectionPrompt('NVIDIA API key', 'nvapi-secret', true).join('\n').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
     expect(plain).toContain('NVIDIA API key');

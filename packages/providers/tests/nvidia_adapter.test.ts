@@ -54,7 +54,10 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
       res.end(
         JSON.stringify({
           data: [
-            { id: 'meta/llama-3.3-70b-instruct', object: 'model', created: 1700000000, owned_by: 'nvidia' },
+            {
+              id: 'meta/llama-3.3-70b-instruct', object: 'model', created: 1700000000, owned_by: 'nvidia',
+              pricing: { prompt: '0', completion: '0', request: '0' },
+            },
             { id: 'mistralai/mixtral-8x7b-instruct-v0.1', object: 'model', created: 1700000000, owned_by: 'nvidia' },
           ],
         })
@@ -66,6 +69,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
 
     expect(models.length).toBe(2);
     expect(models[0].id).toBe('meta/llama-3.3-70b-instruct');
+    expect(models[0].pricing).toEqual({ prompt: '0', completion: '0', request: '0' });
     expect(models[1].id).toBe('mistralai/mixtral-8x7b-instruct-v0.1');
 
     // Second call should hit memory cache and NOT call HTTP server again

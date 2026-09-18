@@ -16,7 +16,7 @@ describe('OpenCode-style Welcome TUI', () => {
     const plainHint = stripAnsi(COMMAND_HINT);
     expect(plainHint).toContain('Use / for slash commands');
     expect(plainHint).toContain('@ for file mentions');
-    expect(plainHint).toContain('Ctrl+P for menu');
+    expect(plainHint).not.toContain('Ctrl+P');
 
     const header = renderModeradoHeader();
     expect(header).toContain(COMMAND_HINT);
@@ -121,6 +121,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
     expect(rendered).toContain('\x1b[2m');
     expect(rendered).toContain('\x1b[?25l');
+    expect(rendered).toContain('\x1b[48;5;236m\x1b[38;5;255m');
     expect(rendered).toContain('NVIDIA NIM');
   });
 
