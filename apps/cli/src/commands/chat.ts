@@ -7,10 +7,9 @@ import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler } from
 import { CliParsedArgs } from '../args.js';
 import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, saveConnection } from '../config.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
-import { TerminalRenderer } from '../ui/renderer.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive } from '../ui/provider_connect.js';
-import { promptInteractiveTurn, terminalCleanExitDone } from '../ui/welcome.js';
+import { promptInteractiveTurn, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
 import { compactSessionMessages, createSession, exportSessionMarkdown, SessionStore, StoredSession } from '../sessions.js';
 import { renderBoxLines, selectListPopup } from '../ui/popup.js';
 
@@ -58,7 +57,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const terminalApproval = new TerminalApprovalHandler();
   const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> =>
     activeAutoApprove ? { requestId: req.requestId, status: 'approved' } : terminalApproval.requestApproval(req, sig) };
-  const renderer = new TerminalRenderer({ verbose: args.verbose, isChatMode: true });
   const router = new Router();
   const loop = new AgentLoop();
   let conversationHistory: ChatMessage[] = [...activeSession.messages];
@@ -163,14 +161,35 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       saveConnection(connection); config = loadConfig(); activateConnection(connection);
     }
 
-    process.stdout.write('\n');
     const policy = new PolicyManager({ maxSteps: args.maxSteps, readOnly: activeMode === 'Plan' || args.readOnly, nonInteractive: args.nonInteractive, timeoutSeconds: args.timeout });
     try {
       const startedAt = Date.now();
+      let streamedAnswer = '';
+      const redrawChatFrame = (): void => {
+        const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
+        process.stdout.write('\x1b[H\x1b[J');
+        process.stdout.write(renderFullWelcomeScreen({
+          model: currentModel ?? 'No model connected — use /connect',
+          tokens: Math.round(sessionTokens),
+          cost: '$0.00',
+          workspace: canonicalWorkspace,
+          mode: activeMode,
+          autoApprove: activeAutoApprove,
+          chatQuestion: trimmed,
+          chatAnswer: streamedAnswer,
+          chatThoughtTime: thoughtTime,
+        }, process.stdout.rows));
+      };
+
+      // Move to the chat layout before the provider can emit its first event.
+      redrawChatFrame();
       const result = await loop.run(trimmed, {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
-        eventListener: (event) => renderer.handleEvent(event), signal, conversationHistory,
+        eventListener: (event) => {
+          if (event.type === 'assistant_delta') streamedAnswer += event.delta;
+          if (event.type === 'assistant_delta' || event.type === 'progress' || event.type === 'reasoning_delta') redrawChatFrame();
+        }, signal, conversationHistory,
       });
       conversationHistory = result.messages;
       if (result.usage) {
@@ -186,7 +205,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
-      process.stdout.write('\n');
     } catch (err: any) { process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }
   }
   return 0;

@@ -20,6 +20,11 @@ export class TerminalRenderer {
   }
 
   handleEvent(event: AgentEvent): void {
+    // The interactive chat command owns a full-screen frame and redraws it as
+    // events arrive. Writing here would place output beneath the previous
+    // welcome frame until the next prompt redraw.
+    if (this.isChatMode) return;
+
     switch (event.type) {
       case 'model_change': {
         this.finishAssistantStream();
@@ -27,13 +32,6 @@ export class TerminalRenderer {
 
         // In interactive chat mode, model is already configured.
         // Only print if there is an unexpected fallback.
-        if (
-          this.isChatMode &&
-          (event.reason === 'initial_selection' || event.reason === 'user_pinned')
-        ) {
-          break;
-        }
-
         const reasonText =
           event.reason === 'initial_selection'
             ? 'Selected'
@@ -110,12 +108,6 @@ export class TerminalRenderer {
       case 'completion': {
         this.finishAssistantStream();
         this.clearTransientProgress();
-
-        if (this.isChatMode) {
-          // Clean finish without large batch completion card
-          this.stdout.write('\n\n');
-          break;
-        }
 
         const bannerColor =
           event.status === 'completed'

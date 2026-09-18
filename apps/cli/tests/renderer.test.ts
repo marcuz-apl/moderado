@@ -101,7 +101,7 @@ describe('TerminalRenderer', () => {
     expect(captured).toContain('Here is the answer.');
   });
 
-  it('suppresses redundant model badges and completion boxes in chat mode', () => {
+  it('does not write agent events outside the chat frame in chat mode', () => {
     let captured = '';
     const stdout = new Writable({
       write(chunk, _encoding, callback) {
@@ -134,9 +134,6 @@ describe('TerminalRenderer', () => {
       timestamp: Date.now(),
     });
 
-    expect(captured).not.toContain('● Model:');
-    expect(captured).not.toContain('=== Session Finished');
-    expect(captured).toContain('Moderado');
-    expect(captured).toContain('Hello from Moderado!');
+    expect(captured).toBe('');
   });
 });
