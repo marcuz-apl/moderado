@@ -57,6 +57,27 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(completionEvent).toBeDefined();
   });
 
+  it('returns provider-reported usage from a completed run', async () => {
+    provider.queueResponse([
+      { contentDelta: 'Done.' },
+      { usage: { promptTokens: 11, completionTokens: 7, totalTokens: 18 } },
+      { finishReason: 'stop' },
+    ]);
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+    });
+
+    expect(result.usage).toEqual({
+      promptTokens: 11,
+      completionTokens: 7,
+      totalTokens: 18,
+    });
+  });
+
   it('fails visibly instead of completing when a model returns no content or tool calls', async () => {
     provider.queueResponse([{ finishReason: 'stop' }]);
 

@@ -4,6 +4,7 @@ import {
   ApprovalDecision,
   ApprovalRequest,
   AssistantMessage,
+  ChatUsage,
   ChatMessage,
   DiscoveredModel,
   EmptyResponseError,
@@ -39,6 +40,7 @@ export interface AgentRunResult {
   finalMessage: string | null;
   selectedModel: DiscoveredModel;
   messages: ChatMessage[];
+  usage?: ChatUsage;
 }
 
 const DEFAULT_SYSTEM_PROMPT = `You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
@@ -78,6 +80,7 @@ export class AgentLoop {
     const policy = options.policy ?? new PolicyManager();
     const router = options.router ?? new Router();
     const signal = options.signal;
+    let latestUsage: ChatUsage | undefined;
 
     if (signal?.aborted) {
       emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
@@ -96,6 +99,7 @@ export class AgentLoop {
           },
         },
         messages: options.conversationHistory ? [...options.conversationHistory] : [],
+        usage: latestUsage,
       };
     }
 
@@ -157,6 +161,7 @@ export class AgentLoop {
           finalMessage: finalAssistantText,
           selectedModel: currentModel,
           messages,
+          usage: latestUsage,
         };
       }
 
@@ -193,6 +198,7 @@ export class AgentLoop {
               finalMessage: finalAssistantText,
               selectedModel: currentModel,
               messages,
+              usage: latestUsage,
             };
           }
 
@@ -211,6 +217,10 @@ export class AgentLoop {
               delta: chunk.contentDelta,
               timestamp: Date.now(),
             });
+          }
+
+          if (chunk.usage) {
+            latestUsage = chunk.usage;
           }
 
           if (chunk.toolCallChunks) {
@@ -258,6 +268,7 @@ export class AgentLoop {
           finalMessage: null,
           selectedModel: currentModel,
           messages,
+          usage: latestUsage,
         };
       }
 
@@ -317,6 +328,7 @@ export class AgentLoop {
           finalMessage: null,
           selectedModel: currentModel,
           messages,
+          usage: latestUsage,
         };
       }
 
@@ -343,6 +355,7 @@ export class AgentLoop {
           finalMessage: assistantText,
           selectedModel: currentModel,
           messages,
+          usage: latestUsage,
         };
       }
 
@@ -356,6 +369,7 @@ export class AgentLoop {
               finalMessage: finalAssistantText,
               selectedModel: currentModel,
               messages,
+              usage: latestUsage,
             };
         }
 
@@ -577,6 +591,7 @@ export class AgentLoop {
           finalMessage: assistantText,
           selectedModel: currentModel,
           messages,
+          usage: latestUsage,
         };
       }
     }
@@ -596,6 +611,7 @@ export class AgentLoop {
       finalMessage: finalAssistantText,
       selectedModel: currentModel,
       messages,
+      usage: latestUsage,
     };
   }
 }

@@ -9,6 +9,7 @@ import {
   MODERADO_ASCII_LOGO,
   COMMAND_HINT,
   stripAnsi,
+  selectCommandCandidate,
 } from '../src/ui/welcome.js';
 
 describe('OpenCode-style Welcome TUI', () => {
@@ -183,6 +184,7 @@ describe('OpenCode-style Welcome TUI', () => {
     const plain = stripAnsi(output);
     expect(plain).toContain('/connect');
     expect(plain).toContain('/model');
+    expect(plain).toContain('/session');
     expect(plain).toContain('/clear');
     expect(plain).toContain('/help');
     expect(plain).toContain('/exit');
@@ -205,5 +207,11 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/model');
     expect(plain).not.toContain('/clear');
     expect(plain).not.toContain('/help');
+  });
+
+  it('selects and completes slash command candidates by index', () => {
+    expect(selectCommandCandidate('/se', 0, 0)?.name).toBe('/session');
+    expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/model');
+    expect(selectCommandCandidate('/', 0, -1)?.name).toBe('/exit');
   });
 });

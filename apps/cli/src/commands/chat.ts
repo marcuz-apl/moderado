@@ -1,4 +1,5 @@
 import path from 'node:path';
+import fs from 'node:fs';
 import { AgentLoop, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot } from '@moderado/tools';
@@ -10,6 +11,8 @@ import { TerminalRenderer } from '../ui/renderer.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive } from '../ui/provider_connect.js';
 import { promptInteractiveTurn, terminalCleanExitDone } from '../ui/welcome.js';
+import { compactSessionMessages, createSession, exportSessionMarkdown, SessionStore, StoredSession } from '../sessions.js';
+import { renderBoxLines, selectListPopup } from '../ui/popup.js';
 
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
   let canonicalWorkspace: string;
@@ -41,7 +44,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
   let activeAutoApprove = false;
-  let sessionTokens = 0;
+  const sessionStore = new SessionStore();
+  let activeSession: StoredSession = sessionStore.loadLatestSession(canonicalWorkspace) ??
+    createSession(canonicalWorkspace, {
+      providerId: activeConnection?.id,
+      providerName: activeConnection?.displayName,
+      modelId: currentModel,
+      mode: activeMode,
+    });
+  let sessionTokens = activeSession.usage.totalTokens;
   let isFirst = true;
   const tools = createDefaultToolRegistry();
   const terminalApproval = new TerminalApprovalHandler();
@@ -50,7 +61,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const renderer = new TerminalRenderer({ verbose: args.verbose, isChatMode: true });
   const router = new Router();
   const loop = new AgentLoop();
-  let conversationHistory: ChatMessage[] = [];
+  let conversationHistory: ChatMessage[] = [...activeSession.messages];
   let lastQuestion = '';
   let lastAnswer = '';
   let lastThoughtTime = 0;
@@ -93,7 +104,53 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         saveConnection(connection); config = loadConfig(); activateConnection(connection);
         return currentModel ?? 'No model connected — use /connect';
       },
-      onClear: () => { conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; },
+      onClear: () => {
+        conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0;
+        activeSession.messages = [];
+        sessionStore.save(activeSession);
+      },
+      onSession: async (command, drawFrame) => {
+        let action = command.slice('/session'.length).trim();
+        if (!action) {
+          action = (await selectListPopup('Session', [
+            { label: 'New session', value: 'new', description: 'Start with an empty conversation.' },
+            { label: 'List or resume', value: 'resume', description: 'Load a saved session for this workspace.' },
+            { label: 'Export transcript', value: 'export', description: 'Write a redacted Markdown transcript in this workspace.' },
+            { label: 'Compact history', value: 'compact', description: 'Reduce older messages without calling a model.' },
+          ], { drawFrame, signal })) ?? '';
+        }
+        if (action === 'new') {
+          activeSession = createSession(canonicalWorkspace, { providerId: activeConnection?.id, providerName: activeConnection?.displayName, modelId: currentModel, mode: activeMode });
+          conversationHistory = []; sessionTokens = 0; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0;
+          sessionStore.save(activeSession);
+          return;
+        }
+        if (action === 'list' || action === 'resume') {
+          const sessions = sessionStore.listSessions(canonicalWorkspace);
+          const id = await selectListPopup('Saved sessions', sessions.map((entry) => ({
+            label: entry.updatedAt.slice(0, 16).replace('T', ' ') + '  ' + (entry.modelId ?? 'No model'),
+            value: entry.id,
+            description: entry.messages.find((message) => message.role === 'user')?.content?.slice(0, 100) ?? 'Empty session',
+          })), { drawFrame, signal, filterable: true });
+          const loaded = sessions.find((entry) => entry.id === id);
+          if (loaded) {
+            activeSession = loaded; conversationHistory = [...loaded.messages]; sessionTokens = loaded.usage.totalTokens;
+            currentModel = loaded.modelId ?? currentModel; activeMode = loaded.mode;
+          }
+          return;
+        }
+        if (action === 'compact') {
+          const compacted = compactSessionMessages(conversationHistory);
+          activeSession.messages = compacted; conversationHistory = compacted; sessionStore.save(activeSession);
+          drawFrame(renderBoxLines('Session compacted', ['Older conversation history was reduced.', '', 'Press Esc or Enter to return.'], 64));
+          return;
+        }
+        if (action === 'export') {
+          const output = path.join(canonicalWorkspace, 'moderado-session.md');
+          fs.writeFileSync(output, exportSessionMarkdown(activeSession), 'utf8');
+          drawFrame(renderBoxLines('Session exported', ['Saved redacted transcript:', output, '', 'Press Esc or Enter to return.'], 70));
+        }
+      },
     });
     activeMode = turn.mode; activeAutoApprove = turn.autoApprove;
     const trimmed = turn.text.trim(); isFirst = false;
@@ -116,10 +173,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         eventListener: (event) => renderer.handleEvent(event), signal, conversationHistory,
       });
       conversationHistory = result.messages;
+      if (result.usage) {
+        activeSession.usage = { ...result.usage, costKnown: false };
+        sessionTokens = result.usage.totalTokens;
+      }
+      activeSession.messages = conversationHistory;
+      activeSession.providerId = activeConnection?.id;
+      activeSession.providerName = activeConnection?.displayName;
+      activeSession.modelId = result.selectedModel.id;
+      activeSession.mode = activeMode;
+      sessionStore.save(activeSession);
       lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
-      sessionTokens += Math.round(result.messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0) / 4);
       process.stdout.write('\n');
     } catch (err: any) { process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }
   }

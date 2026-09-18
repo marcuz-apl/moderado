@@ -122,6 +122,7 @@ export interface SlashCommand {
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/connect', desc: 'Connect a model provider' },
   { name: '/model', desc: 'Switch active AI model' },
+  { name: '/session', desc: 'Create, list, resume, export, or compact sessions' },
   { name: '/clear', desc: 'Reset conversation memory' },
   { name: '/help', desc: 'Display commands, shortcuts & version' },
   { name: '/exit', desc: 'Exit Moderado' },
@@ -131,6 +132,13 @@ export function getMatchingCommands(input: string): SlashCommand[] {
   if (!input.startsWith('/')) return [];
   const q = input.toLowerCase();
   return SLASH_COMMANDS.filter((cmd) => cmd.name.startsWith(q));
+}
+
+export function selectCommandCandidate(input: string, currentIndex: number, direction: number): SlashCommand | undefined {
+  const commands = getMatchingCommands(input);
+  if (commands.length === 0) return undefined;
+  const index = ((currentIndex + direction) % commands.length + commands.length) % commands.length;
+  return commands[index];
 }
 
 export function renderSuggestionsBox(commands: SlashCommand[]): string[] {
@@ -369,6 +377,7 @@ export interface PromptInteractiveTurnOptions {
   onConnect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
+  onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
 }
 
 export async function promptInteractiveTurn(
@@ -381,6 +390,7 @@ export async function promptInteractiveTurn(
   let currentMode: 'Plan' | 'Execute' = options.initialMode ?? 'Execute';
   let currentAutoApprove = options.initialAutoApprove ?? false;
   let input = '';
+  let commandSelection = 0;
 
   const getOptions = (): WelcomeLayoutOptions => ({
     model: currentModel,
@@ -590,6 +600,26 @@ export async function promptInteractiveTurn(
           return;
         }
 
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/session')) {
+          const command = input.trim();
+          input = '';
+          stdin.removeListener('keypress', onKeypress);
+          if (options.onSession) {
+            await options.onSession(command, (popupLines) => {
+              stdout.write('\x1b[H\x1b[J');
+              stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+            });
+          }
+          readlineModule.emitKeypressEvents(stdin);
+          stdin.resume();
+          stdin.setRawMode(true);
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
+          positionCursorOnInput();
+          stdin.on('keypress', onKeypress);
+          return;
+        }
+
 
         // ── /clear ────────────────────────────────────────────────────────────
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/clear') {
@@ -628,10 +658,8 @@ export async function promptInteractiveTurn(
           if (input.startsWith('/')) {
             const matching = getMatchingCommands(input);
             if (matching.length > 0) {
-              const exactIdx = matching.findIndex((m) => m.name.toLowerCase() === input.toLowerCase());
-              input = exactIdx === -1
-                ? matching[0].name
-                : matching[(exactIdx + 1) % matching.length].name;
+              input = matching[Math.min(commandSelection, matching.length - 1)].name;
+              commandSelection = 0;
               redrawCard();
               return;
             }
@@ -641,8 +669,24 @@ export async function promptInteractiveTurn(
           return;
         }
 
+        if (input.startsWith('/') && (key.name === 'up' || key.name === 'down')) {
+          const matching = getMatchingCommands(input);
+          if (matching.length > 0) {
+            commandSelection = ((commandSelection + (key.name === 'up' ? -1 : 1)) % matching.length + matching.length) % matching.length;
+            redrawCard();
+            return;
+          }
+        }
+
         // Enter — submit real user message
         if (key.name === 'return' || key.name === 'enter') {
+          const matching = getMatchingCommands(input);
+          if (input.startsWith('/') && matching.length > 0 && !matching.some((command) => command.name === input.trim())) {
+            input = matching[Math.min(commandSelection, matching.length - 1)].name;
+            commandSelection = 0;
+            redrawCard();
+            return;
+          }
           const trimmed = input.trim();
           cleanup();
           if (options.signal) options.signal.removeEventListener('abort', onAbort);
@@ -656,6 +700,7 @@ export async function promptInteractiveTurn(
         if (key.name === 'backspace') {
           if (input.length > 0) {
             input = input.slice(0, -1);
+            commandSelection = 0;
             redrawCard();
           }
           return;
@@ -664,6 +709,7 @@ export async function promptInteractiveTurn(
         // Printable character
         if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key.ctrl && !key.meta) {
           input += str;
+          commandSelection = 0;
           redrawCard();
         }
 
