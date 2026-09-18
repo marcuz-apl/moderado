@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {
   SessionStore,
+  calculateOutputTokenRate,
   calculateSessionCost,
   compactSessionMessages,
   createSession,
@@ -49,6 +50,12 @@ describe('SessionStore', () => {
     )).toEqual({ costKnown: true, costUsd: 0.005 });
     expect(calculateSessionCost(undefined, { prompt: '0', completion: '0' }))
       .toEqual({ costKnown: false });
+  });
+
+  it('calculates output token speed from completion tokens and stream duration', () => {
+    expect(calculateOutputTokenRate(84, 2_000)).toBe(42);
+    expect(calculateOutputTokenRate(0, 2_000)).toBeUndefined();
+    expect(calculateOutputTokenRate(84, 0)).toBeUndefined();
   });
 
   it('exports redacted Markdown and compacts older messages deterministically', () => {

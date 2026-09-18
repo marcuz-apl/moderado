@@ -111,6 +111,7 @@ describe('OpenCode-style Welcome TUI', () => {
       chatQuestion: 'Explain this repository.',
       chatAnswer: 'It is a provider-independent coding agent.',
       chatThoughtTime: 12,
+      outputTokenRate: 42,
       width: 140,
     }, 40);
 
@@ -121,6 +122,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('It is a provider-independent coding agent.');
     expect(plain).toContain('z-ai/glm-5.3-flash');
     expect(plain).toContain('1500 tokens / $0.00');
+    expect(plain).toContain('42 tok/s');
     expect(plain).toContain('d:\\projects\\moderado');
     expect(plain).toContain('Auto-approve off (Shift+Tab)');
   });

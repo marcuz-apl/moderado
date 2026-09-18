@@ -10,7 +10,7 @@ import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive } from '../ui/provider_connect.js';
 import { promptInteractiveTurn, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
-import { compactSessionMessages, createSession, exportSessionMarkdown, SessionStore, StoredSession } from '../sessions.js';
+import { calculateOutputTokenRate, compactSessionMessages, createSession, exportSessionMarkdown, SessionStore, StoredSession } from '../sessions.js';
 import { renderBoxLines, selectListPopup } from '../ui/popup.js';
 
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
@@ -63,11 +63,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let lastQuestion = '';
   let lastAnswer = '';
   let lastThoughtTime = 0;
+  let lastOutputTokenRate: number | undefined;
 
   while (!signal?.aborted) {
     const turn = await promptInteractiveTurn({
       model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: '$0.00', workspace: canonicalWorkspace, version,
-      initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime,
+      initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate,
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
           await showModelConnectionRequired(drawFrame, signal);
@@ -103,7 +104,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         return currentModel ?? 'No model connected — use /connect';
       },
       onClear: () => {
-        conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0;
+        conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
         activeSession.messages = [];
         sessionStore.save(activeSession);
       },
@@ -119,7 +120,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
         if (action === 'new') {
           activeSession = createSession(canonicalWorkspace, { providerId: activeConnection?.id, providerName: activeConnection?.displayName, modelId: currentModel, mode: activeMode });
-          conversationHistory = []; sessionTokens = 0; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0;
+          conversationHistory = []; sessionTokens = 0; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
           sessionStore.save(activeSession);
           return;
         }
@@ -165,6 +166,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     try {
       const startedAt = Date.now();
       let streamedAnswer = '';
+      let firstAssistantDeltaAt: number | undefined;
+      let outputTokenRate: number | undefined;
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
         process.stdout.write('\x1b[H\x1b[J');
@@ -178,6 +181,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           chatQuestion: trimmed,
           chatAnswer: streamedAnswer,
           chatThoughtTime: thoughtTime,
+          outputTokenRate,
         }, process.stdout.rows));
       };
 
@@ -187,7 +191,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
-          if (event.type === 'assistant_delta') streamedAnswer += event.delta;
+          if (event.type === 'assistant_delta') {
+            firstAssistantDeltaAt ??= Date.now();
+            streamedAnswer += event.delta;
+          }
           if (event.type === 'assistant_delta' || event.type === 'progress' || event.type === 'reasoning_delta') redrawChatFrame();
         }, signal, conversationHistory,
       });
@@ -195,6 +202,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       if (result.usage) {
         activeSession.usage = { ...result.usage, costKnown: false };
         sessionTokens = result.usage.totalTokens;
+        if (firstAssistantDeltaAt) outputTokenRate = calculateOutputTokenRate(result.usage.completionTokens, Date.now() - firstAssistantDeltaAt);
       }
       activeSession.messages = conversationHistory;
       activeSession.providerId = activeConnection?.id;
@@ -205,6 +213,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
+      lastOutputTokenRate = outputTokenRate;
+      redrawChatFrame();
     } catch (err: any) { process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }
   }
   return 0;

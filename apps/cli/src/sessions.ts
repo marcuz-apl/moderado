@@ -42,6 +42,12 @@ export function calculateSessionCost(usage: ChatUsage | undefined, pricing?: Rec
   if (!usage || !Number.isFinite(prompt) || !Number.isFinite(completion) || prompt < 0 || completion < 0) return { costKnown: false };
   return { costKnown: true, costUsd: usage.promptTokens * prompt + usage.completionTokens * completion };
 }
+
+/** Output speed uses only generated tokens, never prompt/context processing time. */
+export function calculateOutputTokenRate(completionTokens: number, streamDurationMs: number): number | undefined {
+  if (!Number.isFinite(completionTokens) || completionTokens <= 0 || !Number.isFinite(streamDurationMs) || streamDurationMs <= 0) return undefined;
+  return completionTokens / (streamDurationMs / 1_000);
+}
 function redact(text: string): string { return text.replace(/(?:nvapi-|sk-)[A-Za-z0-9_-]+/g, '[redacted]'); }
 export function exportSessionMarkdown(session: StoredSession): string {
   const lines = ['# Moderado session', '', 'Updated: ' + session.updatedAt, ''];

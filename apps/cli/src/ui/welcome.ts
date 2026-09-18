@@ -13,6 +13,8 @@ export interface WelcomeLayoutOptions {
   chatQuestion?: string;
   chatAnswer?: string;
   chatThoughtTime?: number;
+  /** Generated completion tokens per second for the preceding response. */
+  outputTokenRate?: number;
 }
 
 export const MODERADO_ASCII_LOGO = [
@@ -68,8 +70,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const textBox = `\x1b[1;38;5;75m❯\x1b[0m ${displayInput}`;
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
-  const left4Raw = `${options.model}  ${options.tokens} tokens / ${options.cost}`;
-  const left4 = `\x1b[38;5;180m${options.model}\x1b[0m  \x1b[38;5;244m${options.tokens} tokens / ${options.cost}\x1b[0m`;
+  const outputRate = options.outputTokenRate === undefined ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
+  const left4Raw = `${options.model}  ${options.tokens} tokens / ${options.cost}${outputRate}`;
+  const left4 = `\x1b[38;5;180m${options.model}\x1b[0m  \x1b[38;5;244m${options.tokens} tokens / ${options.cost}${outputRate}\x1b[0m`;
   
   const right4 =
     options.mode === 'Plan'
@@ -367,6 +370,7 @@ export interface PromptInteractiveTurnOptions {
   chatQuestion?: string;
   chatAnswer?: string;
   chatThoughtTime?: number;
+  outputTokenRate?: number;
   /**
    * Called when user selects a model via /model. Receives a `drawFrame`
    * callback that composites popup content as a floating layer on top of the
@@ -404,6 +408,7 @@ export async function promptInteractiveTurn(
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
     chatThoughtTime: options.chatThoughtTime,
+    outputTokenRate: options.outputTokenRate,
   });
 
   // ── Non-TTY fallback ──────────────────────────────────────────────────────
