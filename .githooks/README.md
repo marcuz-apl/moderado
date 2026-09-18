@@ -7,6 +7,7 @@ git config core.hooksPath .githooks
 ```
 
 `pre-commit` updates `VERSION` to `v<m.n.p>+<yymmddc>` using the UTC date and
-the daily counter (`1`–`9`, then `a`–`z`). It also applies the SemVer bump
-implied by the conventional commit subject. `prepare-commit-msg` prefixes the resulting version,
+the daily counter (`1`–`9`, then `a`–`z`). Ordinary commits keep `m.n.p`
+unchanged; only `release(minor):` and `release(patch):` bump SemVer.
+`prepare-commit-msg` prefixes the resulting version,
 including on `--amend`, and `commit-msg` validates it.

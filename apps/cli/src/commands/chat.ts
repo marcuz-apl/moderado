@@ -64,8 +64,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (selection.modelId) currentModel = selection.modelId;
         return selection.modelId;
       },
-      onConnect: async () => {
-        const connection = await connectProviderInteractive(signal);
+      onConnect: async (drawFrame) => {
+        const connection = await connectProviderInteractive({ signal, drawFrame });
         if (!connection) return currentModel;
         saveConnection(connection); config = loadConfig(); activateConnection(connection);
         return currentModel ?? 'No model connected — use /connect';
@@ -78,7 +78,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
     if (!provider) {
       process.stdout.write('\nNo provider is connected. Let\'s connect one before sending this task.\n');
-      const connection = await connectProviderInteractive(signal);
+      const connection = await connectProviderInteractive({ signal });
       if (!connection) { process.stdout.write('No provider connected. Use /connect whenever you are ready.\n\n'); continue; }
       saveConnection(connection); config = loadConfig(); activateConnection(connection);
     }

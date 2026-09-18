@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   renderModeradoHeader,
   renderCenteredWelcomeScreen,
+  renderWelcomePopupLayer,
   renderFullWelcomeScreen,
   renderWelcomeCard,
   MODERADO_ASCII_LOGO,
@@ -110,6 +111,17 @@ describe('OpenCode-style Welcome TUI', () => {
     const firstContentRow = rendered.split('\n').findIndex((line) => stripAnsi(line).includes('Use / for slash commands'));
     expect(firstContentRow).toBeGreaterThan(12);
     expect(firstContentRow).toBeLessThan(18);
+  });
+
+  it('composites popups over a dimmed welcome window instead of appending them', () => {
+    const rendered = renderWelcomePopupLayer({
+      model: 'Auto (Free-First)', tokens: 0, cost: '$0.00', workspace: 'd:\\test',
+      mode: 'Execute', autoApprove: false, width: 100,
+    }, ['╭─ Connect ─╮', '│ NVIDIA NIM │', '╰───────────╯'], 100, 30);
+
+    expect(rendered).toContain('\x1b[2m');
+    expect(rendered).toContain('\x1b[?25l');
+    expect(rendered).toContain('NVIDIA NIM');
   });
 
   it('renders slash command suggestions box when input starts with slash', () => {

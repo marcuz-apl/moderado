@@ -2,10 +2,26 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { selectModelInteractive } from '../src/ui/model_selector.js';
+import { buildOverlayMenuItems, selectModelInteractive } from '../src/ui/model_selector.js';
 import { loadConfig, saveConfig } from '../src/config.js';
 
 describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
+  it('puts curated popular free models ahead of dynamic catalog actions', () => {
+    const items = buildOverlayMenuItems([
+      'nvidia/nemotron-3-ultra-120b-a12b',
+      'nvidia/nemotron-3-5-lightning-30b-a3b',
+      'z-ai/glm-5.3-flash',
+    ], 75, 9, 'auto');
+
+    expect(items.slice(0, 3).map((item) => item.label)).toEqual([
+      'Nemotron 3 Ultra Free',
+      'Nemotron 3.5 Lightning Free',
+      'z-ai/glm-5.3-flash',
+    ]);
+    expect(items.map((item) => item.label)).toContain('Browse Free Models');
+    expect(items.map((item) => item.label)).toContain('Cancel & Close Window');
+  });
+
   let tempHome: string;
   let origEnvKey: string | undefined;
 

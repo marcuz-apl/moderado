@@ -34,6 +34,29 @@ export interface ModelSelectorOptions {
 
 let cachedInventory: { id: string }[] | null = null;
 
+export function buildOverlayMenuItems(
+  freeModelIds: string[], freeCount: number, paidCount: number, activeModel?: string
+): PopupListItem[] {
+  const popular = [
+    { label: 'Nemotron 3 Ultra Free', match: (id: string) => /nemotron.*3.*ultra/i.test(id) },
+    { label: 'Nemotron 3.5 Lightning Free', match: (id: string) => /nemotron.*3.*5.*lightning|nemotron.*lightning/i.test(id) },
+    { label: 'z-ai/glm-5.3-flash', match: (id: string) => id.toLowerCase() === 'z-ai/glm-5.3-flash' },
+  ];
+  const items: PopupListItem[] = popular.flatMap(({ label, match }) => {
+    const id = freeModelIds.find(match);
+    return id ? [{ label, value: `model:${id}`, tag: 'Free', description: id }] : [];
+  });
+  items.push(
+    { label: 'Browse Free Models', value: 'free', tag: `${freeCount} Free`, description: 'Scan the live NVIDIA NIM free catalog' },
+    { label: 'Browse Paid Models', value: 'paid', tag: `${paidCount} Paid`, description: 'Scan paid and frontier NVIDIA NIM models' },
+    { label: 'Search Full Catalog', value: 'search', description: 'Type to filter every discovered NIM model' },
+    { label: 'Auto Routing', value: 'auto', tag: 'Recommended', description: 'Use free-first automatic routing' },
+  );
+  if (activeModel) items.push({ label: 'Keep Current Model', value: 'keep', tag: activeModel, description: 'Close without changing models' });
+  items.push({ label: 'Cancel & Close Window', value: 'cancel', description: 'No changes · Esc also closes this window' });
+  return items;
+}
+
 export async function selectModelInteractive(
   options: ModelSelectorOptions = {}
 ): Promise<ModelSelectionResult> {
@@ -213,11 +236,19 @@ async function executeModelSelection(
       value: 'cancel',
       description: 'No changes will be made',
     });
+    menuItems.splice(
+      0,
+      menuItems.length,
+      ...buildOverlayMenuItems(
+        freeModels.map((model) => model.id), freeModels.length, paidModels.length, activeModel
+      )
+    );
 
     const picked = await selectListPopup('Model Selection Window', menuItems, {
       signal,
-      drawFrame: options.drawFrame,
+      drawFrame: (popupLines) => options.drawFrame!(popupLines.map((line) => `\x1b[48;5;234m${line}\x1b[0m`)),
       pageSize: 9,
+      hint: '↑↓ navigate · Enter select · Esc close',
     });
     if (picked === null || picked === 'keep' || picked === 'cancel') {
       return {
@@ -231,7 +262,10 @@ async function executeModelSelection(
     let chosenModelId: string | undefined = undefined;
     let isPaid = false;
 
-    if (picked === 'auto') {
+    if (picked.startsWith('model:')) {
+      chosenModelId = picked.slice('model:'.length);
+      isPaid = false;
+    } else if (picked === 'auto') {
       chosenModelId = 'auto';
       isPaid = false;
     } else if (picked === 'free') {

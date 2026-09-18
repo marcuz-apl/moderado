@@ -1,5 +1,6 @@
 import { ProviderConnection } from '../config.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
+import { renderBoxLines, selectListPopup } from './popup.js';
 
 export interface ConnectionInput {
   kind: ProviderConnection['kind'];
@@ -7,6 +8,49 @@ export interface ConnectionInput {
   baseUrl?: string;
   apiKey?: string;
   defaultModel?: string;
+}
+
+export interface PopupConnectionOptions {
+  signal?: AbortSignal;
+  drawFrame?: (popupLines: string[]) => void;
+}
+
+export function renderConnectionPrompt(label: string, value: string, secret = false): string[] {
+  const shown = secret ? '*'.repeat(value.length) : value;
+  return renderBoxLines('Connect Provider', [
+    `\x1b[1;38;5;75m${label}\x1b[0m`,
+    '',
+    `  \x1b[1;38;5;75m❯\x1b[0m ${shown}\x1b[7m \x1b[0m`,
+    '',
+    '\x1b[38;5;244mEnter continue · Esc cancel\x1b[0m',
+  ], 64);
+}
+
+async function askPopupText(label: string, options: PopupConnectionOptions, secret = false): Promise<string | undefined> {
+  if (!options.drawFrame) {
+    return secret ? askSecret(`${label}: `, { signal: options.signal }) : askQuestion(`${label}: `, { signal: options.signal });
+  }
+
+  const stdin = process.stdin;
+  let value = '';
+  return new Promise((resolve) => {
+    const finish = (answer: string | undefined): void => {
+      stdin.removeListener('keypress', onKeypress);
+      options.signal?.removeEventListener('abort', onAbort);
+      resolve(answer);
+    };
+    const redraw = () => options.drawFrame!(renderConnectionPrompt(label, value, secret));
+    const onAbort = () => finish(undefined);
+    const onKeypress = (str: string, key: any): void => {
+      if (key?.name === 'escape' || (key?.ctrl && key.name === 'c')) return finish(undefined);
+      if (key?.name === 'return' || key?.name === 'enter') return finish(value.trim());
+      if (key?.name === 'backspace') { value = value.slice(0, -1); redraw(); return; }
+      if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key?.ctrl && !key?.meta) { value += str; redraw(); }
+    };
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    stdin.on('keypress', onKeypress);
+    redraw();
+  });
 }
 
 function connectionId(name: string): string {
@@ -49,25 +93,28 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
 }
 
 /** Interactive setup used by /connect and by the first attempted prompt. */
-export async function connectProviderInteractive(signal?: AbortSignal): Promise<ProviderConnection | undefined> {
-  const selected = await askSelect('Connect a provider', [
+export async function connectProviderInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+  const choices = [
     { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
     { label: 'OpenAI-compatible endpoint', value: 'openai-compatible', description: 'OpenRouter, Z.AI, DeepSeek, Moonshot, Mistral, or another compatible API.' },
-  ], 0, { signal });
+  ];
+  const selectedValue = options.drawFrame
+    ? await selectListPopup('Connect Provider', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
+    : (await askSelect('Connect a provider', choices, 0, { signal: options.signal })).value;
+  if (!selectedValue) return undefined;
 
-  if (signal?.aborted) return undefined;
-  if (selected.value === 'nvidia-nim') {
-    process.stdout.write('\nGet an NVIDIA API key at https://build.nvidia.com\n');
-    const apiKey = await askSecret('NVIDIA_API_KEY (Enter to cancel): ', { signal });
+  if (options.signal?.aborted) return undefined;
+  if (selectedValue === 'nvidia-nim') {
+    const apiKey = await askPopupText('NVIDIA API key', options, true);
     if (!apiKey) return undefined;
     return buildConnection({ kind: 'nvidia-nim', apiKey });
   }
 
-  const displayName = await askQuestion('Provider name (for example, OpenRouter): ', { signal });
+  const displayName = await askPopupText('Provider name (for example, OpenRouter)', options);
   if (!displayName) return undefined;
-  const baseUrl = await askQuestion('OpenAI-compatible base URL: ', { signal });
-  const apiKey = await askSecret('API key (Enter to cancel): ', { signal });
-  const defaultModel = await askQuestion('Default model ID: ', { signal });
+  const baseUrl = await askPopupText('OpenAI-compatible base URL', options);
+  const apiKey = await askPopupText('API key', options, true);
+  const defaultModel = await askPopupText('Default model ID', options);
   if (!baseUrl || !apiKey || !defaultModel) return undefined;
   return buildConnection({ kind: 'openai-compatible', displayName, baseUrl, apiKey, defaultModel });
 }

@@ -239,6 +239,19 @@ export function renderCenteredWelcomeScreen(options: WelcomeLayoutOptions, heigh
   return '\n'.repeat(topPadding) + content + '\n'.repeat(bottomPadding + 1);
 }
 
+/** Compose an OpenCode-style popup layer without losing the welcome background. */
+export function renderWelcomePopupLayer(
+  options: WelcomeLayoutOptions,
+  popupLines: string[],
+  width?: number,
+  height?: number
+): string {
+  const cols = width ?? process.stdout.columns ?? 80;
+  const rows = height ?? process.stdout.rows ?? 24;
+  const background = dimLines(renderCenteredWelcomeScreen(options, rows).split('\n')).join('\n');
+  return background + shadowUnder(popupLines, cols, rows) + overlayCentered(popupLines, cols, rows);
+}
+
 export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {
   const terminalWidth = width ?? (process.stdout.columns || 80);
   const boxWidth = Math.min(terminalWidth, 74);
@@ -336,7 +349,7 @@ export interface PromptInteractiveTurnOptions {
    */
   onModelSelect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /connect. Returns the model label to display. */
-  onConnect?: () => Promise<string | undefined>;
+  onConnect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
 }
@@ -473,11 +486,9 @@ export async function promptInteractiveTurn(
           stdin.removeListener('keypress', onKeypress); // pause main handler
 
           // Paint: full welcome TUI (background) + help box on top
-          stdout.write('\x1b[H\x1b[J');
-          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           const helpLines = renderHelpPopupBox(options.version ?? 'v0.1', options.workspace);
-          stdout.write('\n' + helpLines.join('\n') + '\n');
-          stdout.write('\x1b[?25l'); // hide cursor while modal is open
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderWelcomePopupLayer(getOptions(), helpLines, stdout.columns, stdout.rows));
 
           // Wait for Esc / Enter / q to dismiss
           await new Promise<void>((dismissResolve) => {
@@ -517,18 +528,8 @@ export async function promptInteractiveTurn(
 
           if (options.onModelSelect) {
             const drawFrame = (popupLines: string[]): void => {
-              // 1. Background: the main TUI window stays as-is underneath, but
-              //    dimmed so the popup layer visually floats above it.
               stdout.write('\x1b[H\x1b[J');
-              stdout.write(
-                dimLines(renderCenteredWelcomeScreen(getOptions(), stdout.rows).split('\n')).join('\n')
-              );
-              const cols = process.stdout.columns || 80;
-              const rows = process.stdout.rows || 24;
-              // 2. Soft drop shadow under the popup, then the popup window
-              //    composited centered on top (Cline/OpenCode style).
-              stdout.write(shadowUnder(popupLines, cols, rows));
-              stdout.write(overlayCentered(popupLines, cols, rows));
+              stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
             };
             const newId = await options.onModelSelect(drawFrame);
             if (newId && newId !== currentModel) {
@@ -550,10 +551,14 @@ export async function promptInteractiveTurn(
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/connect') {
           input = '';
           stdin.removeListener('keypress', onKeypress);
-          try { stdin.setRawMode(false); } catch { /* prompt fallback */ }
+
+          const drawFrame = (popupLines: string[]): void => {
+            stdout.write('\x1b[H\x1b[J');
+            stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+          };
 
           if (options.onConnect) {
-            const newModel = await options.onConnect();
+            const newModel = await options.onConnect(drawFrame);
             if (newModel) currentModel = newModel;
           }
 
