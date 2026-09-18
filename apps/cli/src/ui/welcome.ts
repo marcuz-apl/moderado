@@ -356,6 +356,9 @@ export async function promptInteractiveTurn(
   // ── TTY Interactive Loop ───────────────────────────────────────────────────
   const readlineModule = await import('node:readline');
   readlineModule.emitKeypressEvents(stdin);
+  // A previous turn's cleanup() pauses stdin — resume it so keystrokes keep
+  // flowing after an answer (the main app must never appear dead post-answer).
+  stdin.resume();
   stdin.setRawMode(true);
 
   const getExtraLines = () => {
