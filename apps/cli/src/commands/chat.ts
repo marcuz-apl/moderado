@@ -9,7 +9,7 @@ import { TerminalRenderer } from '../ui/renderer.js';
 import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive, selectModelOverlay } from '../ui/model_selector.js';
-import { promptInteractiveTurn } from '../ui/welcome.js';
+import { promptInteractiveTurn, terminalCleanExitDone } from '../ui/welcome.js';
 
 export async function handleChatSession(
   args: CliParsedArgs,
@@ -69,6 +69,10 @@ export async function handleChatSession(
   // the terminal can never be left in a "locked" state (hidden cursor / raw
   // mode / alternate screen) after the session ends.
   const restoreTerminal = (): void => {
+    // If a clean exit (exitCleanly) already restored + cleared the terminal and
+    // printed the farewell message, do nothing — writing screen-buffer escapes
+    // (e.g. \x1b[?1049l) here would repaint the buffer and cut the message.
+    if (terminalCleanExitDone) return;
     try {
       process.stdout.write('\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m');
       if (process.stdin.isTTY) {

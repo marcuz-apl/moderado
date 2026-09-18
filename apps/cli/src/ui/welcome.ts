@@ -198,12 +198,20 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
   return lines;
 }
 
+export let terminalCleanExitDone = false;
+
+/** Mark that a clean exit already restored + cleared the terminal (guards the process 'exit' hook). */
+export function notifyCleanExit(): void {
+  terminalCleanExitDone = true;
+}
+
 /**
  * Exit Moderado cleanly: restore cursor visibility & style, leave the alternate
  * screen buffer, disable raw mode, fully clear the OS terminal, print the
  * farewell message, and terminate the process.
  */
 export function exitCleanly(message: string): never {
+  notifyCleanExit();
   const stdout = process.stdout;
   if (stdout.isTTY) {
     stdout.write(
