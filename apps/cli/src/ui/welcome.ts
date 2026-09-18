@@ -12,6 +12,7 @@ export interface WelcomeLayoutOptions {
   /** When set, render the full chat window (question row 1 + answer) instead of the logo header. */
   chatQuestion?: string;
   chatAnswer?: string;
+  chatThoughtTime?: number;
 }
 
 export const MODERADO_ASCII_LOGO = [
@@ -183,14 +184,23 @@ function wrapText(text: string, maxWidth: number): string[] {
  * displayed on the first row, the multi-line model answer below it, then the
  * same input card as the welcome window at the bottom.
  */
-export function renderChatScreen(options: WelcomeLayoutOptions): string {
+export function renderChatScreen(options: WelcomeLayoutOptions, height?: number): string {
   const terminalWidth = options.width ?? (process.stdout.columns || 80);
+  const terminalHeight = height ?? process.stdout.rows ?? 24;
   const maxWidth = Math.max(40, terminalWidth - 4);
+  const width = Math.max(40, terminalWidth - 2);
+  const hr = `\x1b[38;5;238m${'─'.repeat(width)}\x1b[0m`;
 
   const lines: string[] = [];
 
+  lines.push(...renderModeradoHeader().split('\n'));
+  lines.push('');
+  lines.push(hr);
+
   // Row 1: the user's question
   lines.push(`\x1b[1;38;5;75m❯\x1b[0m ${options.chatQuestion ?? ''}`);
+  lines.push(hr);
+  lines.push(`\x1b[38;5;244mThought for ${options.chatThoughtTime ?? 0}s\x1b[0m`);
 
   // Answer section: multi-line model answer
   if (options.chatAnswer && options.chatAnswer.trim().length > 0) {
@@ -200,16 +210,16 @@ export function renderChatScreen(options: WelcomeLayoutOptions): string {
     }
   }
 
-  // Lower part: the same input card as the welcome window
-  lines.push('');
-  lines.push(...renderWelcomeCard(options).split('\n'));
+  const composer = renderWelcomeCard(options).split('\n');
+  lines.push(...Array(Math.max(1, terminalHeight - lines.length - composer.length - 1)).fill(''));
+  lines.push(...composer);
 
   return lines.join('\n') + '\n';
 }
 
-export function renderFullWelcomeScreen(options: WelcomeLayoutOptions): string {
+export function renderFullWelcomeScreen(options: WelcomeLayoutOptions, height?: number): string {
   if (options.chatQuestion !== undefined) {
-    return renderChatScreen(options);
+    return renderChatScreen(options, height);
   }
   return [
     renderModeradoHeader(),
@@ -227,7 +237,7 @@ export function getWelcomeBottomPadding(options: WelcomeLayoutOptions, height?: 
 }
 
 export function renderCenteredWelcomeScreen(options: WelcomeLayoutOptions, height?: number): string {
-  if (options.chatQuestion !== undefined) return renderFullWelcomeScreen(options);
+  if (options.chatQuestion !== undefined) return renderFullWelcomeScreen(options, height);
 
   const terminalHeight = height ?? process.stdout.rows ?? 24;
   const content = renderFullWelcomeScreen(options).trimEnd();
@@ -345,6 +355,7 @@ export interface PromptInteractiveTurnOptions {
   /** Previous turn's question/answer — when question is set, render the full chat window (no logo). */
   chatQuestion?: string;
   chatAnswer?: string;
+  chatThoughtTime?: number;
   /**
    * Called when user selects a model via /model. Receives a `drawFrame`
    * callback that composites popup content as a floating layer on top of the
@@ -379,6 +390,7 @@ export async function promptInteractiveTurn(
     input,
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
+    chatThoughtTime: options.chatThoughtTime,
   });
 
   // ── Non-TTY fallback ──────────────────────────────────────────────────────

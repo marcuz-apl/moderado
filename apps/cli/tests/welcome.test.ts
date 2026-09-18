@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   renderModeradoHeader,
   renderCenteredWelcomeScreen,
+  renderChatScreen,
   renderWelcomePopupLayer,
   renderFullWelcomeScreen,
   renderWelcomeCard,
@@ -95,6 +96,31 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('Use / for slash commands');
     expect(plain).toContain('❯ Ask anything, I am all ears...');
     expect(plain).toContain('z-ai/glm-5.3-flash');
+  });
+
+  it('renders a wide post-question chat layout with logo, elapsed time, answer, and anchored composer details', () => {
+    const rendered = renderChatScreen({
+      model: 'z-ai/glm-5.3-flash',
+      tokens: 1500,
+      cost: '$0.00',
+      workspace: 'd:\\projects\\moderado',
+      mode: 'Execute',
+      autoApprove: false,
+      chatQuestion: 'Explain this repository.',
+      chatAnswer: 'It is a provider-independent coding agent.',
+      chatThoughtTime: 12,
+      width: 140,
+    }, 40);
+
+    const plain = stripAnsi(rendered);
+    expect(plain).toContain(stripAnsi(MODERADO_ASCII_LOGO[0]));
+    expect(plain).toContain('Explain this repository.');
+    expect(plain).toContain('Thought for 12s');
+    expect(plain).toContain('It is a provider-independent coding agent.');
+    expect(plain).toContain('z-ai/glm-5.3-flash');
+    expect(plain).toContain('1500 tokens / $0.00');
+    expect(plain).toContain('d:\\projects\\moderado');
+    expect(plain).toContain('Auto-approve off (Shift+Tab)');
   });
 
   it('centers the welcome screen vertically in the available terminal rows', () => {

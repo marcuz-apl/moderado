@@ -53,11 +53,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let conversationHistory: ChatMessage[] = [];
   let lastQuestion = '';
   let lastAnswer = '';
+  let lastThoughtTime = 0;
 
   while (!signal?.aborted) {
     const turn = await promptInteractiveTurn({
       model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: '$0.00', workspace: canonicalWorkspace, version,
-      initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined,
+      initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime,
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
           await showModelConnectionRequired(drawFrame, signal);
@@ -92,7 +93,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         saveConnection(connection); config = loadConfig(); activateConnection(connection);
         return currentModel ?? 'No model connected — use /connect';
       },
-      onClear: () => { conversationHistory = []; lastQuestion = ''; lastAnswer = ''; },
+      onClear: () => { conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; },
     });
     activeMode = turn.mode; activeAutoApprove = turn.autoApprove;
     const trimmed = turn.text.trim(); isFirst = false;
@@ -108,6 +109,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     process.stdout.write('\n');
     const policy = new PolicyManager({ maxSteps: args.maxSteps, readOnly: activeMode === 'Plan' || args.readOnly, nonInteractive: args.nonInteractive, timeoutSeconds: args.timeout });
     try {
+      const startedAt = Date.now();
       const result = await loop.run(trimmed, {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
@@ -116,6 +118,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       conversationHistory = result.messages;
       lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
       lastQuestion = trimmed;
+      lastThoughtTime = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       sessionTokens += Math.round(result.messages.reduce((sum, message) => sum + (message.content?.length ?? 0), 0) / 4);
       process.stdout.write('\n');
     } catch (err: any) { process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }

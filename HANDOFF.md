@@ -28,6 +28,9 @@ The welcome screen remains visible as a dimmed background beneath `/help`, `/mod
 - Agnes AI model choices are explicitly labelled `Free` in `/model`.
 - OpenRouter `/model` now preserves API pricing metadata and separates live
   models into `Free` and `Paid` popup lists, with a badge on every model.
+- Redesigned the post-question chat screen with the Moderado logo, a bordered
+  question row, elapsed processing time, a viewport-sized response area, and
+  the composer/status/footer anchored at the bottom.
 
 ## In progress
 
@@ -41,7 +44,7 @@ The welcome screen remains visible as a dimmed background beneath `/help`, `/mod
 
 - `npm run build` — PASS
 - `npm run typecheck` — PASS
-- `npm test` — PASS (122 tests)
+- `npm test` — PASS (123 tests)
 - `git diff --check` — PASS
 
 ## Decisions and context
