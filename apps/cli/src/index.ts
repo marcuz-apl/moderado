@@ -7,6 +7,7 @@ import { parseCliArgs, getHelpText } from './args.js';
 import { handleModelsCommand } from './commands/models.js';
 import { handleRunCommand } from './commands/run.js';
 import { handleChatSession } from './commands/chat.js';
+import { handleDoctorCommand } from './commands/doctor.js';
 
 function getVersion(): string {
   try {
@@ -54,7 +55,7 @@ async function main(): Promise<void> {
 
   let exitCode = 0;
   try {
-    if (args.command === 'models') {
+    if (args.command === 'doctor') { exitCode = await handleDoctorCommand(args); } else if (args.command === 'models') {
       exitCode = await handleModelsCommand(args);
     } else if (args.command === 'run') {
       exitCode = await handleRunCommand(args, abortController.signal);

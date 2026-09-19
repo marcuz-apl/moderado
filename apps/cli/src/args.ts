@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 
 export interface CliParsedArgs {
-  command?: 'models' | 'run';
+  command?: 'models' | 'run' | 'doctor';
   task?: string;
   workspace: string;
   model?: string;
@@ -15,6 +15,7 @@ export interface CliParsedArgs {
   verbose: boolean;
   json: boolean;
   refresh: boolean;
+  connectivity: boolean;
   help: boolean;
   version: boolean;
 }
@@ -33,6 +34,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     verbose: { type: 'boolean' as const, default: false },
     json: { type: 'boolean' as const, default: false },
     refresh: { type: 'boolean' as const, default: false },
+    connectivity: { type: 'boolean' as const, default: false },
     help: { type: 'boolean' as const, short: 'h', default: false },
     version: { type: 'boolean' as const, short: 'v', default: false },
   };
@@ -44,12 +46,12 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   });
 
   const positionals = parsed.positionals;
-  let command: 'models' | 'run' | undefined;
+  let command: 'models' | 'run' | 'doctor' | undefined;
   let task: string | undefined;
 
   if (positionals.length > 0) {
     const first = positionals[0].toLowerCase();
-    if (first === 'models') {
+    if (first === 'doctor') { command = 'doctor'; } else if (first === 'models') {
       command = 'models';
     } else if (first === 'run') {
       command = 'run';
@@ -79,6 +81,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     verbose: Boolean(parsed.values.verbose),
     json: Boolean(parsed.values.json),
     refresh: Boolean(parsed.values.refresh),
+    connectivity: Boolean(parsed.values.connectivity),
     help: Boolean(parsed.values.help),
     version: Boolean(parsed.values.version),
   };
@@ -94,7 +97,7 @@ USAGE:
 
 COMMANDS:
   models                 Discover live models, capability & access tiers
-  run "<task>"           Execute a bounded coding task in the workspace
+  run "<task>"           Execute a bounded coding task in the workspace\n  doctor                 Check local Moderado setup
 
 OPTIONS:
   -w, --workspace <path> Target workspace directory (default: current directory)
