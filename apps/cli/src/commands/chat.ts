@@ -13,6 +13,7 @@ import { promptInteractiveTurn, renderFullWelcomeScreen, terminalCleanExitDone }
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { renderBoxLines, selectListPopup } from '../ui/popup.js';
 import { findModelPricing } from '../model_pricing.js';
+import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
 
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
   let canonicalWorkspace: string;
@@ -65,6 +66,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let lastAnswer = '';
   let lastThoughtTime = 0;
   let lastOutputTokenRate: number | undefined;
+  let activePlan: string | undefined;
   const costLabel = (): string => formatSessionCost(activeSession.usage);
 
   while (!signal?.aborted) {
@@ -110,6 +112,34 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         activeSession.messages = [];
         sessionStore.save(activeSession);
       },
+      onWorkflow: async (command, drawFrame) => {
+        const action = command.slice('/workflow'.length).trim();
+        if (!action) {
+          const selected = await selectListPopup('Coding Workflow', [
+            { label: 'Git status', value: 'git', description: 'Inspect the current branch and changed files.' },
+            { label: 'Review diff', value: 'diff', description: 'Inspect uncommitted changes safely.' },
+            { label: 'Build plan', value: 'build', description: 'Confirm and execute the active plan.' },
+            { label: 'Undo latest agent change', value: 'undo', description: 'Restore the latest checkpoint when safe.' },
+          ], { drawFrame, signal });
+          command = `/workflow ${selected ?? ''}`;
+        }
+        if (command === '/workflow git') {
+          const summary = await inspectGitWorkspace(canonicalWorkspace);
+          drawFrame(renderBoxLines('Git workspace', summary.isRepository ? [
+            `Branch: ${summary.branch ?? 'detached'}`,
+            ...summary.files.map((file) => `${file.status}  ${file.path}`),
+            '', 'Press Esc or Enter to return.',
+          ] : ['This workspace is not a Git repository.', '', 'Press Esc or Enter to return.'], 72));
+          return undefined;
+        }
+        if (command === '/workflow diff') {
+          drawFrame(renderBoxLines('Git diff', (await readGitDiff(canonicalWorkspace)).split('\n').slice(0, 24), 76));
+          return undefined;
+        }
+        if (command === '/workflow build' && activePlan) return 'build';
+        drawFrame(renderBoxLines(command === '/workflow build' ? 'Build plan' : 'Undo latest change', [command === '/workflow build' ? 'Create a plan first in Plan mode.' : 'Checkpoint restore is ready for approval integration.', '', 'Press Esc or Enter to return.'], 72));
+        return undefined;
+      },
       onSession: async (command, drawFrame) => {
         let action = command.slice('/session'.length).trim();
         if (!action) {
@@ -154,7 +184,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       },
     });
     activeMode = turn.mode; activeAutoApprove = turn.autoApprove;
-    const trimmed = turn.text.trim(); isFirst = false;
+    const trimmed = turn.workflowAction === 'build' && activePlan ? `Implement this approved plan:\n${activePlan}` : turn.text.trim(); isFirst = false;
     if (!trimmed) continue;
 
     if (!provider) {
@@ -220,6 +250,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       activeSession.mode = activeMode;
       sessionStore.save(activeSession);
       lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
+      if (activeMode === 'Plan') activePlan = lastAnswer;
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       lastOutputTokenRate = outputTokenRate;

@@ -23,6 +23,7 @@ export interface IToolDefinition<TParams = unknown> {
   readonly description: string;
   readonly requiresApproval: boolean;
   readonly parametersSchema: z.ZodType<TParams, any, any>;
+  preview?(params: TParams, context: ToolExecutionContext): Promise<string | undefined>;
   execute(params: TParams, context: ToolExecutionContext): Promise<ToolResult>;
 }
 
@@ -54,6 +55,11 @@ export const EditFileParamsSchema = z.object({
   replacementContent: z.string(),
 });
 export type EditFileParams = z.infer<typeof EditFileParamsSchema>;
+
+export const ApplyPatchParamsSchema = z.object({
+  edits: z.array(EditFileParamsSchema).min(1).max(20),
+});
+export type ApplyPatchParams = z.infer<typeof ApplyPatchParamsSchema>;
 
 export const ListFilesParamsSchema = z.object({
   subpath: z.string().default('.'),

@@ -197,6 +197,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/connect');
     expect(plain).toContain('/model');
     expect(plain).toContain('/session');
+    expect(plain).toContain('/workflow');
     expect(plain).toContain('/clear');
     expect(plain).toContain('/help');
     expect(plain).toContain('/exit');

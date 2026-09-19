@@ -499,12 +499,15 @@ export class AgentLoop {
         // Approval Boundary
         if (tool.requiresApproval) {
           const requestId = `req_${crypto.randomUUID()}`;
+          let diffPreview: string | undefined;
+          try { diffPreview = await tool.preview?.(parseResult.data, { workspaceRoot: options.workspaceRoot, abortSignal: signal }); } catch { /* execution returns the actionable validation error */ }
           const requestPayload: ApprovalRequest = {
             requestId,
             toolName: call.name,
             actionSummary: `Execute ${call.name} with ${JSON.stringify(call.arguments)}`,
             exactPayload: {
               targetFile: (call.arguments as any).path,
+              diffPreview,
               command: (call.arguments as any).command
                 ? [(call.arguments as any).command, ...((call.arguments as any).args ?? [])]
                 : undefined,

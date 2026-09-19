@@ -128,6 +128,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/connect', desc: 'Connect a model provider' },
   { name: '/model', desc: 'Switch active AI model' },
   { name: '/session', desc: 'Create, list, resume, export, or compact sessions' },
+  { name: '/workflow', desc: 'Inspect Git, build plans, or undo agent changes' },
   { name: '/clear', desc: 'Reset conversation memory' },
   { name: '/help', desc: 'Display commands, shortcuts & version' },
   { name: '/exit', desc: 'Exit Moderado' },
@@ -356,6 +357,7 @@ export interface InteractiveTurnResult {
   text: string;
   mode: 'Plan' | 'Execute';
   autoApprove: boolean;
+  workflowAction?: 'build';
 }
 
 export interface PromptInteractiveTurnOptions {
@@ -386,6 +388,7 @@ export interface PromptInteractiveTurnOptions {
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
+  onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
 }
 
 export async function promptInteractiveTurn(
@@ -628,6 +631,13 @@ export async function promptInteractiveTurn(
           positionCursorOnInput();
           stdin.on('keypress', onKeypress);
           return;
+        }
+
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/workflow')) {
+          const command = input.trim(); input = ''; stdin.removeListener('keypress', onKeypress);
+          const action = options.onWorkflow ? await options.onWorkflow(command, (popupLines) => { stdout.write('\x1b[H\x1b[J'); stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows)); }) : undefined;
+          if (action === 'build') { cleanup(); resolve({ text: '', mode: 'Execute', autoApprove: currentAutoApprove, workflowAction: 'build' }); return; }
+          readlineModule.emitKeypressEvents(stdin); stdin.resume(); stdin.setRawMode(true); redrawFull(); stdin.on('keypress', onKeypress); return;
         }
 
 

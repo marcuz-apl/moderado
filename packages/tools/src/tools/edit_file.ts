@@ -16,6 +16,10 @@ export const EditFileTool: IToolDefinition<EditFileParams> = {
   description: 'Replace an exact, unique target code snippet in a file with new content.',
   requiresApproval: true,
   parametersSchema: EditFileParamsSchema,
+  async preview(params, context) {
+    const file = resolveInJail(context.workspaceRoot, params.path);
+    return generateDiffPreview(params.path, fs.readFileSync(file, 'utf8'), params.targetContent, params.replacementContent).diffPreview;
+  },
 
   async execute(params: EditFileParams, context: ToolExecutionContext): Promise<ToolResult> {
     const canonicalPath = resolveInJail(context.workspaceRoot, params.path);
