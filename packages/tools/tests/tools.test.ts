@@ -257,7 +257,7 @@ describe('Workspace Tools Suite', () => {
       expect(registry.get('find_references')).toBeDefined();
 
       const declarations = registry.getDeclarations();
-      expect(declarations.length).toBe(11);
+      expect(declarations.length).toBe(12);
       const readDecl = declarations.find((d) => d.name === 'read_file');
       expect(readDecl?.parameters).toBeDefined();
       expect((readDecl?.parameters as any).type).toBe('object');
