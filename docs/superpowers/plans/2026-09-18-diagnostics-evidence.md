@@ -1,0 +1,148 @@
+# Diagnostics Evidence Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Add an approval-gated TypeScript/JavaScript diagnostics tool with structured evidence events and compact CLI rendering.
+
+**Architecture:** Contracts define validated diagnostic records and a host-safe event. Tools discover only allowlisted npm scripts and execute a fixed `npm run <script>` command through a reusable safe runner. Core maps diagnostic metadata to an event; the CLI renders it without changing provider or workspace boundaries.
+
+**Tech Stack:** TypeScript, Node.js 20 standard library, Zod, Vitest.
+
+**Spec:** `docs/superpowers/specs/2026-09-18-diagnostics-evidence-design.md`
+
+## Global Constraints
+
+- No runtime dependencies.
+- All tests run offline.
+- Diagnostics never run automatically and always require approval.
+- Accept only direct `typecheck`, `lint`, and `test` scripts from jailed `package.json`.
+- Use `spawn` with `shell: false`, scrubbed environment, timeout, and output caps.
+
+---
+
+### Task 1: Diagnostic contracts and event
+
+**Files:**
+- Modify: `packages/contracts/src/tools.ts`
+- Modify: `packages/contracts/src/events.ts`
+- Modify: `packages/contracts/tests/contracts.test.ts`
+
+**Interfaces:**
+- Produces `DiagnosticSchema`, `Diagnostic`, `RunDiagnosticsParamsSchema`, and `DiagnosticResultEvent`.
+
+- [ ] **Step 1: Write failing schema tests**
+
+```ts
+expect(DiagnosticSchema.parse({ severity: 'error', file: 'src/a.ts', line: 4, column: 2, code: 'TS2322', message: 'Type mismatch' })).toMatchObject({ code: 'TS2322' });
+expect(() => RunDiagnosticsParamsSchema.parse({ script: 'prepare' })).toThrow();
+expect(AgentEventSchema.parse({ type: 'diagnostic_result', toolCallId: 'call_1', diagnostics: [], exitCode: 1, timestamp: 1 })).toMatchObject({ type: 'diagnostic_result' });
+```
+
+- [ ] **Step 2: Run focused tests and confirm failure**
+
+Run: `npm test -- packages/contracts/tests/contracts.test.ts`
+
+- [ ] **Step 3: Add schemas and discriminated event**
+
+```ts
+export const DiagnosticSchema = z.object({ severity: z.enum(['error', 'warning', 'info']), message: z.string().min(1), file: z.string().optional(), line: z.number().int().positive().optional(), column: z.number().int().positive().optional(), code: z.string().optional() });
+export const RunDiagnosticsParamsSchema = z.object({ script: z.enum(['typecheck', 'lint', 'test']) });
+```
+
+Add `DiagnosticResultEventSchema` to the `AgentEventSchema` union with `toolCallId`, `diagnostics`, `exitCode`, and `timestamp`.
+
+- [ ] **Step 4: Run focused tests and confirm pass**
+
+Run: `npm test -- packages/contracts/tests/contracts.test.ts`
+
+### Task 2: Safe diagnostic discovery, parser, and tool
+
+**Files:**
+- Create: `packages/tools/src/diagnostics.ts`
+- Create: `packages/tools/src/tools/run_diagnostics.ts`
+- Modify: `packages/tools/src/registry.ts`
+- Modify: `packages/tools/src/index.ts`
+- Create: `packages/tools/tests/diagnostics.test.ts`
+- Modify: `packages/tools/tests/tools.test.ts`
+
+**Interfaces:**
+- Produces `discoverDiagnosticScripts(root)`, `parseTypeScriptDiagnostics(output)`, and `RunDiagnosticsTool`.
+
+- [ ] **Step 1: Write failing tool tests**
+
+```ts
+fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ scripts: { typecheck: 'tsc --noEmit', prepare: 'node setup' } }));
+expect(discoverDiagnosticScripts(root)).toEqual(['typecheck']);
+expect(parseTypeScriptDiagnostics('src/a.ts(4,2): error TS2322: Type mismatch')).toEqual([expect.objectContaining({ file: 'src/a.ts', line: 4, column: 2, code: 'TS2322' })]);
+expect(RunDiagnosticsTool.parametersSchema.safeParse({ script: 'prepare' }).success).toBe(false);
+```
+
+Inject a test-only runner into the tool factory that returns `{ exitCode: 1, stdout: '', stderr: 'src/a.ts(4,2): error TS2322: Type mismatch' }`; assert the result status is `success`, metadata includes `exitCode: 1`, and diagnostics contain one error.
+
+- [ ] **Step 2: Run focused tests and confirm failure**
+
+Run: `npm test -- packages/tools/tests/diagnostics.test.ts packages/tools/tests/tools.test.ts`
+
+- [ ] **Step 3: Implement jailed discovery and fixed runner**
+
+Use `resolveInJail(root, 'package.json')`, parse only an object-valued `scripts`, and return the intersection of `['typecheck', 'lint', 'test']`. The runner accepts only an allowlisted discovered script, then invokes `npm` with `['run', script]`, `shell: false`, the sanitized environment, a 60-second timeout, and a 64 KB combined output cap. Treat non-zero exits as completed diagnostics; process spawn, timeout, and malformed manifest errors remain tool errors.
+
+- [ ] **Step 4: Register and export the tool**
+
+Register `RunDiagnosticsTool` in `createDefaultToolRegistry` and export it from the tools package. Update expected registry count from 8 to 9.
+
+- [ ] **Step 5: Run focused tests and confirm pass**
+
+Run: `npm test -- packages/tools/tests/diagnostics.test.ts packages/tools/tests/tools.test.ts`
+
+### Task 3: Core event and CLI presentation
+
+**Files:**
+- Modify: `packages/core/src/agent.ts`
+- Modify: `packages/core/tests/agent.test.ts`
+- Modify: `apps/cli/src/ui/renderer.ts`
+- Modify: `apps/cli/tests/renderer.test.ts`
+
+**Interfaces:**
+- Core emits `diagnostic_result` after a successful `run_diagnostics` result with validated metadata.
+
+- [ ] **Step 1: Write failing event and renderer tests**
+
+```ts
+expect(events).toContainEqual(expect.objectContaining({ type: 'diagnostic_result', exitCode: 1, diagnostics: [expect.objectContaining({ code: 'TS2322' })] }));
+renderer.handleEvent({ type: 'diagnostic_result', toolCallId: 'call_1', exitCode: 1, diagnostics: [{ severity: 'error', file: 'src/a.ts', line: 4, column: 2, message: 'Type mismatch' }], timestamp: 1 });
+expect(output).toContain('src/a.ts:4:2');
+```
+
+- [ ] **Step 2: Run focused tests and confirm failure**
+
+Run: `npm test -- packages/core/tests/agent.test.ts apps/cli/tests/renderer.test.ts`
+
+- [ ] **Step 3: Emit and render bounded evidence**
+
+After tool execution, safely parse `result.metadata.diagnostics` and `exitCode` through the contracts schema. Emit `diagnostic_result` only for `run_diagnostics`; show at most ten entries in `TerminalRenderer`, with severity, optional location, code, and message. Chat rendering continues to show the existing tool-result summary.
+
+- [ ] **Step 4: Run focused tests and confirm pass**
+
+Run: `npm test -- packages/core/tests/agent.test.ts apps/cli/tests/renderer.test.ts`
+
+### Task 4: Documentation and full verification
+
+**Files:**
+- Modify: `README.md`
+- Modify: `docs/CLI_CAPABILITY_ROADMAP.md`
+- Modify: `HANDOFF.md`
+
+- [ ] **Step 1: Document behavior**
+
+Document that users request diagnostics through the agent, only conventional npm scripts are eligible, every diagnostic run needs approval, non-zero commands provide evidence, and M4.1 covers TypeScript/JavaScript only.
+
+- [ ] **Step 2: Run full verification**
+
+Run: `npm test; npm run build; git diff --check`
+
+Expected: all tests pass offline, TypeScript builds, and the diff has no whitespace errors.
+
+- [ ] **Step 3: Commit with Alfazen versioning**
+
+Run: `git commit -m "feat(cli): add approved diagnostics evidence"`
