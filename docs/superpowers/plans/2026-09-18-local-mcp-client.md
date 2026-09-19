@@ -1,0 +1,42 @@
+# Local MCP Client Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task.
+
+**Goal:** Add approval-required, explicitly configured local stdio MCP tools.
+
+**Architecture:** Tools owns bounded JSON-RPC stdio and converts discovered MCP tools into namespaced tool definitions. Core applies its existing approval gate. CLI loads trusted server definitions only from user config.
+
+**Tech Stack:** TypeScript, Node.js child processes and streams, Zod, Vitest fake stdio server.
+
+**Spec:** `docs/superpowers/specs/2026-09-18-local-mcp-client-design.md`
+
+## Constraints
+
+- No network MCP, downloads, installation, or dependencies.
+- Fixed executable/arguments from user configuration only.
+- 64 KB output cap; shell disabled; scrubbed environment.
+- Every MCP tool requires approval.
+
+### Task 1: Contracts and configuration
+
+- [ ] Add `McpServerConfigSchema` and validated named-server configuration.
+- [ ] Test rejected malformed executable, arguments, and duplicate names.
+- [ ] Add `mcpServers?: Record<string, McpServerConfig>` to CLI configuration.
+
+### Task 2: Bounded stdio protocol
+
+- [ ] Create a fake JSON-RPC server test that asserts initialize, `tools/list`, and `tools/call` ordering.
+- [ ] Implement frame parsing with one-megabyte message cap, timeout, process cleanup, and malformed-frame rejection.
+- [ ] Verify server output is capped to 64 KB.
+
+### Task 3: Tool adapter and approval integration
+
+- [ ] Test that discovered tools register as `mcp.<server>.<tool>`, require approval, reject collisions, and preserve exact arguments.
+- [ ] Implement `createMcpTools(config)` returning `IToolDefinition` instances with opaque Zod object parameters.
+- [ ] Compose configured adapters in the CLI registry without importing MCP transport into core.
+
+### Task 4: Documentation and validation
+
+- [ ] Document local server configuration and approval behavior in README.
+- [ ] Update roadmap and handoff.
+- [ ] Run `npm test; npm run build; git diff --check` and commit with Alfazen versioning.
