@@ -11,7 +11,7 @@ import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
-import { promptInteractiveTurn, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
+import { promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { findModelPricing } from '../model_pricing.js';
@@ -28,6 +28,25 @@ export function createAgentTask(request: string, mode: 'Plan' | 'Execute'): stri
   if (mode === 'Execute') return request;
   return `Create a concise implementation checklist for this request. Inspect files as needed, but do not modify files or run commands.\n\nUser request:\n${request}`;
 }
+
+export function isBareExitCommand(input: string): boolean {
+  return input.trim().toLowerCase() === 'exit';
+}
+
+export function isGenerationCancelKey(key: { name?: string } | undefined): boolean {
+  return key?.name === 'escape';
+}
+
+export function isNetworkCommand(request: Pick<ApprovalRequest, 'toolName' | 'exactPayload'>): boolean {
+  const command = (request.exactPayload as { command?: unknown }).command;
+  const text = Array.isArray(command) ? command.join(' ').toLowerCase() : '';
+  return request.toolName === 'run_command' && /\b(curl|wget|invoke-webrequest|iwr|irm)\b|https?:\/\//.test(text);
+}
+
+export function isNetworkConsentReply(input: string, previousAnswer: string): boolean {
+  return /^(y|yes)$/i.test(input.trim()) && /\b(weather|internet|online|look up|web|curl)\b/i.test(previousAnswer);
+}
+
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
   let canonicalWorkspace: string;
   try { canonicalWorkspace = canonicalizeRoot(path.resolve(process.cwd(), args.workspace)); }
@@ -75,8 +94,17 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const tools = createDefaultToolRegistry(mcpTools);
   const terminalApproval = new TerminalApprovalHandler();
   const checkpoints = new WorkspaceCheckpointStore();
-  const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> =>
-    activeAutoApprove ? { requestId: req.requestId, status: 'approved' } : terminalApproval.requestApproval(req, sig) };
+  let networkAccessApproved = false;
+  let suspendGenerationInput: (() => (() => void) | undefined) | undefined;
+  const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> => {
+    if (isNetworkCommand(req) && !networkAccessApproved) {
+      return { requestId: req.requestId, status: 'denied', reason: 'Network access requires an explicit Yes reply to the model first.' };
+    }
+    if (activeAutoApprove) return { requestId: req.requestId, status: 'approved' };
+    const resumeGenerationInput = suspendGenerationInput?.();
+    try { return await terminalApproval.requestApproval(req, sig); }
+    finally { resumeGenerationInput?.(); }
+  } };
   const router = new Router();
   const loop = new AgentLoop();
   let conversationHistory: ChatMessage[] = [...activeSession.messages];
@@ -91,6 +119,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     const turn = await promptInteractiveTurn({
       model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
       usageAvailable: activeSession.usage.available, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate,
+      questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
           await showModelConnectionRequired(drawFrame, signal);
@@ -116,7 +145,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           return modelId;
         }
         const selection = await selectModelOverlay({ apiKey: activeConnection.apiKey, currentModel, signal, saveSelectionByDefault: true, drawFrame });
-        if (selection.modelId) currentModel = selection.modelId;
+        if (selection.modelId) {
+          currentModel = selection.modelId;
+          activeConnection = { ...activeConnection, defaultModel: selection.modelId };
+          saveConnection(activeConnection);
+          config = loadConfig();
+        }
         return selection.modelId;
       },
       onConnect: async (drawFrame) => {
@@ -223,6 +257,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     activeMode = turn.mode; activeAutoApprove = turn.autoApprove;
     const trimmed = turn.workflowAction === 'build' && activePlan ? `Implement this approved plan:\n${activePlan}` : turn.text.trim(); isFirst = false;
     if (!trimmed) continue;
+    if (isBareExitCommand(trimmed)) {
+      lastQuestion = trimmed;
+      lastAnswer = 'To leave Moderado, type /exit.';
+      lastThoughtTime = 0;
+      lastOutputTokenRate = undefined;
+      continue;
+    }
+    networkAccessApproved = isNetworkConsentReply(trimmed, lastAnswer);
 
     if (!provider) {
       process.stdout.write('\nNo provider is connected. Let\'s connect one before sending this task.\n');
@@ -233,11 +275,38 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
 
     const policy = new PolicyManager({ maxSteps: args.maxSteps, readOnly: activeMode === 'Plan' || args.readOnly, nonInteractive: args.nonInteractive, timeoutSeconds: args.timeout });
+    let thinkingTimer: ReturnType<typeof setInterval> | undefined;
+    let removeGenerationListener: (() => void) | undefined;
     try {
+      const requestAbort = new AbortController();
+      const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
+      const onGenerationKeypress = (_text: string, key: { name?: string } | undefined): void => {
+        if (isGenerationCancelKey(key)) requestAbort.abort();
+      };
+      if (process.stdin.isTTY) {
+        const readlineModule = await import('node:readline');
+        const attachGenerationListener = (): void => {
+          readlineModule.emitKeypressEvents(process.stdin);
+          process.stdin.resume();
+          process.stdin.setRawMode(true);
+          process.stdin.on('keypress', onGenerationKeypress);
+        };
+        attachGenerationListener();
+        suspendGenerationInput = () => {
+          process.stdin.removeListener('keypress', onGenerationKeypress);
+          try { process.stdin.setRawMode(false); process.stdin.pause(); } catch { /* ignore */ }
+          return () => { if (!requestSignal.aborted) attachGenerationListener(); };
+        };
+        removeGenerationListener = () => {
+          process.stdin.removeListener('keypress', onGenerationKeypress);
+          suspendGenerationInput = undefined;
+        };
+      }
       const startedAt = Date.now();
       let streamedAnswer = '';
       let firstAssistantDeltaAt: number | undefined;
       let outputTokenRate: number | undefined;
+      let answerPosition = { row: 15, column: 1 };
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
         process.stdout.write('\x1b[H\x1b[J');
@@ -254,20 +323,30 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           chatThoughtTime: thoughtTime,
           outputTokenRate,
         }, process.stdout.rows));
+        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
       };
 
       // Move to the chat layout before the provider can emit its first event.
       redrawChatFrame();
+      thinkingTimer = setInterval(() => {
+        if (!firstAssistantDeltaAt) {
+          process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000));
+        }
+      }, 400);
       const runAgent = () => loop.run(createAgentTask(trimmed, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'assistant_delta') {
             firstAssistantDeltaAt ??= Date.now();
+            if (thinkingTimer) clearInterval(thinkingTimer);
             streamedAnswer += event.delta;
+            const renderedDelta = renderChatAnswerDelta(event.delta, answerPosition, process.stdout.columns || 80);
+            answerPosition = renderedDelta;
+            process.stdout.write(renderedDelta.sequence);
+            process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
           }
-          if (event.type === 'assistant_delta' || event.type === 'progress' || event.type === 'reasoning_delta') redrawChatFrame();
-        }, signal, conversationHistory,
+        }, signal: requestSignal, conversationHistory,
         onMutationApproved: (toolName, parameters) => {
           const paths = mutationPaths(toolName, parameters);
           if (paths.length) checkpoints.capture(canonicalWorkspace, paths);
@@ -282,6 +361,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         result = await runAgent();
       } catch (error) {
         if (!activeConnection || !isAuthenticationFailure(error)) throw error;
+        if (thinkingTimer) clearInterval(thinkingTimer);
         process.stdout.write(`\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
         const replacement = await replaceProviderKeyInteractive(activeConnection, { signal });
         if (!replacement) throw error;
@@ -312,8 +392,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       lastOutputTokenRate = outputTokenRate;
+      if (thinkingTimer) clearInterval(thinkingTimer);
+      removeGenerationListener?.();
       redrawChatFrame();
-    } catch (err: any) { process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }
+    } catch (err: any) { if (thinkingTimer) clearInterval(thinkingTimer); removeGenerationListener?.(); process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }
   }
   return 0;
 }

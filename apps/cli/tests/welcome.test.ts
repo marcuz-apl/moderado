@@ -3,10 +3,15 @@ import {
   renderModeradoHeader,
   renderCenteredWelcomeScreen,
   renderChatScreen,
+  renderChatComposerCursor,
+  renderChatAnswerDelta,
+  renderChatThoughtTimeUpdate,
+  navigateQuestionHistory,
   renderWelcomePopupLayer,
   renderFullWelcomeScreen,
   renderWelcomeCard,
   renderHelpPopupBox,
+  renderExitMessage,
   MODERADO_ASCII_LOGO,
   COMMAND_HINT,
   stripAnsi,
@@ -153,6 +158,30 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(stripAnsi(rendered)).toContain('Thought for <1s');
   });
 
+  it('renders the Moderado logo above the clean-exit message', () => {
+    const output = renderExitMessage('Goodbye!');
+    expect(output).toContain(MODERADO_ASCII_LOGO[0]);
+    expect(output).not.toContain('Use / for slash commands');
+    expect(stripAnsi(output).split('\n')[0]).toBe(stripAnsi(MODERADO_ASCII_LOGO[0]));
+    expect(output.indexOf(MODERADO_ASCII_LOGO[0])).toBeLessThan(output.indexOf('Goodbye!'));
+  });
+
+  it('updates only the elapsed counter while preserving a flashing composer cursor', () => {
+    const rendered = renderChatScreen({
+      model: 'nvidia/nemotron-3', tokens: 0, cost: '$0.00', workspace: 'd:\\projects\\moderado',
+      mode: 'Execute', autoApprove: false, chatQuestion: 'Who are you?', chatThoughtTime: 0.2,
+      width: 100,
+    }, 30);
+
+    expect(stripAnsi(rendered)).not.toContain('Thinking');
+    expect(stripAnsi(rendered)).not.toContain('Thought for <1s');
+    expect(renderChatComposerCursor({ width: 100 }, 0)).toBe('\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[3C');
+    expect(renderChatThoughtTimeUpdate(2.2)).toContain('Thought for 2s');
+    expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/^\x1b7\x1b\[13;1H/);
+    expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/\x1b8$/);
+    expect(renderChatAnswerDelta('Hi', { row: 15, column: 1 }, 100)).toMatchObject({ row: 15, column: 3 });
+  });
+
   it('centers the welcome screen vertically in the available terminal rows', () => {
     const rendered = renderCenteredWelcomeScreen({
       model: 'z-ai/glm-5.3-flash',
@@ -220,6 +249,11 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/model');
     expect(plain).not.toContain('/clear');
     expect(plain).not.toContain('/help');
+  });
+
+  it('recalls prior questions and restores the unfinished draft', () => {
+    expect(navigateQuestionHistory(['first', 'second'], -1, 2, 'draft')).toEqual({ input: 'second', index: 1, draft: 'draft' });
+    expect(navigateQuestionHistory(['first', 'second'], 1, 1, 'draft')).toEqual({ input: 'draft', index: 2, draft: 'draft' });
   });
 
   it('includes session management in the help popup without an extra content indent', () => {

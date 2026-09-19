@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createAgentTask, handleChatSession } from '../src/commands/chat.js';
+import { createAgentTask, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { saveConfig } from '../src/config.js';
 
@@ -58,5 +58,25 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   it('creates a read-only checklist instruction in Plan mode', () => {
     expect(createAgentTask('Add a command', 'Plan')).toContain('do not modify files or run commands');
     expect(createAgentTask('Add a command', 'Execute')).toBe('Add a command');
+  });
+
+  it('recognizes only a bare exit input for an exit reminder', () => {
+    expect(isBareExitCommand('exit')).toBe(true);
+    expect(isBareExitCommand(' EXIT ')).toBe(true);
+    expect(isBareExitCommand('/exit')).toBe(false);
+    expect(isBareExitCommand('How do I exit?')).toBe(false);
+  });
+
+  it('recognizes Escape as a request-only generation interrupt', () => {
+    expect(isGenerationCancelKey({ name: 'escape' })).toBe(true);
+    expect(isGenerationCancelKey({ name: 'c', ctrl: true })).toBe(false);
+    expect(isGenerationCancelKey({ name: 'return' })).toBe(false);
+  });
+
+  it('requires an explicit reply to the model before enabling network commands', () => {
+    expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as any)).toBe(true);
+    expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['git', 'status'] } } as any)).toBe(false);
+    expect(isNetworkConsentReply('yes', 'Would you like me to look up the weather online?')).toBe(true);
+    expect(isNetworkConsentReply('yes', 'Here is your answer.')).toBe(false);
   });
 });

@@ -216,7 +216,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   lines.push(hr);
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  lines.push(`\x1b[38;5;244mThought for ${thoughtTimeLabel}\x1b[0m`);
+  lines.push(options.chatAnswer?.trim() ? `\x1b[38;5;244mThought for ${thoughtTimeLabel}\x1b[0m` : '');
 
   // Answer section: multi-line model answer
   if (options.chatAnswer && options.chatAnswer.trim().length > 0) {
@@ -231,6 +231,37 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   lines.push(...composer);
 
   return lines.join('\n') + '\n';
+}
+
+/** Place the terminal cursor on the first row of the bottom composer. */
+export function renderChatComposerCursor(options: Pick<WelcomeLayoutOptions, 'width'>, inputLength: number): string {
+  const column = getWelcomeIndent(getWelcomeCardWidth(options.width), options.width) + 2 + inputLength;
+  return `\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${column}C`;
+}
+
+export function navigateQuestionHistory(history: string[], direction: -1 | 1, index: number, draft: string): { input: string; index: number; draft: string } {
+  const nextIndex = Math.max(0, Math.min(history.length, index + direction));
+  return { input: nextIndex === history.length ? draft : history[nextIndex], index: nextIndex, draft };
+}
+
+/** Update the fixed chat elapsed-time row without repainting the terminal. */
+export function renderChatThoughtTimeUpdate(thoughtTime: number): string {
+  const label = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
+  return `\x1b7\x1b[13;1H\r\x1b[K\x1b[38;5;244mThought for ${label}\x1b[0m\x1b8`;
+}
+
+export interface ChatAnswerPosition { row: number; column: number; }
+
+/** Write one streamed fragment into the answer area without repainting the chat frame. */
+export function renderChatAnswerDelta(delta: string, start: ChatAnswerPosition, width: number): ChatAnswerPosition & { sequence: string } {
+  let row = start.row;
+  let column = start.column;
+  for (const character of delta) {
+    if (character === '\n') { row++; column = 1; continue; }
+    column++;
+    if (column > width) { row++; column = 1; }
+  }
+  return { sequence: `\x1b[${start.row};${start.column}H\x1b[38;5;253m${delta}\x1b[0m`, row, column };
 }
 
 export function renderFullWelcomeScreen(options: WelcomeLayoutOptions, height?: number): string {
@@ -331,6 +362,10 @@ export function notifyCleanExit(): void {
   terminalCleanExitDone = true;
 }
 
+export function renderExitMessage(message: string): string {
+  return `${MODERADO_ASCII_LOGO.join('\n')}\n\n${message}\n\n`;
+}
+
 /**
  * Exit Moderado cleanly: restore cursor visibility & style, leave the alternate
  * screen buffer, disable raw mode, fully clear the OS terminal, print the
@@ -341,10 +376,10 @@ export function exitCleanly(message: string): never {
   const stdout = process.stdout;
   if (stdout.isTTY) {
     stdout.write(
-      '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + message + '\n\n'
+      '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + renderExitMessage(message)
     );
   } else {
-    stdout.write(message + '\n\n');
+    stdout.write(renderExitMessage(message));
   }
   const stdin = process.stdin;
   if (stdin.isTTY) {
@@ -376,6 +411,7 @@ export interface PromptInteractiveTurnOptions {
   chatAnswer?: string;
   chatThoughtTime?: number;
   outputTokenRate?: number;
+  questionHistory?: string[];
   /**
    * Called when user selects a model via /model. Receives a `drawFrame`
    * callback that composites popup content as a floating layer on top of the
@@ -402,6 +438,9 @@ export async function promptInteractiveTurn(
   let currentAutoApprove = options.initialAutoApprove ?? false;
   let input = '';
   let commandSelection = 0;
+  const questionHistory = options.questionHistory ?? [];
+  let questionHistoryIndex = questionHistory.length;
+  let questionHistoryDraft = '';
 
   const getOptions = (): WelcomeLayoutOptions => ({
     model: currentModel,
@@ -698,6 +737,15 @@ export async function promptInteractiveTurn(
           }
         }
 
+        if (!input.startsWith('/') && (key.name === 'up' || key.name === 'down') && questionHistory.length > 0) {
+          if (questionHistoryIndex === questionHistory.length) questionHistoryDraft = input;
+          const recalled = navigateQuestionHistory(questionHistory, key.name === 'up' ? -1 : 1, questionHistoryIndex, questionHistoryDraft);
+          input = recalled.input;
+          questionHistoryIndex = recalled.index;
+          redrawCard();
+          return;
+        }
+
         // Enter — submit real user message
         if (key.name === 'return' || key.name === 'enter') {
           const matching = getMatchingCommands(input);
@@ -730,6 +778,7 @@ export async function promptInteractiveTurn(
         if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key.ctrl && !key.meta) {
           input += str;
           commandSelection = 0;
+          questionHistoryIndex = questionHistory.length;
           redrawCard();
         }
 
