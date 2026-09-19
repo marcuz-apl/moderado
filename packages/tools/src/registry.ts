@@ -128,7 +128,7 @@ function extractPropertySchema(propSchema: any): Record<string, unknown> {
   return schema;
 }
 
-export function createDefaultToolRegistry(): IToolRegistry {
+export function createDefaultToolRegistry(extraTools: IToolDefinition<any>[] = []): IToolRegistry {
   const registry = new ToolRegistry();
   registry.register(ReadFileTool);
   registry.register(WriteFileTool);
@@ -141,5 +141,6 @@ export function createDefaultToolRegistry(): IToolRegistry {
   registry.register(RunDiagnosticsTool);
   registry.register(GetDefinitionTool);
   registry.register(FindReferencesTool);
+  for (const tool of extraTools) registry.register(tool);
   return registry;
 }

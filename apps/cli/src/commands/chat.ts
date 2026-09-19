@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { AgentLoop, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
-import { createDefaultToolRegistry, canonicalizeRoot, WorkspaceCheckpointStore } from '@moderado/tools';
+import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, WorkspaceCheckpointStore } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, saveConnection } from '../config.js';
@@ -67,7 +67,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let sessionTokens = activeSession.usage.totalTokens;
   let isFirst = true;
   if (config.typescriptLanguageServer) process.env.MODERADO_TYPESCRIPT_LANGUAGE_SERVER = config.typescriptLanguageServer;
-  const tools = createDefaultToolRegistry();
+  const mcpTools = await createMcpTools(config.mcpServers);
+  const tools = createDefaultToolRegistry(mcpTools);
   const terminalApproval = new TerminalApprovalHandler();
   const checkpoints = new WorkspaceCheckpointStore();
   const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> =>
