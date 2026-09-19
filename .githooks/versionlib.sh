@@ -1,6 +1,6 @@
 #!/bin/sh
 VERSION_FILE=VERSION
-IDENT_RE='^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-z]$'
+IDENT_RE='^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z]$'
 
 die() { echo "alfazen-versioning: $*" >&2; exit 1; }
 utc_yymmdd() { TZ=UTC LC_ALL=C date -u +%y%m%d; }
@@ -68,7 +68,9 @@ next_identifier() {
       [1-8]) nctr=$((bctr + 1)) ;;
       9)     nctr=a ;;
       [a-y]) nctr=$(printf '%s' "$bctr" | tr 'a-y' 'b-z') ;;
-      z)     die "daily counter exhausted for $today" ;;
+      z)     nctr=A ;;
+      [A-Y]) nctr=$(printf '%s' "$bctr" | tr 'A-Y' 'B-Z') ;;
+      Z)     die "daily counter exhausted for $today" ;;
       *)     die "invalid counter '$bctr'" ;;
     esac
   fi
