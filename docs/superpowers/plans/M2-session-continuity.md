@@ -1,4 +1,4 @@
-﻿# M2 Session Continuity Implementation Plan
+# M2 Session Continuity Implementation Plan
 
 > **For agentic workers:** Execute this plan task-by-task with tests before implementation. Steps use checkbox syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Node.js 20 standard library, Zod, Vitest.
 
-**Spec:** docs/superpowers/specs/2026-09-18-session-continuity-design.md
+**Spec:** docs/superpowers/specs/M2-session-continuity-design.md
 
 ## Global constraints
 
@@ -267,3 +267,4 @@ whitespace errors.
 
 Run the configured Alfazen hook through a conventional commit subject:
 git commit -m "feat(cli): add persistent session workflows"
+

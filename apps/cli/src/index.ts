@@ -8,6 +8,7 @@ import { handleModelsCommand } from './commands/models.js';
 import { handleRunCommand } from './commands/run.js';
 import { handleChatSession } from './commands/chat.js';
 import { handleDoctorCommand } from './commands/doctor.js';
+import { writeDiagnosticLog } from './diagnostic_log.js';
 
 function getVersion(): string {
   try {
@@ -77,6 +78,7 @@ async function main(): Promise<void> {
 }
 
 main().catch((err) => {
+  writeDiagnosticLog(process.argv[2] ?? 'interactive', err);
   process.stderr.write(`\x1b[1;31mFatal error:\x1b[0m ${err.message}\n`);
   process.exitCode = 1;
 });

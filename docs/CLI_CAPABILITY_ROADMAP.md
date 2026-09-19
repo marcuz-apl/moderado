@@ -129,7 +129,7 @@ security model.
 - A future desktop host can render existing agent events without core changes.
 - Offline tests use fake language-server and MCP transports.
 
-## Milestone 5 — Distribution, security, and operational polish
+## Milestone 5 — Distribution, security, and operational polish ✅
 
 **Goal:** Make Moderado straightforward and safe to install, configure, diagnose,
 and update.
@@ -166,4 +166,4 @@ For each milestone:
 5. Review the user-facing CLI flow manually.
 6. Commit using the repository's Alfazen versioning hook only after verification.
 
-Milestone 3 is complete. The recommended next target is **Milestone 4**, which adds code intelligence and controlled extensibility on top of the reviewable workflow.
+Milestones 1 through 5 are complete. The next product phase can build on this stable CLI foundation.

@@ -8,7 +8,7 @@
 
 **Tech Stack:** TypeScript, Node.js 20 standard library, existing Zod, Vitest, temporary local Git repositories.
 
-**Spec:** `docs/superpowers/specs/2026-09-18-practical-coding-workflow-design.md`
+**Spec:** `docs/superpowers/specs/M3-practical-coding-workflow-design.md`
 
 ## Global constraints
 
@@ -227,3 +227,4 @@ Expected: all offline tests pass, TypeScript builds, and no whitespace errors.
 - [ ] **Step 4: Commit with the Alfazen hook**
 
 Run: `git commit -m "feat(cli): add practical coding workflow"`
+
