@@ -1,0 +1,3 @@
+import { describe, expect, it } from 'vitest';
+import { credentialReference, MemoryCredentialStore, resolveCredential } from '../src/credentials.js';
+describe('credentials',()=>{it('prefers environment over store and legacy values',async()=>{const store=new MemoryCredentialStore();await store.set(credentialReference('nim'),'vault');expect(await resolveCredential('env',credentialReference('nim'),'legacy',store)).toBe('env');expect(await resolveCredential(undefined,credentialReference('nim'),'legacy',store)).toBe('vault');expect(await resolveCredential(undefined,undefined,'legacy',store)).toBe('legacy');});});
