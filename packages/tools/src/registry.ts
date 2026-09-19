@@ -13,6 +13,7 @@ import { GitDiffTool } from './tools/git_diff.js';
 import { ApplyPatchTool } from './tools/apply_patch.js';
 import { RunDiagnosticsTool } from './tools/run_diagnostics.js';
 import { FindReferencesTool, GetDefinitionTool } from './tools/language_intelligence.js';
+import { WebSearchTool } from './tools/web_search.js';
 
 export class ToolRegistry implements IToolRegistry {
   private readonly tools = new Map<string, IToolDefinition<any>>();
@@ -141,6 +142,7 @@ export function createDefaultToolRegistry(extraTools: IToolDefinition<any>[] = [
   registry.register(RunDiagnosticsTool);
   registry.register(GetDefinitionTool);
   registry.register(FindReferencesTool);
+  registry.register(WebSearchTool);
   for (const tool of extraTools) registry.register(tool);
   return registry;
 }

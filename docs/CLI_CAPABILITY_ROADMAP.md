@@ -215,3 +215,11 @@ For each milestone:
 
 Milestones 1 through 5 are complete. M6 begins the public-distribution phase
 on top of the stable CLI foundation.
+
+## Milestone 7 — Controlled internet access
+
+### M7.1 — Approved web search
+
+- Add the approval-gated `web_search` tool with a configured HTTPS endpoint.
+- Bound query length and result count, validate response shape, and return source URLs.
+- Keep automated tests local and offline; no implicit shell or unrestricted network access.

@@ -50,6 +50,8 @@ export const DiagnosticSchema = z.object({ severity: DiagnosticSeveritySchema, m
 export type Diagnostic = z.infer<typeof DiagnosticSchema>;
 export const RunDiagnosticsParamsSchema = z.object({ script: z.enum(['typecheck', 'lint', 'test']) });
 export type RunDiagnosticsParams = z.infer<typeof RunDiagnosticsParamsSchema>;
+export const WebSearchParamsSchema = z.object({ query: z.string().min(1).max(500), endpoint: z.string().url(), maxResults: z.number().int().min(1).max(10).default(5) });
+export type WebSearchParams = z.infer<typeof WebSearchParamsSchema>;
 // --- Specific Parameter Schemas for the 7 Workspace Tools ---
 
 export const ReadFileParamsSchema = z.object({

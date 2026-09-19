@@ -242,7 +242,7 @@ describe('Workspace Tools Suite', () => {
     it('registers all 11 tools and exports JSON schema declarations', () => {
       const registry = createDefaultToolRegistry();
       const tools = registry.list();
-      expect(tools.length).toBe(11);
+      expect(tools.length).toBe(12);
 
       expect(registry.get('read_file')).toBeDefined();
       expect(registry.get('write_file')).toBeDefined();

@@ -18,6 +18,7 @@ export * from './tools/run_diagnostics.js';
 
 export * from './lsp.js';
 export * from './tools/language_intelligence.js';
+export * from './tools/web_search.js';
 
 export * from './mcp.js';
 export * from './mcp_adapter.js';

@@ -9,10 +9,12 @@
 
 ## 1. Overview & General Constraints
 
-Moderado equips the agent with exactly 7 core tools in v0.1. Every tool call:
+Moderado equips the agent with bounded workspace tools plus the approval-gated `web_search` tool. Every tool call:
 - Receives a strongly-typed argument payload validated via runtime schemas.
 - Executes within the canonical workspace jail.
 - Is subjected to per-action approval policies before execution.
+
+`web_search` only calls a user-configured HTTPS endpoint (or localhost in development), limits results, validates titles and URLs, and returns source links. It does not grant general internet access or execute commands.
 - Returns a normalized `ToolResult` containing output text, metadata, or structured errors.
 
 ```typescript
