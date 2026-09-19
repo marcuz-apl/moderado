@@ -218,8 +218,27 @@ on top of the stable CLI foundation.
 
 ## Milestone 7 — Controlled internet access
 
-### M7.1 — Approved web search
+### M7.1 — Approved web search ✅
 
 - Add the approval-gated `web_search` tool with a configured HTTPS endpoint.
 - Bound query length and result count, validate response shape, and return source URLs.
 - Keep automated tests local and offline; no implicit shell or unrestricted network access.
+
+### M7.2 — Web-aware answers
+
+- Add search results to agent context only after approved search completes.
+- Preserve source URLs and render citations in the answer area.
+- Clearly report when search is unavailable, denied, or returns no results.
+- Keep result size and context injection bounded.
+
+### M7.3 — Public release channels
+
+- Add deliberate maintainer workflows for npm and GitHub Release publication.
+- Enable Homebrew, Scoop, winget, and AUR submissions only from verified artifacts.
+- Keep credentials out of development commits and require explicit release approval.
+
+### M7.4 — Provider expansion
+
+- Add provider adapters through the existing provider-independent contracts.
+- Extend model discovery, pricing metadata, capability classification, and routing.
+- Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
