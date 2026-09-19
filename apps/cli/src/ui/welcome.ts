@@ -316,8 +316,6 @@ export function renderWelcomePopupLayer(
 export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {
   const terminalWidth = width ?? (process.stdout.columns || 80);
   const boxWidth = Math.min(terminalWidth, 74);
-  const padLeft = Math.max(0, Math.floor((terminalWidth - boxWidth) / 2));
-  const indent = ' '.repeat(padLeft);
   const innerW = boxWidth - 4;
   const shortWs = workspace.length > 38 ? '...' + workspace.slice(-35) : workspace;
 
@@ -345,13 +343,13 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
   ];
 
   const lines: string[] = [];
-  lines.push(indent + '\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
+  lines.push('\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
   for (const item of content) {
     const plain = item.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
     const spaces = Math.max(0, innerW - plain.length);
-    lines.push(indent + '\x1b[38;5;240m│\x1b[0m  ' + item + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
+    lines.push('\x1b[38;5;240m│\x1b[0m  ' + item + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
   }
-  lines.push(indent + '\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
+  lines.push('\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
   return lines;
 }
 

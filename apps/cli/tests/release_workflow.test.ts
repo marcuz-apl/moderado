@@ -11,4 +11,16 @@ describe('release workflow', () => {
     expect(yaml).toContain('actions/upload-artifact@');
     expect(yaml).not.toMatch(/npm\s+publish|NODE_AUTH_TOKEN|NPM_TOKEN/i);
   });
+
+  it('builds and combines unsigned native binaries on their matching operating systems', async () => {
+    const yaml = await readFile('.github/workflows/release.yml', 'utf8');
+    expect(yaml).toContain('binary-package:');
+    expect(yaml).toContain('windows-latest');
+    expect(yaml).toContain('macos-latest');
+    expect(yaml).toContain('ubuntu-latest');
+    expect(yaml).toContain('npm run build:binaries');
+    expect(yaml).toContain('npm run verify:binaries');
+    expect(yaml).toContain('merge-binaries');
+    expect(yaml).not.toMatch(/gh\s+release|npm\s+publish|NODE_AUTH_TOKEN|NPM_TOKEN/i);
+  });
 });

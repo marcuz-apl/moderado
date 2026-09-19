@@ -1,4 +1,4 @@
-name: Verify release package
+name: Verify release artifacts
 
 on:
   workflow_dispatch:
@@ -27,3 +27,58 @@ jobs:
         with:
           name: moderado-npm-package
           path: apps/cli/*.tgz
+
+  binary-package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            target: node22-win-x64
+          - runner: macos-latest
+            target: node22-macos-arm64
+          - runner: ubuntu-latest
+            target: node22-linux-x64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build:binaries -- --target ${{ matrix.target }} --revision ${{ github.sha }}
+      - run: npm run verify:binaries -- --target ${{ matrix.target }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moderado-binary-${{ matrix.target }}
+          path: artifacts/*/${{ matrix.target }}
+
+  binary-metadata:
+    needs: binary-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: moderado-binary-node22-win-x64
+          path: collected/win
+      - uses: actions/download-artifact@v4
+        with:
+          name: moderado-binary-node22-macos-arm64
+          path: collected/macos
+      - uses: actions/download-artifact@v4
+        with:
+          name: moderado-binary-node22-linux-x64
+          path: collected/linux
+      - run: npm run merge-binaries -- --source collected/win,collected/macos,collected/linux --output artifacts/release --revision ${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moderado-binaries
+          path: artifacts/release

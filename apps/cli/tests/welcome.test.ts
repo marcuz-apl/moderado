@@ -262,6 +262,12 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).not.toContain('│   /session');
   });
 
+  it('leaves horizontal placement to the popup layer instead of indenting the help box', () => {
+    const plainLines = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n')).split('\n');
+    expect(plainLines[0]).not.toMatch(/^\s/);
+    expect(plainLines[1]).not.toMatch(/^\s/);
+  });
+
   it('selects and completes slash command candidates by index', () => {
     expect(selectCommandCandidate('/se', 0, 0)?.name).toBe('/session');
     expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/model');
