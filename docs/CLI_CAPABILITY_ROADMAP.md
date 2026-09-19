@@ -246,6 +246,15 @@ approval-first security, bounded context, and source traceability.
 - Extend model discovery, pricing metadata, capability classification, and routing.
 - Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
 
+## Milestone 8 — Desktop host expansion
+
+### M8.1 — Desktop host architecture
+
+- Define a versioned, typed IPC boundary between a Tauri host and the Node agent.
+- Reuse the existing core, providers, tools, approvals, sessions, and web search.
+- Keep credentials, workspace access, and approval enforcement inside the agent process.
+- Require offline protocol tests before implementing desktop UI.
+
 ### M7 acceptance criteria
 
 - Internet access is available only through declared, approval-gated tools.
