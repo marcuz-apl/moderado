@@ -1,0 +1,36 @@
+# Doctor Command Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task.
+
+**Goal:** Add a safe offline-first `moderado doctor` command with an opt-in connectivity probe.
+
+**Architecture:** A testable CLI diagnostic module returns typed rows; the command parser and main entrypoint compose it. Provider probing remains optional and outside automated tests.
+
+**Tech Stack:** TypeScript, Node.js standard library, Vitest.
+
+**Spec:** `docs/superpowers/specs/2026-09-18-doctor-command-design.md`
+
+### Task 1: Arguments and diagnostic model
+
+- [ ] Add `doctor` and `--connectivity` argument parsing.
+- [ ] Create typed `DoctorCheck` and `DoctorReport` interfaces.
+- [ ] Write failing parser and report tests, then implement them.
+
+### Task 2: Offline checks
+
+- [ ] Write failing tests for Node, workspace, home-directory, provider/key/model, `git`, and `npm` checks.
+- [ ] Implement injected dependency checks with redacted output and exit status.
+- [ ] Run focused tests.
+
+### Task 3: Command presentation and optional probe
+
+- [ ] Write failing command-rendering tests for pass/warn/fail lines and no default connectivity call.
+- [ ] Wire doctor into CLI command dispatch.
+- [ ] Implement the `--connectivity` probe through the active provider only.
+- [ ] Run focused tests.
+
+### Task 4: Documentation and validation
+
+- [ ] Document `moderado doctor` and `--connectivity`.
+- [ ] Run `npm test; npm run build; git diff --check`.
+- [ ] Commit with Alfazen versioning.
