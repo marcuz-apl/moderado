@@ -588,6 +588,11 @@ export class AgentLoop {
           }
         }
 
+        if (call.name === 'run_diagnostics' && result.status === 'success') {
+          const diagnostics = (result.metadata?.diagnostics as unknown[]) ?? [];
+          const exitCode = result.metadata?.exitCode;
+          if (typeof exitCode === 'number') emit({ type: 'diagnostic_result', toolCallId: call.id, diagnostics: diagnostics as any, exitCode, timestamp: Date.now() });
+        }
         emit({ type: 'tool_result', toolCallId: call.id, result, timestamp: Date.now() });
         messages.push({
           role: 'tool',

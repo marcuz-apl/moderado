@@ -85,6 +85,15 @@ export class TerminalRenderer {
         break;
       }
 
+      case 'diagnostic_result': {
+        this.finishAssistantStream();
+        this.clearTransientProgress();
+        const visible = event.diagnostics.slice(0, 10);
+        this.stdout.write(`\x1b[38;5;203mDiagnostics (exit ${event.exitCode}):\x1b[0m\n`);
+        for (const diagnostic of visible) this.stdout.write(`  ${diagnostic.file ? `${diagnostic.file}:${diagnostic.line ?? 0}:${diagnostic.column ?? 0} ` : ''}${diagnostic.code ? `${diagnostic.code} ` : ''}${diagnostic.message}\n`);
+        break;
+      }
+
       case 'tool_result': {
         this.finishAssistantStream();
         this.clearTransientProgress();

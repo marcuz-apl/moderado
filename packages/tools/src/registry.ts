@@ -11,6 +11,7 @@ import { SearchFilesTool } from './tools/search_files.js';
 import { RunCommandTool } from './tools/run_command.js';
 import { GitDiffTool } from './tools/git_diff.js';
 import { ApplyPatchTool } from './tools/apply_patch.js';
+import { RunDiagnosticsTool } from './tools/run_diagnostics.js';
 
 export class ToolRegistry implements IToolRegistry {
   private readonly tools = new Map<string, IToolDefinition<any>>();
@@ -136,5 +137,6 @@ export function createDefaultToolRegistry(): IToolRegistry {
   registry.register(RunCommandTool);
   registry.register(GitDiffTool);
   registry.register(ApplyPatchTool);
+  registry.register(RunDiagnosticsTool);
   return registry;
 }

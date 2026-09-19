@@ -12,3 +12,6 @@ export * from './tools/list_files.js';
 export * from './tools/search_files.js';
 export * from './tools/run_command.js';
 export * from './tools/git_diff.js';
+
+export * from './diagnostics.js';
+export * from './tools/run_diagnostics.js';

@@ -2,20 +2,19 @@
 
 Updated: 2026-09-18
 Branch: master
-Status: Milestone 3 implementation is ready for final verification and commit.
+Status: M4.1 diagnostics evidence is complete locally and ready to commit.
 
-## Completed in Milestone 3
+## M4.1 delivered
 
-- `/workflow` provides safe Git status and diff popups.
-- Plan mode produces a checklist-only request; Build requires explicit confirmation before Execute mode.
-- Mutating file tools provide previews and create byte-preserving checkpoints only after user approval.
-- `/workflow undo` has a separate approval request and restores only when post-mutation digests still match; conflicts leave every file unchanged.
-- Multi-file patches validate all targets before changing files and recover earlier files if a later write fails.
+- `run_diagnostics` runs only approved `typecheck`, `lint`, and `test` npm scripts from the workspace manifest.
+- Each run uses the existing approval boundary, `shell: false`, a scrubbed environment, timeout, and output cap.
+- TypeScript diagnostics are parsed into stable agent events and compact terminal output.
+- Non-zero diagnostic exits remain usable agent evidence.
 
-## Current validation target
+## Validation
 
-Run `npm test`, `npm run build`, and `git diff --check`. When all pass, commit with the Alfazen versioning hook and push `master`.
+`npm test` passed: 29 files, 152 tests. `npm run build` and `git diff --check` passed.
 
-## Next milestone
+## Next increment
 
-Milestone 4: code intelligence and controlled extensibility, including the separately proposed opt-in web-search capability.
+M4.2: language-server-backed symbol and reference lookup.

@@ -34,6 +34,12 @@ export interface IToolRegistry {
   getDeclarations(): ProviderToolDeclaration[];
 }
 
+export const DiagnosticSeveritySchema = z.enum(['error', 'warning', 'info']);
+export type DiagnosticSeverity = z.infer<typeof DiagnosticSeveritySchema>;
+export const DiagnosticSchema = z.object({ severity: DiagnosticSeveritySchema, message: z.string().min(1), file: z.string().min(1).optional(), line: z.number().int().positive().optional(), column: z.number().int().positive().optional(), code: z.string().min(1).optional() });
+export type Diagnostic = z.infer<typeof DiagnosticSchema>;
+export const RunDiagnosticsParamsSchema = z.object({ script: z.enum(['typecheck', 'lint', 'test']) });
+export type RunDiagnosticsParams = z.infer<typeof RunDiagnosticsParamsSchema>;
 // --- Specific Parameter Schemas for the 7 Workspace Tools ---
 
 export const ReadFileParamsSchema = z.object({

@@ -15,6 +15,8 @@ import {
   ListFilesParamsSchema,
   SearchFilesParamsSchema,
   RunCommandParamsSchema,
+  RunDiagnosticsParamsSchema,
+  DiagnosticSchema,
   GitDiffParamsSchema,
   ApprovalRequestSchema,
   ApprovalDecisionSchema,
@@ -165,6 +167,12 @@ describe('Contracts: 7 Tool Parameter Schemas', () => {
     expect(parsed.command).toBe('npm');
     expect(parsed.args).toEqual(['test']);
     expect(parsed.timeoutSeconds).toBe(60);
+  });
+
+  it('validates diagnostics parameters', () => {
+    expect(RunDiagnosticsParamsSchema.parse({ script: 'typecheck' }).script).toBe('typecheck');
+    expect(() => RunDiagnosticsParamsSchema.parse({ script: 'prepare' })).toThrow();
+    expect(DiagnosticSchema.parse({ severity: 'error', message: 'Type mismatch', file: 'src/a.ts', line: 4, column: 2, code: 'TS2322' }).code).toBe('TS2322');
   });
 
   it('validates git_diff parameters', () => {

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AccessTierSchema } from './models.js';
-import { ToolResultSchema } from './tools.js';
+import { DiagnosticSchema, ToolResultSchema } from './tools.js';
 import { ApprovalRequestSchema, ApprovalStatusSchema } from './approvals.js';
 
 export const ProgressEventSchema = z.object({
@@ -69,6 +69,10 @@ export const ToolResultEventSchema = z.object({
 });
 export type ToolResultEvent = z.infer<typeof ToolResultEventSchema>;
 
+export const DiagnosticResultEventSchema = z.object({
+  type: z.literal('diagnostic_result'), toolCallId: z.string().min(1), diagnostics: z.array(DiagnosticSchema), exitCode: z.number().int(), timestamp: z.number().int().nonnegative(),
+});
+export type DiagnosticResultEvent = z.infer<typeof DiagnosticResultEventSchema>;
 export const CompletionEventSchema = z.object({
   type: z.literal('completion'),
   status: z.enum(['completed', 'step_limit_reached', 'timeout', 'cancelled', 'failed']),
@@ -103,6 +107,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   ApprovalRequestEventSchema,
   ApprovalResolvedEventSchema,
   ToolResultEventSchema,
+  DiagnosticResultEventSchema,
   CompletionEventSchema,
   ErrorEventSchema,
   CancellationEventSchema,
