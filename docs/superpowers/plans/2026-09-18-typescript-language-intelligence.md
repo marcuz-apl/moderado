@@ -1,0 +1,53 @@
+# TypeScript Language Intelligence Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans task-by-task.
+
+**Goal:** Add safe, read-only TypeScript definition and reference lookup through an explicitly configured local language server.
+
+**Architecture:** Contracts hold position and location schemas. Tools own a bounded JSON-RPC transport and workspace filtering; core consumes normal tools without language-server imports. The server is started per request and stopped after its response.
+
+**Tech Stack:** TypeScript, Node.js 20 child processes and streams, Zod, Vitest.
+
+**Spec:** `docs/superpowers/specs/2026-09-18-typescript-language-intelligence-design.md`
+
+## Global Constraints
+
+- No dependencies or automatic executable installation.
+- Only read-only definition and reference requests.
+- `shell: false`, scrubbed environment, jail validation, and capped protocol messages.
+- Offline tests use a fake transport only.
+
+### Task 1: Contracts
+
+**Files:** modify `packages/contracts/src/tools.ts`, `packages/contracts/tests/contracts.test.ts`.
+
+- [ ] Write failing tests for `SourcePositionSchema` with one-based coordinates and `SourceLocationSchema` with optional bounded preview.
+- [ ] Run `npm test -- packages/contracts/tests/contracts.test.ts` and confirm failure.
+- [ ] Add Zod schemas and `GetDefinitionParamsSchema` / `FindReferencesParamsSchema`.
+- [ ] Re-run the focused test.
+
+### Task 2: Bounded LSP transport
+
+**Files:** create `packages/tools/src/lsp.ts`, `packages/tools/tests/lsp.test.ts`.
+
+- [ ] Write failing fake-transport tests that assert initialize, didOpen, definition/references request order; reject malformed Content-Length framing; and discard locations outside the workspace.
+- [ ] Run `npm test -- packages/tools/tests/lsp.test.ts` and confirm failure.
+- [ ] Implement `requestLanguageServer(root, executable, method, position)` using fixed `spawn(executable, ['--stdio'])`, JSON-RPC framing, a 1 MB message cap, 10-second initialization timeout, and process cleanup in `finally`.
+- [ ] Re-run the focused test.
+
+### Task 3: Read-only tools and registry
+
+**Files:** create `packages/tools/src/tools/get_definition.ts`, `packages/tools/src/tools/find_references.ts`; modify `packages/tools/src/registry.ts`, `packages/tools/src/index.ts`, `packages/tools/tests/tools.test.ts`.
+
+- [ ] Write failing tests for missing configured executable, valid workspace result mapping, and both registry declarations.
+- [ ] Run focused tests and confirm failure.
+- [ ] Implement read-only tools that request configured language-server executable, resolve requested and returned paths through the jail, and return bounded locations with source previews.
+- [ ] Register both tools and rerun focused tests.
+
+### Task 4: Configuration, documentation, and validation
+
+**Files:** modify `apps/cli/src/config.ts`, `README.md`, `docs/CLI_CAPABILITY_ROADMAP.md`, `HANDOFF.md`.
+
+- [ ] Add optional `typescriptLanguageServer` configuration and document manual installation/configuration.
+- [ ] Run `npm test; npm run build; git diff --check`.
+- [ ] Commit with `git commit -m "feat(tools): add TypeScript language intelligence"`.
