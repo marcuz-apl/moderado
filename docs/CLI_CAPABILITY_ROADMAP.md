@@ -166,6 +166,4 @@ For each milestone:
 5. Review the user-facing CLI flow manually.
 6. Commit using the repository's Alfazen versioning hook only after verification.
 
-The current recommended implementation target is **Milestone 3**. It adds the
-reviewable coding workflow built on M1's trustworthy responses and M2's durable
-session state.
+Milestone 3 is complete. The recommended next target is **Milestone 4**, which adds code intelligence and controlled extensibility on top of the reviewable workflow.

@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { AgentLoop, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
-import { createDefaultToolRegistry, canonicalizeRoot } from '@moderado/tools';
+import { createDefaultToolRegistry, canonicalizeRoot, WorkspaceCheckpointStore } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, saveConnection } from '../config.js';
@@ -11,10 +11,21 @@ import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRe
 import { connectProviderInteractive } from '../ui/provider_connect.js';
 import { promptInteractiveTurn, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
-import { renderBoxLines, selectListPopup } from '../ui/popup.js';
+import { renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { findModelPricing } from '../model_pricing.js';
 import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
 
+function mutationPaths(toolName: string, parameters: unknown): string[] {
+  const value = parameters as { path?: unknown; edits?: { path?: unknown }[] };
+  if (toolName === 'apply_patch' && Array.isArray(value.edits)) {
+    return value.edits.map((edit) => typeof edit.path === 'string' ? edit.path : '').filter(Boolean);
+  }
+  return typeof value.path === 'string' ? [value.path] : [];
+}
+export function createAgentTask(request: string, mode: 'Plan' | 'Execute'): string {
+  if (mode === 'Execute') return request;
+  return `Create a concise implementation checklist for this request. Inspect files as needed, but do not modify files or run commands.\n\nUser request:\n${request}`;
+}
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
   let canonicalWorkspace: string;
   try { canonicalWorkspace = canonicalizeRoot(path.resolve(process.cwd(), args.workspace)); }
@@ -57,6 +68,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let isFirst = true;
   const tools = createDefaultToolRegistry();
   const terminalApproval = new TerminalApprovalHandler();
+  const checkpoints = new WorkspaceCheckpointStore();
   const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> =>
     activeAutoApprove ? { requestId: req.requestId, status: 'approved' } : terminalApproval.requestApproval(req, sig) };
   const router = new Router();
@@ -136,8 +148,26 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           drawFrame(renderBoxLines('Git diff', (await readGitDiff(canonicalWorkspace)).split('\n').slice(0, 24), 76));
           return undefined;
         }
-        if (command === '/workflow build' && activePlan) return 'build';
-        drawFrame(renderBoxLines(command === '/workflow build' ? 'Build plan' : 'Undo latest change', [command === '/workflow build' ? 'Create a plan first in Plan mode.' : 'Checkpoint restore is ready for approval integration.', '', 'Press Esc or Enter to return.'], 72));
+        if (command === '/workflow build') {
+          if (!activePlan) {
+            drawFrame(renderBoxLines('Build plan', ['Create a plan first in Plan mode.', '', 'Press Esc or Enter to return.'], 72));
+            return undefined;
+          }
+          const confirmed = await selectConfirmPopup('Build plan', ['Send the active plan to the agent in Build mode?', '', 'The agent will still ask approval before each mutation.'], { drawFrame, signal });
+          return confirmed ? 'build' : undefined;
+        }
+        if (command === '/workflow undo') {
+          const request: ApprovalRequest = { requestId: `workflow_undo_${Date.now()}`, toolName: 'undo latest agent change', actionSummary: 'Restore the latest completed agent checkpoint.', exactPayload: { cwd: canonicalWorkspace }, timestamp: Date.now() };
+          const decision = await terminalApproval.requestApproval(request, signal);
+          if (decision.status !== 'approved') {
+            drawFrame(renderBoxLines('Undo latest change', ['Undo was not approved.', '', 'Press Esc or Enter to return.'], 72));
+            return undefined;
+          }
+          const restored = checkpoints.restoreLatest(canonicalWorkspace);
+          drawFrame(renderBoxLines('Undo latest change', restored.conflicts.length ? ['No files changed because the workspace changed since the checkpoint:', ...restored.conflicts] : restored.restored.length ? ['Restored:', ...restored.restored] : ['No completed agent checkpoint is available.'], 72));
+          return undefined;
+        }
+        drawFrame(renderBoxLines('Coding Workflow', ['Choose Git status, Review diff, Build plan, or Undo latest agent change.', '', 'Press Esc or Enter to return.'], 72));
         return undefined;
       },
       onSession: async (command, drawFrame) => {
@@ -220,7 +250,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
       // Move to the chat layout before the provider can emit its first event.
       redrawChatFrame();
-      const result = await loop.run(trimmed, {
+      const result = await loop.run(createAgentTask(trimmed, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
@@ -230,6 +260,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           }
           if (event.type === 'assistant_delta' || event.type === 'progress' || event.type === 'reasoning_delta') redrawChatFrame();
         }, signal, conversationHistory,
+        onMutationApproved: (toolName, parameters) => {
+          const paths = mutationPaths(toolName, parameters);
+          if (paths.length) checkpoints.capture(canonicalWorkspace, paths);
+        },
+        onMutationCompleted: (toolName, parameters) => {
+          const paths = mutationPaths(toolName, parameters);
+          if (paths.length) checkpoints.recordPostWrite(canonicalWorkspace, paths);
+        },
       });
       conversationHistory = result.messages;
       if (result.usage) {

@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.2.0%2B2609192-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.2.0%2B2609193-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -135,3 +135,13 @@ node scripts/smoke_test.js
 
 This project is licensed under the MIT License.
 *NVIDIA NIM, NGC, and model weights/APIs are subject to their respective terms and licenses. Moderado is independent and not endorsed by NVIDIA.*
+
+### Practical coding workflow
+
+Use `/workflow` from the TUI to work through a change safely:
+
+- **Git status** shows the current branch and changed files without using a shell.
+- **Review diff** shows the bounded working-tree diff.
+- In **Plan** mode, Moderado asks the model for a concise checklist and cannot make workspace changes. Choose **Build plan** and confirm to send that checklist to Execute mode.
+- File writes, exact edits, and multi-file patches show their change preview and still require approval. Moderado records a byte-preserving checkpoint immediately before an approved file mutation.
+- **Undo latest agent change** requires its own approval. It restores the latest completed checkpoint from `~/.moderado/checkpoints/` only when every affected file still has the expected post-change digest. If a file changed externally, it reports the conflict and restores nothing.

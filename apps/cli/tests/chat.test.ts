@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { handleChatSession } from '../src/commands/chat.js';
+import { createAgentTask, handleChatSession } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { saveConfig } from '../src/config.js';
 
@@ -52,5 +52,11 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
 
     const exitCode = await handleChatSession(args, 'v0.1.2', controller.signal);
     expect(exitCode).toBe(0);
+  });
+
+
+  it('creates a read-only checklist instruction in Plan mode', () => {
+    expect(createAgentTask('Add a command', 'Plan')).toContain('do not modify files or run commands');
+    expect(createAgentTask('Add a command', 'Execute')).toBe('Add a command');
   });
 });

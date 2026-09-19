@@ -32,6 +32,8 @@ export interface AgentRunOptions {
   signal?: AbortSignal;
   conversationHistory?: ChatMessage[];
   modelInventory?: ModelInventoryEntry[];
+  onMutationApproved?: (toolName: string, parameters: unknown) => Promise<void> | void;
+  onMutationCompleted?: (toolName: string, parameters: unknown, result: ToolResult) => Promise<void> | void;
 }
 
 export interface AgentRunResult {
@@ -551,6 +553,18 @@ export class AgentLoop {
           }
         }
 
+        // Capture a recovery point only after the human approved this mutation.
+        if (tool.requiresApproval && options.onMutationApproved) {
+          try {
+            await options.onMutationApproved(call.name, parseResult.data);
+          } catch (err: any) {
+            const checkpointResult: ToolResult = { toolName: call.name, status: 'error', output: `Unable to prepare recovery checkpoint: ${err.message}` };
+            emit({ type: 'tool_result', toolCallId: call.id, result: checkpointResult, timestamp: Date.now() });
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, content: checkpointResult.output, status: 'error' });
+            continue;
+          }
+        }
+
         // Execute tool inside workspace
         let result: ToolResult;
         try {
@@ -564,6 +578,14 @@ export class AgentLoop {
             status: 'error',
             output: `Tool execution failed: ${err.message}`,
           };
+        }
+
+        if (tool.requiresApproval && result.status === 'success' && options.onMutationCompleted) {
+          try {
+            await options.onMutationCompleted(call.name, parseResult.data, result);
+          } catch (err: any) {
+            result = { ...result, status: 'error', output: `${result.output}\nRecovery checkpoint could not be finalized: ${err.message}` };
+          }
         }
 
         emit({ type: 'tool_result', toolCallId: call.id, result, timestamp: Date.now() });

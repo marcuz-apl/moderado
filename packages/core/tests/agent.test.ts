@@ -446,4 +446,33 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(assistantEvents.length).toBe(1);
     expect((assistantEvents[0] as any).delta).toBe('Here is the direct answer.');
   });
+
+  it('calls mutation lifecycle hooks only for an approved write', async () => {
+    provider.queueToolCallResponse('write_file', { path: 'tracked.txt', content: 'new' });
+    provider.queueTextResponse('Done.');
+    const lifecycle: string[] = [];
+
+    await loop.run('Write tracked.txt', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler,
+      onMutationApproved: (toolName) => { lifecycle.push(`approved:${toolName}`); },
+      onMutationCompleted: (toolName, _parameters, result) => { lifecycle.push(`completed:${toolName}:${result.status}`); },
+    });
+
+    expect(lifecycle).toEqual(['approved:write_file', 'completed:write_file:success']);
+  });
+
+  it('does not call mutation lifecycle hooks when a write is denied', async () => {
+    provider.queueToolCallResponse('write_file', { path: 'denied.txt', content: 'new' });
+    provider.queueTextResponse('Denied.');
+    const lifecycle: string[] = [];
+    const deny: IApprovalHandler = { async requestApproval(request) { return { requestId: request.requestId, status: 'denied' }; } };
+
+    await loop.run('Write denied.txt', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: deny,
+      onMutationApproved: () => { lifecycle.push('approved'); },
+      onMutationCompleted: () => { lifecycle.push('completed'); },
+    });
+
+    expect(lifecycle).toEqual([]);
+  });
 });
