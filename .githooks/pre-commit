@@ -4,9 +4,3 @@ HOOKDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 
 old=$(read_version)
 validate_identifier "$old"
-gitdir=$(git rev-parse --git-dir)
-message=$(sed -E '1s/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-z] //' "$gitdir/COMMIT_EDITMSG" 2>/dev/null || true)
-new=$(next_identifier "$old" "$(utc_yymmdd)" "$(detect_bump_type "$message")") || exit 1
-
-printf '%s\n' "$new" > "$VERSION_FILE"
-git add -- "$VERSION_FILE"

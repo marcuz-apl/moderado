@@ -27,6 +27,7 @@ detect_bump_type() {
     *BREAKING\ CHANGE*|*!:\ *) echo "major_requires_approval" ;;
     release\(minor\):*)        echo "minor" ;;
     release\(patch\):*)        echo "patch" ;;
+    feat:*|feat\(*\):*)         echo "patch" ;;
     *)                         echo "build" ;;
   esac
 }
