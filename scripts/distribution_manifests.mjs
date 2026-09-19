@@ -10,10 +10,15 @@ export async function generateDistributionManifests(manifest, outputDirectory, r
   const artifact = manifest.artifacts[0];
   if (!artifact || artifact.signed !== false) throw new Error('Only unsigned verified artifacts may be staged.');
   const url = `${releaseBaseUrl}/${artifact.filename}`;
-  await Promise.all(['homebrew', 'scoop', 'winget'].map((directory) => mkdir(join(outputDirectory, directory), { recursive: true })));
+  const linux = manifest.artifacts.find((candidate) => candidate.platform === 'linux' && candidate.architecture === 'x64');
+  await Promise.all(['homebrew', 'scoop', 'winget', 'aur'].map((directory) => mkdir(join(outputDirectory, directory), { recursive: true })));
   await writeFile(join(outputDirectory, 'homebrew', 'moderado.rb'), `class Moderado < Formula\n  desc "Free-first AI coding agent"\n  homepage "https://github.com/marcuz-apl/moderado"\n  version "${version}"\n  url "${url}"\n  sha256 "${artifact.checksum}"\n  def install\n    bin.install "${artifact.filename}" => "moderado"\n  end\nend\n`);
   await writeFile(join(outputDirectory, 'scoop', 'moderado.json'), `${JSON.stringify({ version, description: 'Free-first AI coding agent', homepage: 'https://github.com/marcuz-apl/moderado', architecture: { '64bit': { url, hash: artifact.checksum } }, bin: 'moderado-win-x64.exe' }, null, 2)}\n`);
   await writeFile(join(outputDirectory, 'winget', 'Moderado.yaml'), `PackageIdentifier: MarcuzApl.Moderado\nPackageVersion: ${version}\nPackageName: Moderado\nPublisher: Marcuz Apl\nInstallerType: portable\nInstallers:\n- Architecture: x64\n  InstallerUrl: ${url}\n  InstallerSha256: ${artifact.checksum}\nManifestType: singleton\nManifestVersion: 1.6.0\n`);
+  if (linux) {
+    const linuxUrl = `${releaseBaseUrl}/${linux.filename}`;
+    await writeFile(join(outputDirectory, 'aur', 'PKGBUILD'), `pkgname=moderado-bin\npkgver=${version}\npkgrel=1\npkgdesc='Free-first AI coding agent'\narch=('x86_64')\nurl='https://github.com/marcuz-apl/moderado'\nlicense=('MIT')\nsource_x86_64=("${linuxUrl}")\nsha256sums_x86_64=('${linux.checksum}')\npackage() {\n  install -Dm755 "$srcdir/${linux.filename}" "$pkgdir/usr/bin/moderado"\n}\n`);
+  }
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

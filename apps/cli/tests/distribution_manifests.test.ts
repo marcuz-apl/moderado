@@ -17,3 +17,15 @@ it('generates reviewable Homebrew, Scoop, and winget manifests from checksums', 
     expect(await readFile(join(root, 'winget', 'Moderado.yaml'), 'utf8')).toContain('InstallerSha256: ' + 'a'.repeat(64));
   } finally { await rm(root, { recursive: true, force: true }); }
 });
+
+it('generates an AUR PKGBUILD from the verified Linux artifact', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'moderado-aur-'));
+  try {
+    await generateDistributionManifests({ version: 'v0.2.22+260919w', revision: 'abc123', artifacts: [
+      { target: 'node22-linux-x64', filename: 'moderado-linux-x64', platform: 'linux', architecture: 'x64', size: 10, checksum: 'b'.repeat(64), signed: false },
+    ] }, root, 'https://example.invalid/moderado/releases/download/v0.2.22');
+    const pkgbuild = await readFile(join(root, 'aur', 'PKGBUILD'), 'utf8');
+    expect(pkgbuild).toContain(`sha256sums_x86_64=('${'b'.repeat(64)}')`);
+    expect(pkgbuild).toContain('moderado-linux-x64');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
