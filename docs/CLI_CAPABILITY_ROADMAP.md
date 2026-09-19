@@ -8,7 +8,8 @@
 
 Moderado already has a clean provider-independent core, a safe coding-tool boundary,
 and an interactive terminal interface. This roadmap identifies the next five
-capability areas needed to make it dependable for real coding work.
+capability areas needed to make it dependable for real coding work and ready
+for public distribution.
 
 The milestones are deliberately sequential. Each must be complete, tested, and
 usable before work begins on the next one.
@@ -155,6 +156,47 @@ and update.
 - Release documentation reflects the current `VERSION` identifier and supported
   providers.
 
+## Milestone 6 — Public distribution and release trust
+
+**Goal:** Turn the release-ready CLI into an installable, reproducible public
+product without exposing publishing credentials or shipping an incomplete npm
+package.
+
+### M6.1 — Standalone npm installation and release gate
+
+- Build one self-contained npm package whose compiled CLI can resolve its
+  internal workspace modules after a global install.
+- Verify the packed tarball by installing it into an empty temporary directory
+  and running `moderado --help`; this check must not contact a provider.
+- Add a GitHub Actions release workflow that runs the offline verification and
+  produces the package as a release artifact. It must require an explicit tag
+  or manual release action before publication is even considered.
+- Use npm trusted publishing (OIDC) when publication is deliberately enabled;
+  no long-lived npm token belongs in the repository or workflow configuration.
+- Document the supported global npm installation command and the maintainer
+  release prerequisites.
+
+### M6.2 — Signed standalone binaries
+
+- Produce platform-specific Windows, macOS, and Linux artifacts with checksums
+  and versioned release notes.
+- Add a checksum-verifying install script only after those artifacts exist.
+
+### M6.3 — Package-manager channels
+
+- Publish and maintain Homebrew, Scoop/winget, and AUR manifests from stable
+  binary releases.
+- Keep npm as the canonical package for npm and Bun users.
+
+### Done when
+
+- `npm install -g` produces a working CLI without a source checkout or private
+  workspace packages from the npm registry.
+- Every public artifact can be traced to a verified source revision and its
+  `VERSION` identifier.
+- Publishing remains an explicit maintainer action and never occurs from a
+  normal development commit.
+
 ## Delivery discipline
 
 For each milestone:
@@ -166,4 +208,5 @@ For each milestone:
 5. Review the user-facing CLI flow manually.
 6. Commit using the repository's Alfazen versioning hook only after verification.
 
-Milestones 1 through 5 are complete. The next product phase can build on this stable CLI foundation.
+Milestones 1 through 5 are complete. M6 begins the public-distribution phase
+on top of the stable CLI foundation.
