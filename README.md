@@ -80,7 +80,16 @@ moderado run "Analyze security boundaries" --read-only
 
 ## Install Moderado
 
-Moderado requires **Node.js 20 or newer**.
+Moderado requires **Node.js 20 or newer**. M6.1 creates a verified npm tarball
+but does not publish a public npm release yet. Once a release is published,
+the global install command will be:
+
+```bash
+npm install -g moderado
+moderado
+```
+
+Until then, build from the source checkout:
 
 ```bash
 git clone https://github.com/marcuz-apl/moderado.git
@@ -90,7 +99,9 @@ npm run build
 node apps/cli/dist/index.js
 ```
 
-M5.3 prepares the npm package with `npm pack --dry-run`; publishing to npm is a separate release action.
+Maintainers can install a verified release artifact directly with
+`npm install -g ./moderado-<version>.tgz`. See
+[docs/RELEASING.md](docs/RELEASING.md) for the review procedure.
 
 ### Connect a provider
 

@@ -1,0 +1,29 @@
+name: Verify release package
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  verify-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Verify tag matches the release version
+        if: github.ref_type == 'tag'
+        run: test "$GITHUB_REF_NAME" = "$(cut -d+ -f1 VERSION)"
+      - run: npm test
+      - run: npm run verify:package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moderado-npm-package
+          path: apps/cli/*.tgz

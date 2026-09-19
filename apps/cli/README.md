@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.2.18%2B260919r-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.2.20%2B260919t-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -80,7 +80,16 @@ moderado run "Analyze security boundaries" --read-only
 
 ## Install Moderado
 
-Moderado requires **Node.js 20 or newer**.
+Moderado requires **Node.js 20 or newer**. M6.1 creates a verified npm tarball
+but does not publish a public npm release yet. Once a release is published,
+the global install command will be:
+
+```bash
+npm install -g moderado
+moderado
+```
+
+Until then, build from the source checkout:
 
 ```bash
 git clone https://github.com/marcuz-apl/moderado.git
@@ -90,7 +99,9 @@ npm run build
 node apps/cli/dist/index.js
 ```
 
-M5.3 prepares the npm package with `npm pack --dry-run`; publishing to npm is a separate release action.
+Maintainers can install a verified release artifact directly with
+`npm install -g ./moderado-<version>.tgz`. See
+[docs/RELEASING.md](docs/RELEASING.md) for the review procedure.
 
 ### Connect a provider
 
@@ -174,7 +185,7 @@ Use `/workflow` from the TUI to work through a change safely:
 
 ### Diagnostics evidence
 
-Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or JavaScript workspace. It may run only the direct `typecheck`, `lint`, or `test` script defined in that workspace’s `package.json`, and every run requires approval. A non-zero exit returns parsed TypeScript errors as repair evidence; it does not bypass the safety boundary.
+Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or JavaScript workspace. It may run only the direct `typecheck`, `lint`, or `test` script defined in that workspaceï¿½s `package.json`, and every run requires approval. A non-zero exit returns parsed TypeScript errors as repair evidence; it does not bypass the safety boundary.
 
 ### TypeScript language intelligence
 

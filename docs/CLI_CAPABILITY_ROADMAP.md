@@ -162,7 +162,7 @@ and update.
 product without exposing publishing credentials or shipping an incomplete npm
 package.
 
-### M6.1 — Standalone npm installation and release gate
+### M6.1 — Standalone npm installation and release gate ✅
 
 - Build one self-contained npm package whose compiled CLI can resolve its
   internal workspace modules after a global install.
@@ -173,8 +173,8 @@ package.
   or manual release action before publication is even considered.
 - Use npm trusted publishing (OIDC) when publication is deliberately enabled;
   no long-lived npm token belongs in the repository or workflow configuration.
-- Document the supported global npm installation command and the maintainer
-  release prerequisites.
+- Document release-artifact installation and the maintainer release
+  prerequisites; public npm installation awaits an explicit publishing step.
 
 ### M6.2 — Signed standalone binaries
 
