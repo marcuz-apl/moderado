@@ -1,0 +1,39 @@
+name: Publish Moderado release
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type PUBLISH to publish the verified release artifacts'
+        required: true
+        type: string
+      tag:
+        description: 'Existing version tag to publish'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  publish:
+    if: inputs.confirm == 'PUBLISH'
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run verify:package
+      - run: npm publish apps/cli/*.tgz --provenance --access public
+      - run: gh release create "${{ inputs.tag }}" --verify-tag "${{ inputs.tag }}" --title "Moderado ${{ inputs.tag }}" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

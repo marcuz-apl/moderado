@@ -23,4 +23,14 @@ describe('release workflow', () => {
     expect(yaml).toContain('merge-binaries');
     expect(yaml).not.toMatch(/gh\s+release|npm\s+publish|NODE_AUTH_TOKEN|NPM_TOKEN/i);
   });
+
+  it('keeps public publication behind an explicit manual confirmation workflow', async () => {
+    const yaml = await readFile('.github/workflows/publish.yml', 'utf8');
+    expect(yaml).toContain('workflow_dispatch:');
+    expect(yaml).toContain('confirm:');
+    expect(yaml).toContain('PUBLISH');
+    expect(yaml).toContain('npm publish');
+    expect(yaml).toContain('gh release create');
+    expect(yaml).toContain('id-token: write');
+  });
 });

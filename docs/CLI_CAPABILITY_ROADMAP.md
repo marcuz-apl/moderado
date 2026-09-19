@@ -231,7 +231,7 @@ on top of the stable CLI foundation.
 - Clearly report when search is unavailable, denied, or returns no results.
 - Keep result size and context injection bounded.
 
-### M7.3 — Public release channels
+### M7.3 — Public release channels ✅
 
 - Add deliberate maintainer workflows for npm and GitHub Release publication.
 - Enable Homebrew, Scoop, winget, and AUR submissions only from verified artifacts.
