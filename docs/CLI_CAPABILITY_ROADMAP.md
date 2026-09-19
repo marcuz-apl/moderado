@@ -224,7 +224,7 @@ on top of the stable CLI foundation.
 - Bound query length and result count, validate response shape, and return source URLs.
 - Keep automated tests local and offline; no implicit shell or unrestricted network access.
 
-### M7.2 — Web-aware answers
+### M7.2 — Web-aware answers ✅
 
 - Add search results to agent context only after approved search completes.
 - Preserve source URLs and render citations in the answer area.

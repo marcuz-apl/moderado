@@ -16,8 +16,9 @@ export const WebSearchTool: IToolDefinition<WebSearchParams> = {
       const response = await fetch(url, { signal: context.abortSignal });
       if (!response.ok) return { toolName: 'web_search', status: 'error', output: `Search endpoint returned HTTP ${response.status}.` };
       const payload = await response.json() as { results?: SearchItem[] };
-      const results = Array.isArray(payload.results) ? payload.results.slice(0, params.maxResults).filter((item) => typeof item.title === 'string' && typeof item.url === 'string').map((item) => `${item.title}\n${item.url}${typeof item.snippet === 'string' ? `\n${item.snippet}` : ''}`) : [];
-      return { toolName: 'web_search', status: 'success', output: results.length ? results.join('\n\n') : 'No search results.' };
+      const valid = Array.isArray(payload.results) ? payload.results.slice(0, params.maxResults).filter((item) => typeof item.title === 'string' && typeof item.url === 'string') : [];
+      const results = valid.map((item) => `${item.title}\n${item.url}${typeof item.snippet === 'string' ? `\n${item.snippet}` : ''}`);
+      return { toolName: 'web_search', status: 'success', output: results.length ? results.join('\n\n') : 'No search results.', metadata: { sources: valid.map((item) => ({ title: item.title, url: item.url })) } };
     } catch (error) { return { toolName: 'web_search', status: 'error', output: `Web search failed: ${error instanceof Error ? error.message : String(error)}` }; }
   },
 };
