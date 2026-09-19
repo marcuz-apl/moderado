@@ -218,6 +218,9 @@ on top of the stable CLI foundation.
 
 ## Milestone 7 — Controlled internet access
 
+**Goal:** Let Moderado retrieve current public information while preserving
+approval-first security, bounded context, and source traceability.
+
 ### M7.1 — Approved web search ✅
 
 - Add the approval-gated `web_search` tool with a configured HTTPS endpoint.
@@ -242,3 +245,10 @@ on top of the stable CLI foundation.
 - Add provider adapters through the existing provider-independent contracts.
 - Extend model discovery, pricing metadata, capability classification, and routing.
 - Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
+
+### M7 acceptance criteria
+
+- Internet access is available only through declared, approval-gated tools.
+- Search responses are bounded, validated, and attributable to source URLs.
+- Offline tests never contact external services.
+- Provider additions remain isolated behind the provider-independent contracts.
