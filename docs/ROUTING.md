@@ -138,3 +138,15 @@ Transient HTTP errors (`429 Too Many Requests`, `500 Internal Server Error`, `50
 > [!CRITICAL]
 > **Never repeat executed tool calls merely because inference retries.**
 > If a model emitted tool calls, the tools executed, and the provider subsequently fails during the follow-up completion, the executed tool results remain fixed in the conversation state. Only the subsequent assistant inference request is retried.
+
+## 5. M7 Provider and Web Routing
+
+OpenRouter, Agnes, and future OpenAI-compatible providers use the shared
+provider transport with explicit provider IDs, names, base URLs, credentials,
+and model classifications. Routing remains free-first and never infers price
+or tool support from a provider name.
+
+Web search is routed separately through the approval-gated `web_search` tool.
+It uses a configured HTTPS search endpoint, returns bounded source metadata,
+and does not participate in model AUTO ranking or grant unrestricted network
+access.
