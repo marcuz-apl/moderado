@@ -114,3 +114,12 @@ function getSanitizedEnv(): NodeJS.ProcessEnv {
 
 - **Credential Redaction**: Before any error or debug event is written to the terminal or log file, sensitive patterns (API keys matching `nvapi-*`, `sk-*`, bearer tokens) are replaced with `[REDACTED]`.
 - **Zero Ephemeral Transcripts**: Moderado does not silently upload or persist user prompt transcripts to third-party diagnostic servers.
+
+## 6. Controlled Web Search (M7)
+
+`web_search` is a declared tool with `requiresApproval: true`. It may call only a
+configured HTTPS endpoint (or localhost for offline tests), applies query and
+result limits, validates returned titles and URLs, and preserves source URLs as
+citation metadata. It does not enable arbitrary internet access, shell access,
+or automatic browsing. Network failures, denial, malformed responses, and empty
+results return visible bounded tool results.

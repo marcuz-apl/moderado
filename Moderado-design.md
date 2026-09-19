@@ -64,6 +64,11 @@ Commands use Node.js child_process.spawn with argument arrays and shell: false, 
 
 Treat repository contents and tool output as untrusted model context. Never let model instructions modify approval policy. Do not automatically upload the repository; only requested tool results enter the conversation. Explain that file contents sent to a hosted model leave the machine. Redact credentials from diagnostics and avoid persistent full transcripts by default.
 
+Web search follows the same boundary: the `web_search` tool requires approval,
+uses a configured HTTPS endpoint, validates and bounds results, and returns
+source URLs for citations. Provider adapters remain injected behind the common
+provider contract, including OpenAI-compatible services.
+
 ## Tests and acceptance
 Require strict TypeScript type checking, a successful workspace build, and passing Vitest unit and integration tests. Check CLI behavior on Windows, macOS, and Linux in CI. Test the core through injected interfaces without terminal or desktop dependencies, including structured events, cancellation, and approval request binding.
 

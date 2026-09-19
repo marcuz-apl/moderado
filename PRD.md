@@ -17,6 +17,7 @@ Moderado is an original, lightweight, terminal-first AI coding agent designed to
 - **Provider Independence**: Core agent logic, message hierarchies, tool dispatch, and routing policies are completely decoupled from any single API or SDK. Provider adapters (beginning with NVIDIA NIM) are injected via typed contracts.
 - **Free-First AUTO Routing**: Dynamically discovers available models, filters for chat and tool capabilities, and prioritizes verified free/trial endpoints before any paid inference is considered. Paid models and unknown pricing require explicit user opt-in.
 - **Strict Approval Boundary**: Interactive per-action approvals for all write operations and process executions. Non-interactive sessions fail closed by denying operations requiring approval.
+- **Controlled Web Search**: M7 adds an approval-gated, bounded search tool with source URLs and no unrestricted network or shell access.
 - **Minimalist Engineering (`ponytail`)**: Strict application of the Decision Ladder: YAGNI, standard library first (native Node.js `fetch`, `AbortController`, `child_process.spawn`), zero unnecessary dependencies, and runtime schema validation at all system boundaries.
 
 ---
