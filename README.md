@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.2.16%2B260919o-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.2.17%2B260919p-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -165,3 +165,7 @@ Moderado exposes a versioned host-event envelope with session identity and monot
 ### Doctor command
 
 Run `moderado doctor` to check the local Node runtime, workspace, Moderado home directory, provider/key presence, Git, and npm without exposing credentials. Run `moderado doctor --connectivity` only when you want an explicit live provider catalog check.
+
+## Windows credential storage
+
+On Windows, /connect saves provider API keys in Windows Credential Manager and stores only a provider credential reference in ~/.moderado/config.json. Existing plaintext keys remain usable for compatibility. Migrate them explicitly with moderado doctor --migrate-credentials; a failed migration leaves the existing configuration unchanged. On other platforms, set the provider environment variable (for example, NVIDIA_API_KEY or OPENROUTER_API_KEY).

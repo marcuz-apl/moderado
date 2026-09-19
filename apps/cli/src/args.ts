@@ -16,6 +16,7 @@ export interface CliParsedArgs {
   json: boolean;
   refresh: boolean;
   connectivity: boolean;
+  migrateCredentials: boolean;
   help: boolean;
   version: boolean;
 }
@@ -35,6 +36,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     json: { type: 'boolean' as const, default: false },
     refresh: { type: 'boolean' as const, default: false },
     connectivity: { type: 'boolean' as const, default: false },
+    'migrate-credentials': { type: 'boolean' as const, default: false },
     help: { type: 'boolean' as const, short: 'h', default: false },
     version: { type: 'boolean' as const, short: 'v', default: false },
   };
@@ -82,6 +84,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     json: Boolean(parsed.values.json),
     refresh: Boolean(parsed.values.refresh),
     connectivity: Boolean(parsed.values.connectivity),
+    migrateCredentials: Boolean(parsed.values['migrate-credentials']),
     help: Boolean(parsed.values.help),
     version: Boolean(parsed.values.version),
   };
@@ -111,6 +114,7 @@ OPTIONS:
   --allow-unknown        Permit unverified/unknown access models in AUTO
   --verbose              Display raw tool inputs and event logs
   --json                 Output results in structured JSON (models command)
+  --migrate-credentials  Move legacy Windows config keys into Credential Manager
   -h, --help             Show this help screen
   -v, --version          Show version identifier
 `;

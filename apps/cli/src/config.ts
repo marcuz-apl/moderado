@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
+import { credentialReference, CredentialStore, resolveCredential } from './credentials.js';
 
 export interface ModeradoConfig {
   apiKey?: string;
@@ -21,6 +22,7 @@ export interface ProviderConnection {
   displayName: string;
   kind: ProviderConnectionKind;
   baseUrl: string;
+  credentialReference?: string;
   apiKey?: string;
   defaultModel?: string;
 }
@@ -90,6 +92,7 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
       displayName: item.displayName,
       kind,
       baseUrl: item.baseUrl,
+      credentialReference: typeof item.credentialReference === 'string' ? item.credentialReference : undefined,
       apiKey: typeof item.apiKey === 'string' ? item.apiKey : undefined,
       defaultModel: typeof item.defaultModel === 'string' ? item.defaultModel : undefined,
     };
@@ -152,11 +155,51 @@ export function getActiveConnection(config: ModeradoConfig): ProviderConnection 
 /** Save a provider profile and select it for future chat sessions. */
 export function saveConnection(connection: ProviderConnection, customHome?: string): void {
   const existing = loadConfig(customHome);
+  const persisted = connection.credentialReference ? { ...connection, apiKey: undefined } : connection;
   saveConfig(
     {
-      connections: { ...existing.connections, [connection.id]: connection },
-      activeConnectionId: connection.id,
+      connections: { ...existing.connections, [persisted.id]: persisted },
+      activeConnectionId: persisted.id,
     },
     customHome
   );
+}
+
+export async function storeConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
+  if (!connection.apiKey?.trim()) throw new Error('A provider API key is required.');
+  const reference = credentialReference(connection.id);
+  await store.set(reference, connection.apiKey.trim());
+  return { ...connection, credentialReference: reference };
+}
+
+export async function resolveConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
+  const environmentName = connection.id === 'nvidia-nim' ? 'NVIDIA_API_KEY' : `${connection.id.replace(/[^a-z0-9]/gi, '_').toUpperCase()}_API_KEY`;
+  const apiKey = await resolveCredential(process.env[environmentName], connection.credentialReference, connection.apiKey, store);
+  return { ...connection, apiKey };
+}
+
+/** Move legacy plaintext provider keys into a credential store only when every write succeeds. */
+export async function migrateLegacyCredentials(store: CredentialStore, customHome?: string): Promise<number> {
+  const config = loadConfig(customHome);
+  const next: ModeradoConfig = { ...config, connections: { ...config.connections } };
+  const pending: Array<{ id: string; secret: string }> = [];
+  if (config.apiKey?.trim()) pending.push({ id: 'nvidia-nim', secret: config.apiKey.trim() });
+  for (const connection of Object.values(config.connections ?? {})) {
+    if (connection.apiKey?.trim()) pending.push({ id: connection.id, secret: connection.apiKey.trim() });
+  }
+  if (!pending.length) return 0;
+  for (const entry of pending) await store.set(credentialReference(entry.id), entry.secret);
+  delete next.apiKey;
+  for (const entry of pending) {
+    const existing = next.connections?.[entry.id];
+    const connection = existing ?? { id: 'nvidia-nim', displayName: 'NVIDIA NIM', kind: 'nvidia-nim' as const, baseUrl: 'https://integrate.api.nvidia.com/v1', defaultModel: config.defaultModel };
+    next.connections![entry.id] = { ...connection, credentialReference: credentialReference(entry.id), apiKey: undefined };
+  }
+  next.activeConnectionId ??= pending[0]?.id;
+  const configPath = getConfigPath(customHome);
+  fs.mkdirSync(path.dirname(configPath), { recursive: true, mode: 0o700 });
+  const temporary = `${configPath}.tmp`;
+  fs.writeFileSync(temporary, JSON.stringify(next, null, 2), { encoding: 'utf8', mode: 0o600 });
+  fs.renameSync(temporary, configPath);
+  return pending.length;
 }

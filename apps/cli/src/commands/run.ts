@@ -5,7 +5,8 @@ import { createDefaultToolRegistry, canonicalizeRoot } from '@moderado/tools';
 import { CliParsedArgs } from '../args.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
-import { resolveApiKey, saveConfig, loadConfig } from '../config.js';
+import { getActiveConnection, resolveApiKey, resolveConnectionCredential, saveConfig, loadConfig, saveConnection, storeConnectionCredential } from '../config.js';
+import { WindowsCredentialStore } from '../windows_credentials.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
 
@@ -33,6 +34,10 @@ export async function handleRunCommand(
 
   const isLocal = args.profile.includes('local');
   let apiKey = resolveApiKey();
+  if (!apiKey && process.platform === 'win32') {
+    const connection = getActiveConnection(loadConfig());
+    if (connection) apiKey = (await resolveConnectionCredential(connection, new WindowsCredentialStore())).apiKey;
+  }
 
   if (!isLocal && !apiKey) {
     if (args.nonInteractive) {
@@ -60,8 +65,7 @@ export async function handleRunCommand(
 
     const shouldSave = await askQuestion('Save API key persistently to ~/.moderado/config.json? [Y/n]: ', { signal });
     if (shouldSave.toLowerCase() !== 'n' && shouldSave.toLowerCase() !== 'no') {
-      saveConfig({ apiKey });
-      process.stdout.write('\x1b[32m✔ API key saved to ~/.moderado/config.json\x1b[0m\n\n');
+      if (process.platform === 'win32') { const connection = await storeConnectionCredential({ id: 'nvidia-nim', displayName: 'NVIDIA NIM', kind: 'nvidia-nim', baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey }, new WindowsCredentialStore()); saveConnection(connection); process.stdout.write('API key saved in Windows Credential Manager.\\n'); } else { saveConfig({ apiKey }); process.stdout.write('Set NVIDIA_API_KEY to persist this key on your platform.\\n'); }
     }
   }
 

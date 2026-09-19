@@ -9,7 +9,9 @@ import {
   resolveApiKey,
   saveConfig,
   saveConnection,
+  migrateLegacyCredentials,
 } from '../src/config.js';
+import { MemoryCredentialStore } from '../src/credentials.js';
 
 describe('CLI Configuration Storage', () => {
   let tempDir: string;
@@ -93,5 +95,17 @@ describe('CLI Configuration Storage', () => {
   it('loads an optional TypeScript language server executable', () => {
     saveConfig({ typescriptLanguageServer: 'typescript-language-server' }, tempDir);
     expect(loadConfig(tempDir).typescriptLanguageServer).toBe('typescript-language-server');
+  });
+
+  it('migrates legacy plaintext credentials only after every secure write succeeds', async () => {
+    saveConnection({ id: 'openrouter', displayName: 'OpenRouter', kind: 'openai-compatible', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-legacy' }, tempDir);
+    const store = new MemoryCredentialStore();
+
+    await migrateLegacyCredentials(store, tempDir);
+
+    const raw = fs.readFileSync(getConfigPath(tempDir), 'utf8');
+    expect(raw).not.toContain('sk-legacy');
+    expect(loadConfig(tempDir).connections?.openrouter?.credentialReference).toBe('moderado/provider/openrouter');
+    expect(await store.get('moderado/provider/openrouter')).toBe('sk-legacy');
   });
 });

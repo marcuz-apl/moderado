@@ -5,7 +5,9 @@ import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, WorkspaceCheckpointStore } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
-import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, saveConnection } from '../config.js';
+import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, resolveConnectionCredential, saveConnection, storeConnectionCredential } from '../config.js';
+import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
+import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive } from '../ui/provider_connect.js';
@@ -31,8 +33,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   try { canonicalWorkspace = canonicalizeRoot(path.resolve(process.cwd(), args.workspace)); }
   catch (err: any) { process.stderr.write(`\x1b[1;31mWorkspace Error:\x1b[0m ${err.message}\n`); return 1; }
 
+  const credentialStore: CredentialStore = process.platform === 'win32' ? new WindowsCredentialStore() : new MemoryCredentialStore();
   let config = loadConfig();
   let activeConnection = getActiveConnection(config);
+  if (activeConnection) activeConnection = await resolveConnectionCredential(activeConnection, credentialStore);
   if (!activeConnection && resolveApiKey()) {
     activeConnection = { id: 'nvidia-nim', displayName: 'NVIDIA NIM', kind: 'nvidia-nim',
       baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: resolveApiKey(), defaultModel: config.defaultModel };
@@ -118,7 +122,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       onConnect: async (drawFrame) => {
         const connection = await connectProviderInteractive({ signal, drawFrame });
         if (!connection) return currentModel;
-        saveConnection(connection); config = loadConfig(); activateConnection(connection);
+        const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
+        saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
         return currentModel ?? 'No model connected — use /connect';
       },
       onClear: () => {
@@ -223,7 +228,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       process.stdout.write('\nNo provider is connected. Let\'s connect one before sending this task.\n');
       const connection = await connectProviderInteractive({ signal });
       if (!connection) { process.stdout.write('No provider connected. Use /connect whenever you are ready.\n\n'); continue; }
-      saveConnection(connection); config = loadConfig(); activateConnection(connection);
+      const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
+      saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
     }
 
     const policy = new PolicyManager({ maxSteps: args.maxSteps, readOnly: activeMode === 'Plan' || args.readOnly, nonInteractive: args.nonInteractive, timeoutSeconds: args.timeout });

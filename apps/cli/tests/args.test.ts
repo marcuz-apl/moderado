@@ -46,4 +46,8 @@ describe('CLI Argument Parser', () => {
     expect(parseCliArgs(['--version']).version).toBe(true);
     expect(parseCliArgs(['-v']).version).toBe(true);
   });
+
+  it('requires an explicit doctor migration flag', () => {
+    expect(parseCliArgs(['doctor', '--migrate-credentials']).migrateCredentials).toBe(true);
+  });
 });
