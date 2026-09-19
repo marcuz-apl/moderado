@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.2.0%2B260919f-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.2.0%2B260919g-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -157,3 +157,7 @@ Install `typescript-language-server` yourself, then set `typescriptLanguageServe
 ### Local MCP tools
 
 Configure trusted local stdio MCP servers under `mcpServers` in `~/.moderado/config.json`, with an executable and fixed `args` list. Moderado discovers server tools at session startup, namespaces them as `mcp.<server>.<tool>`, and requires approval for every call. MCP network transports and automatic server installation are not supported.
+
+### Host event protocol
+
+Moderado exposes a versioned host-event envelope with session identity and monotonic sequence numbers. The CLI continues to render the contained agent event, while a future desktop host can consume the same protocol without importing CLI code.

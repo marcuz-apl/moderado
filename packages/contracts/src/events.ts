@@ -114,4 +114,9 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
 ]);
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
 
+export const HostEventEnvelopeSchema = z.object({
+  protocolVersion: z.literal(1), sessionId: z.string().min(1), sequence: z.number().int().positive(), timestamp: z.number().int().nonnegative(), event: AgentEventSchema,
+});
+export type HostEventEnvelope = z.infer<typeof HostEventEnvelopeSchema>;
 export type AgentEventListener = (event: AgentEvent) => void;
+export type HostEventListener = (envelope: HostEventEnvelope) => void;

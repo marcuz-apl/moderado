@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {
   AgentEventListener,
+  HostEventListener,
   ApprovalDecision,
   ApprovalRequest,
   AssistantMessage,
@@ -19,6 +20,7 @@ import {
 } from '@moderado/contracts';
 import { Router, RouteSelectionOptions } from './router.js';
 import { PolicyManager } from './policy.js';
+import { HostEventStream } from './host_event_stream.js';
 
 export interface AgentRunOptions {
   workspaceRoot: string;
@@ -29,6 +31,7 @@ export interface AgentRunOptions {
   policy?: PolicyManager;
   routeOptions?: RouteSelectionOptions;
   eventListener?: AgentEventListener;
+  hostEventListener?: HostEventListener;
   signal?: AbortSignal;
   conversationHistory?: ChatMessage[];
   modelInventory?: ModelInventoryEntry[];
@@ -78,7 +81,8 @@ const PSEUDO_ANSWER_TOOLS = new Set([
 
 export class AgentLoop {
   async run(task: string, options: AgentRunOptions): Promise<AgentRunResult> {
-    const emit = options.eventListener ?? (() => {});
+    const hostStream = options.hostEventListener ? new HostEventStream(options.hostEventListener) : undefined;
+    const emit = (event: any): void => { options.eventListener?.(event); hostStream?.emit(event); };
     const policy = options.policy ?? new PolicyManager();
     const router = options.router ?? new Router();
     const signal = options.signal;
