@@ -237,7 +237,7 @@ on top of the stable CLI foundation.
 - Enable Homebrew, Scoop, winget, and AUR submissions only from verified artifacts.
 - Keep credentials out of development commits and require explicit release approval.
 
-### M7.4 — Provider expansion
+### M7.4 — Provider expansion ✅
 
 - Add provider adapters through the existing provider-independent contracts.
 - Extend model discovery, pricing metadata, capability classification, and routing.
