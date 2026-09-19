@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
 
 export interface ModeradoConfig {
   apiKey?: string;
@@ -10,6 +11,7 @@ export interface ModeradoConfig {
   activeConnectionId?: string;
   connections?: Record<string, ProviderConnection>;
   typescriptLanguageServer?: string;
+  mcpServers?: Record<string, McpServerConfig>;
 }
 
 export type ProviderConnectionKind = 'nvidia-nim' | 'openai-compatible';
@@ -52,6 +54,7 @@ export function loadConfig(customHome?: string): ModeradoConfig {
             ? parsed.activeConnectionId
             : undefined,
         connections: Object.keys(connections).length > 0 ? connections : undefined,
+        mcpServers: parseMcpServers(parsed.mcpServers),
         typescriptLanguageServer: typeof parsed.typescriptLanguageServer === 'string' ? parsed.typescriptLanguageServer : undefined,
       };
     }
@@ -59,6 +62,12 @@ export function loadConfig(customHome?: string): ModeradoConfig {
   } catch {
     return {};
   }
+}
+
+function parseMcpServers(value: unknown): Record<string, McpServerConfig> | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const servers = Object.entries(value as Record<string, unknown>).flatMap(([name, config]) => McpServerConfigSchema.safeParse(config).success && /^[a-z0-9_-]+$/i.test(name) ? [[name, McpServerConfigSchema.parse(config)]] : []);
+  return servers.length ? Object.fromEntries(servers) : undefined;
 }
 
 function parseConnections(value: unknown): Record<string, ProviderConnection> {

@@ -1,0 +1,4 @@
+import { IToolDefinition, McpServerConfig, ToolExecutionContext, ToolResult } from '@moderado/contracts';
+import { z } from 'zod';
+import { callMcpTool } from './mcp.js';
+export function createMcpTool(serverName:string, server:McpServerConfig, toolName:string):IToolDefinition<Record<string,unknown>> { if(!/^[a-z0-9_-]+$/i.test(serverName)||!/^[a-z0-9_-]+$/i.test(toolName)) throw new Error('MCP server and tool names must be alphanumeric, dash, or underscore.'); return {name:`mcp.${serverName}.${toolName}`,description:`Configured MCP tool ${toolName}.`,requiresApproval:true,parametersSchema:z.record(z.unknown()),async execute(params:Record<string,unknown>,_context:ToolExecutionContext):Promise<ToolResult>{try{return {toolName:`mcp.${serverName}.${toolName}`,status:'success',output:await callMcpTool(server,toolName,params)};}catch(err:any){return {toolName:`mcp.${serverName}.${toolName}`,status:'error',output:err.message};}}};}
