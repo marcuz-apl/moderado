@@ -10,7 +10,7 @@ import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
-import { connectProviderInteractive } from '../ui/provider_connect.js';
+import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
 import { promptInteractiveTurn, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
@@ -120,7 +120,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         return selection.modelId;
       },
       onConnect: async (drawFrame) => {
-        const connection = await connectProviderInteractive({ signal, drawFrame });
+        const connection = await connectProviderInteractive({ signal, drawFrame, savedConnections: config.connections, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
         if (!connection) return currentModel;
         const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
         saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
@@ -226,7 +226,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
     if (!provider) {
       process.stdout.write('\nNo provider is connected. Let\'s connect one before sending this task.\n');
-      const connection = await connectProviderInteractive({ signal });
+      const connection = await connectProviderInteractive({ signal, savedConnections: config.connections, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
       if (!connection) { process.stdout.write('No provider connected. Use /connect whenever you are ready.\n\n'); continue; }
       const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
       saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
@@ -258,7 +258,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
       // Move to the chat layout before the provider can emit its first event.
       redrawChatFrame();
-      const result = await loop.run(createAgentTask(trimmed, activeMode), {
+      const runAgent = () => loop.run(createAgentTask(trimmed, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
@@ -277,6 +277,18 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           if (paths.length) checkpoints.recordPostWrite(canonicalWorkspace, paths);
         },
       });
+      let result;
+      try {
+        result = await runAgent();
+      } catch (error) {
+        if (!activeConnection || !isAuthenticationFailure(error)) throw error;
+        process.stdout.write(`\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
+        const replacement = await replaceProviderKeyInteractive(activeConnection, { signal });
+        if (!replacement) throw error;
+        const secured = process.platform === 'win32' ? await storeConnectionCredential(replacement, credentialStore) : replacement;
+        saveConnection(secured); config = loadConfig(); activateConnection(secured);
+        result = await runAgent();
+      }
       conversationHistory = result.messages;
       if (result.usage) {
         let pricing: Record<string, string> | undefined;

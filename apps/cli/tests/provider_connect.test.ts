@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { buildConnection, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { buildConnection, findReusableConnection, isAuthenticationFailure, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+
+const openRouter = {
+  id: 'openrouter',
+  displayName: 'OpenRouter',
+  kind: 'openai-compatible' as const,
+  baseUrl: 'https://openrouter.ai/api/v1',
+  credentialReference: 'moderado/provider/openrouter',
+  defaultModel: 'openrouter/free',
+};
 
 describe('provider connection setup', () => {
   it('offers NVIDIA NIM, OpenRouter, and Agnes AI presets', () => {
@@ -10,6 +19,17 @@ describe('provider connection setup', () => {
       .toBe('https://openrouter.ai/api/v1');
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'agnes-ai')?.baseUrl)
       .toBe('https://apihub.agnes-ai.com/v1');
+  });
+
+  it('finds the saved profile for a named provider preset', () => {
+    expect(findReusableConnection('openrouter', { openrouter: openRouter })).toEqual(openRouter);
+    expect(findReusableConnection('agnes-ai', { openrouter: openRouter })).toBeUndefined();
+    expect(findReusableConnection('openai-compatible', { openrouter: openRouter })).toBeUndefined();
+  });
+
+  it('recognizes provider authentication failures without exposing a key', () => {
+    expect(isAuthenticationFailure(new Error('OpenRouter authentication failed (401) during chat'))).toBe(true);
+    expect(isAuthenticationFailure(new Error('request failed with status 429'))).toBe(false);
   });
 
   it('renders credential entry as a popup, masking secrets', () => {

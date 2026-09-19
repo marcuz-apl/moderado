@@ -13,6 +13,8 @@ export interface ConnectionInput {
 export interface PopupConnectionOptions {
   signal?: AbortSignal;
   drawFrame?: (popupLines: string[]) => void;
+  savedConnections?: Record<string, ProviderConnection>;
+  resolveSavedConnection?: (connection: ProviderConnection) => Promise<ProviderConnection>;
 }
 
 export interface ProviderPreset {
@@ -30,6 +32,16 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'OpenAI-compatible', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key and choose a model ID.' },
   { label: 'Other OpenAI-compatible provider', value: 'openai-compatible', description: 'Connect any compatible endpoint with its base URL, key, and model ID.' },
 ];
+
+export function findReusableConnection(preset: ProviderPreset['value'], connections?: Record<string, ProviderConnection>): ProviderConnection | undefined {
+  if (preset === 'openai-compatible') return undefined;
+  const id = preset === 'nvidia-nim' ? 'nvidia-nim' : preset;
+  return connections?.[id];
+}
+
+export function isAuthenticationFailure(error: unknown): boolean {
+  return error instanceof Error && /authentication failed \((401|403)\)/i.test(error.message);
+}
 
 export function renderConnectionPrompt(label: string, value: string, secret = false): string[] {
   const shown = secret ? '*'.repeat(value.length) : value;
@@ -117,6 +129,15 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   if (!selectedValue) return undefined;
 
   if (options.signal?.aborted) return undefined;
+  const saved = findReusableConnection(selectedValue as ProviderPreset['value'], options.savedConnections);
+  if (saved && options.resolveSavedConnection) {
+    try {
+      const resolved = await options.resolveSavedConnection(saved);
+      if (resolved.apiKey?.trim()) return resolved;
+    } catch {
+      // Continue to key entry when the credential service is unavailable.
+    }
+  }
   if (selectedValue === 'nvidia-nim') {
     const apiKey = await askPopupText('NVIDIA API key', options, true);
     if (!apiKey) return undefined;
@@ -131,4 +152,10 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   const defaultModel = await askPopupText('Default model ID', options);
   if (!baseUrl || !apiKey || !defaultModel) return undefined;
   return buildConnection({ kind: 'openai-compatible', displayName, baseUrl, apiKey, defaultModel });
+}
+
+/** Ask for a replacement key after a provider rejects its saved credential. */
+export async function replaceProviderKeyInteractive(connection: ProviderConnection, options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+  const apiKey = await askPopupText(`${connection.displayName} API key`, options, true);
+  return apiKey ? { ...connection, apiKey } : undefined;
 }
