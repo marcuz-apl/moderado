@@ -176,10 +176,15 @@ package.
 - Document release-artifact installation and the maintainer release
   prerequisites; public npm installation awaits an explicit publishing step.
 
-### M6.2 — Signed standalone binaries
+### M6.2 — Standalone binaries and checksums
 
-- Produce platform-specific Windows, macOS, and Linux artifacts with checksums
-  and versioned release notes.
+- Produce platform-specific Windows, macOS, and Linux artifacts from the
+  verified CLI runtime using `@yao-pkg/pkg`.
+- Generate SHA-256 checksum files and a versioned release manifest for every
+  artifact.
+- Build and smoke-test the artifacts through the existing release workflow.
+- Label M6.2 artifacts unsigned; certificate-backed code signing is a separate
+  maintainer-controlled release step.
 - Add a checksum-verifying install script only after those artifacts exist.
 
 ### M6.3 — Package-manager channels
