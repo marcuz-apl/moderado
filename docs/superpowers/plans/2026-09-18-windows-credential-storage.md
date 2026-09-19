@@ -19,7 +19,7 @@
 ### Task 2: Windows Credential Manager implementation
 
 - [ ] Write failing tests for command construction, no-shell policy, and errors without secret leakage.
-- [ ] Implement fixed `cmdkey` invocation with hidden windows and redacted errors.
+- [ ] Implement a fixed PowerShell/C# Credential Manager bridge using `CredRead`, `CredWrite`, and `CredDelete`; pass secrets through standard input and redact errors.
 - [ ] Run focused tests without calling the real vault.
 
 ### Task 3: Configuration migration and composition

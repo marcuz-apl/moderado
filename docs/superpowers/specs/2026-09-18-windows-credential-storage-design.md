@@ -9,7 +9,7 @@ Keep provider API keys out of Moderado configuration files on Windows while reta
 
 ## Design
 
-`apps/cli` defines a `CredentialStore` interface with read, write, and delete operations. A Windows implementation invokes Credential Manager through `cmdkey` using fixed argument arrays, hidden windows, and scrubbed output. Tests use an in-memory fake store.
+`apps/cli` defines a `CredentialStore` interface with read, write, and delete operations. A Windows implementation invokes Credential Manager through a fixed PowerShell/C# bridge around the native `CredRead`, `CredWrite`, and `CredDelete` APIs. The bridge returns a key only over standard output to the parent process, which never logs it. Tests use an in-memory fake store.
 
 Configuration retains provider metadata and an optional credential reference, never a secure-store value. Resolution order is environment variable, secure-store reference, then a legacy plaintext config key. Legacy values remain readable only for migration. A successful migration writes the key to the store, removes the plaintext key from config atomically, and reports only that migration completed.
 
@@ -19,7 +19,7 @@ During `/connect`, Moderado writes the selected provider key to the credential s
 
 ## Security
 
-No command output, diagnostic output, exception, session export, or configuration rendering may contain an API key. The process always uses `shell: false`; password values are passed only to the OS credential command and never through a shell. A failed write leaves the legacy configuration unchanged.
+No command output, diagnostic output, exception, session export, or configuration rendering may contain an API key. The bridge runs through a fixed PowerShell invocation with no user-controlled command text; password values are supplied through standard input and never through a shell command line. A failed write leaves the legacy configuration unchanged.
 
 ## Testing
 
