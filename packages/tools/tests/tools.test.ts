@@ -239,10 +239,10 @@ describe('Workspace Tools Suite', () => {
   });
 
   describe('ToolRegistry', () => {
-    it('registers all 9 tools and exports JSON schema declarations', () => {
+    it('registers all 11 tools and exports JSON schema declarations', () => {
       const registry = createDefaultToolRegistry();
       const tools = registry.list();
-      expect(tools.length).toBe(9);
+      expect(tools.length).toBe(11);
 
       expect(registry.get('read_file')).toBeDefined();
       expect(registry.get('write_file')).toBeDefined();
@@ -253,9 +253,11 @@ describe('Workspace Tools Suite', () => {
       expect(registry.get('apply_patch')).toBeDefined();
       expect(registry.get('git_diff')).toBeDefined();
       expect(registry.get('run_diagnostics')).toBeDefined();
+      expect(registry.get('get_definition')).toBeDefined();
+      expect(registry.get('find_references')).toBeDefined();
 
       const declarations = registry.getDeclarations();
-      expect(declarations.length).toBe(9);
+      expect(declarations.length).toBe(11);
       const readDecl = declarations.find((d) => d.name === 'read_file');
       expect(readDecl?.parameters).toBeDefined();
       expect((readDecl?.parameters as any).type).toBe('object');

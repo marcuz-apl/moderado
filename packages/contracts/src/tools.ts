@@ -34,6 +34,14 @@ export interface IToolRegistry {
   getDeclarations(): ProviderToolDeclaration[];
 }
 
+export const SourcePositionSchema = z.object({ path: z.string().min(1), line: z.number().int().positive(), column: z.number().int().positive() });
+export type SourcePosition = z.infer<typeof SourcePositionSchema>;
+export const SourceLocationSchema = SourcePositionSchema.extend({ endLine: z.number().int().positive().optional(), endColumn: z.number().int().positive().optional(), preview: z.string().max(500).optional() });
+export type SourceLocation = z.infer<typeof SourceLocationSchema>;
+export const GetDefinitionParamsSchema = SourcePositionSchema;
+export type GetDefinitionParams = z.infer<typeof GetDefinitionParamsSchema>;
+export const FindReferencesParamsSchema = SourcePositionSchema;
+export type FindReferencesParams = z.infer<typeof FindReferencesParamsSchema>;
 export const DiagnosticSeveritySchema = z.enum(['error', 'warning', 'info']);
 export type DiagnosticSeverity = z.infer<typeof DiagnosticSeveritySchema>;
 export const DiagnosticSchema = z.object({ severity: DiagnosticSeveritySchema, message: z.string().min(1), file: z.string().min(1).optional(), line: z.number().int().positive().optional(), column: z.number().int().positive().optional(), code: z.string().min(1).optional() });

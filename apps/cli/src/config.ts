@@ -9,6 +9,7 @@ export interface ModeradoConfig {
   allowUnknown?: boolean;
   activeConnectionId?: string;
   connections?: Record<string, ProviderConnection>;
+  typescriptLanguageServer?: string;
 }
 
 export type ProviderConnectionKind = 'nvidia-nim' | 'openai-compatible';
@@ -51,6 +52,7 @@ export function loadConfig(customHome?: string): ModeradoConfig {
             ? parsed.activeConnectionId
             : undefined,
         connections: Object.keys(connections).length > 0 ? connections : undefined,
+        typescriptLanguageServer: typeof parsed.typescriptLanguageServer === 'string' ? parsed.typescriptLanguageServer : undefined,
       };
     }
     return {};

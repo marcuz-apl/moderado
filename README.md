@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.2.0%2B2609198-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.2.0%2B2609199-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -149,3 +149,7 @@ Use `/workflow` from the TUI to work through a change safely:
 ### Diagnostics evidence
 
 Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or JavaScript workspace. It may run only the direct `typecheck`, `lint`, or `test` script defined in that workspace’s `package.json`, and every run requires approval. A non-zero exit returns parsed TypeScript errors as repair evidence; it does not bypass the safety boundary.
+
+### TypeScript language intelligence
+
+Install `typescript-language-server` yourself, then set `typescriptLanguageServer` in `~/.moderado/config.json` to its executable path. Moderado can then use read-only definition and reference lookup for TypeScript/JavaScript files. When the executable is unavailable, it reports how to configure it and leaves normal tools available.

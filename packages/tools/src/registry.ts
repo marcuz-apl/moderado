@@ -12,6 +12,7 @@ import { RunCommandTool } from './tools/run_command.js';
 import { GitDiffTool } from './tools/git_diff.js';
 import { ApplyPatchTool } from './tools/apply_patch.js';
 import { RunDiagnosticsTool } from './tools/run_diagnostics.js';
+import { FindReferencesTool, GetDefinitionTool } from './tools/language_intelligence.js';
 
 export class ToolRegistry implements IToolRegistry {
   private readonly tools = new Map<string, IToolDefinition<any>>();
@@ -138,5 +139,7 @@ export function createDefaultToolRegistry(): IToolRegistry {
   registry.register(GitDiffTool);
   registry.register(ApplyPatchTool);
   registry.register(RunDiagnosticsTool);
+  registry.register(GetDefinitionTool);
+  registry.register(FindReferencesTool);
   return registry;
 }

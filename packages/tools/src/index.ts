@@ -15,3 +15,6 @@ export * from './tools/git_diff.js';
 
 export * from './diagnostics.js';
 export * from './tools/run_diagnostics.js';
+
+export * from './lsp.js';
+export * from './tools/language_intelligence.js';

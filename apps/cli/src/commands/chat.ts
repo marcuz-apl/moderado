@@ -66,6 +66,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     });
   let sessionTokens = activeSession.usage.totalTokens;
   let isFirst = true;
+  if (config.typescriptLanguageServer) process.env.MODERADO_TYPESCRIPT_LANGUAGE_SERVER = config.typescriptLanguageServer;
   const tools = createDefaultToolRegistry();
   const terminalApproval = new TerminalApprovalHandler();
   const checkpoints = new WorkspaceCheckpointStore();

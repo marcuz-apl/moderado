@@ -17,6 +17,7 @@ import {
   RunCommandParamsSchema,
   RunDiagnosticsParamsSchema,
   DiagnosticSchema,
+  SourcePositionSchema,
   GitDiffParamsSchema,
   ApprovalRequestSchema,
   ApprovalDecisionSchema,
@@ -167,6 +168,11 @@ describe('Contracts: 7 Tool Parameter Schemas', () => {
     expect(parsed.command).toBe('npm');
     expect(parsed.args).toEqual(['test']);
     expect(parsed.timeoutSeconds).toBe(60);
+  });
+
+  it('validates language intelligence positions', () => {
+    expect(SourcePositionSchema.parse({ path: 'src/a.ts', line: 1, column: 1 }).path).toBe('src/a.ts');
+    expect(() => SourcePositionSchema.parse({ path: 'src/a.ts', line: 0, column: 1 })).toThrow();
   });
 
   it('validates diagnostics parameters', () => {

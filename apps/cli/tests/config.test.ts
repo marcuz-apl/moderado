@@ -90,4 +90,8 @@ describe('CLI Configuration Storage', () => {
       defaultModel: 'meta/llama',
     });
   });
+  it('loads an optional TypeScript language server executable', () => {
+    saveConfig({ typescriptLanguageServer: 'typescript-language-server' }, tempDir);
+    expect(loadConfig(tempDir).typescriptLanguageServer).toBe('typescript-language-server');
+  });
 });
