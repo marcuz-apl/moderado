@@ -237,7 +237,7 @@ traceability.
 - Add a shared OpenAI-compatible adapter through provider-independent contracts.
 - Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
 
-### M7.5 — MCP CLI management and release gate
+### M7.5 — MCP CLI management and release gate ?
 
 - Add `/mcp` discovery, server status, add, disable, enable, and remove controls.
 - Keep local stdio MCP servers explicit, approval-gated, and unable to bypass core policy.
