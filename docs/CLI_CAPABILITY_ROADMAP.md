@@ -255,6 +255,27 @@ traceability.
 - Focused MCP/TUI tests, the full offline suite, the TypeScript build, the
   manual popup flow, and `git diff --check` all pass.
 
+### M7.6 — Real-time web answers ✅
+
+- Search hosted provider sites (Exa first, then Parallel) with no credential
+  requirement, while keeping a configured custom endpoint as the first choice.
+- Bound every search attempt with a timeout, validate MCP JSON and SSE payloads,
+  cap the injected context, and keep `Title:`/`URL:` citations as tool metadata.
+- Detect current-information questions and search before provider inference so the
+  answer costs one inference round trip; without a connected provider, print the
+  bounded search result instead of a capability apology.
+- Keep `web_search` automatic without a per-search approval while `run_command`
+  network access stays approval-gated.
+
+#### M7.6 completion criteria
+
+- Offline tests cover search-site ordering, fallback, timeout, payload parsing,
+  citation extraction, context bounding, and question detection through injected
+  fetch implementations; no automated test contacts a live search site.
+- The full offline suite, the TypeScript build, and `git diff --check` pass.
+- `docs/TOOLS.md`, `docs/ROUTING.md`, and `docs/SECURITY.md` describe the search
+  sites, configuration keys, and the untrusted-context trust boundary.
+
 ### M7 acceptance criteria
 
 - Internet access is available only through declared, approval-gated tools.

@@ -12,6 +12,10 @@ export interface ModeradoConfig {
   activeConnectionId?: string;
   connections?: Record<string, ProviderConnection>;
   typescriptLanguageServer?: string;
+  /** HTTPS endpoint that returns `{ results: [{ title, url, snippet? }] }`. */
+  webSearchEndpoint?: string;
+  /** Preferred search site: `exa` (default), `parallel`, or a `custom` endpoint. */
+  webSearchProvider?: 'exa' | 'parallel' | 'custom';
   mcpServers?: Record<string, McpServerConfig>;
 }
 
@@ -58,6 +62,8 @@ export function loadConfig(customHome?: string): ModeradoConfig {
         connections: Object.keys(connections).length > 0 ? connections : undefined,
         mcpServers: parseMcpServers(parsed.mcpServers),
         typescriptLanguageServer: typeof parsed.typescriptLanguageServer === 'string' ? parsed.typescriptLanguageServer : undefined,
+        webSearchEndpoint: typeof parsed.webSearchEndpoint === 'string' ? parsed.webSearchEndpoint : undefined,
+        webSearchProvider: parsed.webSearchProvider === 'exa' || parsed.webSearchProvider === 'parallel' || parsed.webSearchProvider === 'custom' ? parsed.webSearchProvider : undefined,
       };
     }
     return {};

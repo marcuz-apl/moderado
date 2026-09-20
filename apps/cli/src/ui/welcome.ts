@@ -341,6 +341,8 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1mTab\x1b[0m          Toggle between [Plan] and [Execute] mode',
     '\x1b[1mShift+Tab\x1b[0m    Toggle Auto-approval on / off for actions',
     '\x1b[1mCtrl+C\x1b[0m       Cancel active inference or exit session',
+    '\x1b[1mLeft/Right\x1b[0m   Move the caret inside the bottom input line',
+    '\x1b[1mMouse click\x1b[0m  Place the caret on the input line',
     '',
     `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,
     `\x1b[38;5;245mVersion:\x1b[0m    \x1b[1;38;5;75m${version}\x1b[0m`,
@@ -380,7 +382,7 @@ export function exitCleanly(message: string): never {
   const stdout = process.stdout;
   if (stdout.isTTY) {
     stdout.write(
-      '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + renderExitMessage(message)
+      MOUSE_REPORT_OFF + '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + renderExitMessage(message)
     );
   } else {
     stdout.write(renderExitMessage(message));
@@ -437,6 +439,16 @@ function isMcpCommandInput(value: string): boolean {
   return command === '/mcp' || command.startsWith('/mcp ');
 }
 
+/**
+ * SGR mouse report, e.g. "\x1b[<0;12;5M" for a primary-button press on column 12
+ * of row 5. readline splits that escape into several keypress events ("0", ";",
+ * "5", "M"), so the raw data chunk is parsed instead of the derived keystrokes.
+ */
+const MOUSE_REPORT_PATTERN = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
+const MOUSE_REPORT_ON = '\x1b[?1000h\x1b[?1006h';
+const MOUSE_REPORT_OFF = '\x1b[?1000l\x1b[?1006l';
+
+
 export async function promptInteractiveTurn(
   options: PromptInteractiveTurnOptions
 ): Promise<InteractiveTurnResult> {
@@ -447,10 +459,22 @@ export async function promptInteractiveTurn(
   let currentMode: 'Plan' | 'Execute' = options.initialMode ?? 'Execute';
   let currentAutoApprove = options.initialAutoApprove ?? false;
   let input = '';
+  /** Caret index inside `input` (0 .. input.length) - the composer is editable. */
+  let caret = 0;
+  /** True while keypress events derived from a mouse report are being dropped. */
+  let ignoreComposerKeypress = false;
+  /** Terminal height, with the same fallback the renderer uses. */
+  const getRows = (): number => stdout.rows || 24;
   let commandSelection = 0;
   const questionHistory = options.questionHistory ?? [];
   let questionHistoryIndex = questionHistory.length;
   let questionHistoryDraft = '';
+
+  /** Replace the composer text, leaving the caret at the end of the new value. */
+  const setInput = (value: string): void => {
+    input = value;
+    caret = value.length;
+  };
 
   const getOptions = (): WelcomeLayoutOptions => ({
     model: currentModel,
@@ -495,12 +519,25 @@ export async function promptInteractiveTurn(
     return matching.length > 0 ? matching.length + 2 : 0;
   };
 
-  /** Move cursor to the ❯ input line (Line 2 inside the centered card). */
+  /** Rows between the painted composer line and the terminal's last row. */
+  const getComposerOffset = (): number => getWelcomeBottomPadding(getOptions(), getRows()) + 4 + getExtraLines();
+
+  /** Screen row and 1-based column of the composer's first text cell. */
+  const getComposerAnchor = (): { row: number; column: number } => ({
+    row: getRows() - getComposerOffset(),
+    column: getWelcomeIndent(getWelcomeCardWidth()) + 3,
+  });
+
+
+  /**
+   * Move cursor to the ❯ input line (Line 2 inside the centered card).
+   * Absolute addressing (`row;column H`) works no matter where the cursor
+   * currently sits — relative "move up N" escapes the input line when
+   * pressed repeatedly, e.g. browsing history with Left/Right.
+   */
   const positionCursorOnInput = () => {
-    const cardIndent = getWelcomeIndent(getWelcomeCardWidth());
-    const cursorCol = cardIndent + 2 + input.length;
-    const moveUp = getWelcomeBottomPadding(getOptions(), stdout.rows) + 4 + getExtraLines();
-    stdout.write(`\x1b[1 q\x1b[?25h\x1b[${moveUp}A\r\x1b[${cursorCol}C`);
+    const { row, column } = getComposerAnchor();
+    stdout.write(`\x1b[1 q\x1b[?25h\x1b[${row};${column + caret}H`);
   };
 
   /** Full-screen redraw: clear everything, repaint welcome TUI, reposition cursor. */
@@ -516,6 +553,31 @@ export async function promptInteractiveTurn(
   };
 
   const onResize = () => redrawFull();
+
+  /**
+   * Place the caret where the user clicked on the composer line. Only a primary
+   * press is honoured; releases, drags, wheel and other buttons are ignored.
+   */
+  const onMouseData = (chunk: string | Buffer): void => {
+    const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
+    let reported = false;
+    for (const report of text.matchAll(MOUSE_REPORT_PATTERN)) {
+      reported = true;
+      if (report[4] !== 'M' || Number(report[1]) !== 0) continue;
+      const { row, column } = getComposerAnchor();
+      if (Number(report[3]) !== row) continue;
+      caret = Math.max(0, Math.min(input.length, Number(report[2]) - column));
+      positionCursorOnInput();
+    }
+    if (reported) {
+      // readline turns the same bytes into keypress events ("0", ";", "5", "M").
+      ignoreComposerKeypress = true;
+      setImmediate(() => { ignoreComposerKeypress = false; });
+    }
+  };
+  // Registered before readline's decoder so a report is consumed before it is
+  // mistaken for typed text.
+  stdin.prependListener('data', onMouseData);
   stdout.on('resize', onResize);
 
   // Initial paint
@@ -531,9 +593,10 @@ export async function promptInteractiveTurn(
 
   return new Promise((resolve) => {
     const cleanup = () => {
-      stdin.removeListener('keypress', onKeypress);
+      unbindComposerInput();
+      stdin.removeListener('data', onMouseData);
       stdout.removeListener('resize', onResize);
-      stdout.write('\x1b[0 q\x1b[?25h');
+      stdout.write(`${MOUSE_REPORT_OFF}\x1b[0 q\x1b[?25h`);
       if (stdin.isTTY) {
         try { stdin.setRawMode(false); } catch { /* ignore */ }
       }
@@ -556,6 +619,9 @@ export async function promptInteractiveTurn(
     const onKeypress = (str: string, key: any) => {
       void (async () => {
 
+        // Keystrokes decoded from a mouse report were already handled above.
+        if (ignoreComposerKeypress) return;
+
         if (options.signal?.aborted) {
           cleanup();
           resolve({ text: '', mode: currentMode, autoApprove: currentAutoApprove });
@@ -572,8 +638,8 @@ export async function promptInteractiveTurn(
         // Triggered when Enter is pressed with "/help" already in the input box.
         // We keep the main TUI as background and layer the help box on top.
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/help') {
-          input = '';
-          stdin.removeListener('keypress', onKeypress); // pause main handler
+          setInput('');
+          unbindComposerInput(); // pause main handler
 
           // Paint: full welcome TUI (background) + help box on top
           const helpLines = renderHelpPopupBox(options.version ?? 'v0.1', options.workspace);
@@ -600,7 +666,7 @@ export async function promptInteractiveTurn(
           stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();
 
-          stdin.on('keypress', onKeypress); // re-attach main handler
+          bindComposerInput(); // re-attach main handler
           return;
         }
 
@@ -613,8 +679,8 @@ export async function promptInteractiveTurn(
         // the background because every step redraws the whole frame.
         // After it returns, we repaint the full welcome TUI and reposition cursor.
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/model') {
-          input = '';
-          stdin.removeListener('keypress', onKeypress); // pause main handler
+          setInput('');
+          unbindComposerInput(); // pause main handler
 
           if (options.onModelSelect) {
             const drawFrame = (popupLines: string[]): void => {
@@ -634,13 +700,13 @@ export async function promptInteractiveTurn(
           stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();
 
-          stdin.on('keypress', onKeypress); // re-attach main handler
+          bindComposerInput(); // re-attach main handler
           return;
         }
 
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/connect') {
-          input = '';
-          stdin.removeListener('keypress', onKeypress);
+          setInput('');
+          unbindComposerInput();
 
           const drawFrame = (popupLines: string[]): void => {
             stdout.write('\x1b[H\x1b[J');
@@ -658,14 +724,14 @@ export async function promptInteractiveTurn(
           stdout.write('\x1b[H\x1b[J');
           stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();
-          stdin.on('keypress', onKeypress);
+          bindComposerInput();
           return;
         }
 
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/session')) {
           const command = input.trim();
-          input = '';
-          stdin.removeListener('keypress', onKeypress);
+          setInput('');
+          unbindComposerInput();
           if (options.onSession) {
             await options.onSession(command, (popupLines) => {
               stdout.write('\x1b[H\x1b[J');
@@ -678,14 +744,14 @@ export async function promptInteractiveTurn(
           stdout.write('\x1b[H\x1b[J');
           stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();
-          stdin.on('keypress', onKeypress);
+          bindComposerInput();
           return;
         }
 
         if (key && (key.name === 'return' || key.name === 'enter') && isMcpCommandInput(input)) {
           const command = input.trim();
-          input = '';
-          stdin.removeListener('keypress', onKeypress);
+          setInput('');
+          unbindComposerInput();
           if (options.onMcp) {
             await options.onMcp(command, (popupLines) => {
               stdout.write('\x1b[H\x1b[J');
@@ -697,21 +763,21 @@ export async function promptInteractiveTurn(
           stdin.resume();
           stdin.setRawMode(true);
           redrawFull();
-          stdin.on('keypress', onKeypress);
+          bindComposerInput();
           return;
         }
 
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/workflow')) {
-          const command = input.trim(); input = ''; stdin.removeListener('keypress', onKeypress);
+          const command = input.trim(); setInput(''); unbindComposerInput();
           const action = options.onWorkflow ? await options.onWorkflow(command, (popupLines) => { stdout.write('\x1b[H\x1b[J'); stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows)); }) : undefined;
           if (action === 'build') { cleanup(); resolve({ text: '', mode: 'Execute', autoApprove: currentAutoApprove, workflowAction: 'build' }); return; }
-          readlineModule.emitKeypressEvents(stdin); stdin.resume(); stdin.setRawMode(true); redrawFull(); stdin.on('keypress', onKeypress); return;
+          readlineModule.emitKeypressEvents(stdin); stdin.resume(); stdin.setRawMode(true); redrawFull(); bindComposerInput(); return;
         }
 
 
         // ── /clear ────────────────────────────────────────────────────────────
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/clear') {
-          input = '';
+          setInput('');
           options.onClear?.();
           redrawFull();
           return;
@@ -728,7 +794,8 @@ export async function promptInteractiveTurn(
         // ── Normal keys ───────────────────────────────────────────────────────
         if (!key) {
           if (str && str.length === 1 && str.charCodeAt(0) >= 32) {
-            input += str;
+            input = input.slice(0, caret) + str + input.slice(caret);
+            caret += 1;
             redrawCard();
           }
           return;
@@ -746,7 +813,7 @@ export async function promptInteractiveTurn(
           if (input.startsWith('/')) {
             const matching = getMatchingCommands(input);
             if (matching.length > 0) {
-              input = matching[Math.min(commandSelection, matching.length - 1)].name;
+              setInput(matching[Math.min(commandSelection, matching.length - 1)].name);
               commandSelection = 0;
               redrawCard();
               return;
@@ -769,7 +836,7 @@ export async function promptInteractiveTurn(
         if (!input.startsWith('/') && (key.name === 'up' || key.name === 'down') && questionHistory.length > 0) {
           if (questionHistoryIndex === questionHistory.length) questionHistoryDraft = input;
           const recalled = navigateQuestionHistory(questionHistory, key.name === 'up' ? -1 : 1, questionHistoryIndex, questionHistoryDraft);
-          input = recalled.input;
+          setInput(recalled.input);
           questionHistoryIndex = recalled.index;
           redrawCard();
           return;
@@ -779,7 +846,7 @@ export async function promptInteractiveTurn(
         if (key.name === 'return' || key.name === 'enter') {
           const matching = getMatchingCommands(input);
           if (input.startsWith('/') && matching.length > 0 && !matching.some((command) => command.name === input.trim())) {
-            input = matching[Math.min(commandSelection, matching.length - 1)].name;
+            setInput(matching[Math.min(commandSelection, matching.length - 1)].name);
             commandSelection = 0;
             redrawCard();
             return;
@@ -793,10 +860,27 @@ export async function promptInteractiveTurn(
           return;
         }
 
+        // Caret movement (cursor-only hop) and forward delete (repaint: the
+        // line shrank, so the old trailing character must be cleared).
+        if (key.name === 'left' || key.name === 'right' || key.name === 'delete') {
+          if (key.name === 'left') {
+            caret = Math.max(0, caret - 1);
+            positionCursorOnInput();
+          } else if (key.name === 'right') {
+            caret = Math.min(input.length, caret + 1);
+            positionCursorOnInput();
+          } else if (caret < input.length) {
+            input = input.slice(0, caret) + input.slice(caret + 1);
+            redrawCard();
+          }
+          return;
+        }
+
         // Backspace
         if (key.name === 'backspace') {
-          if (input.length > 0) {
-            input = input.slice(0, -1);
+          if (caret > 0) {
+            input = input.slice(0, caret - 1) + input.slice(caret);
+            caret = Math.max(0, caret - 1);
             commandSelection = 0;
             redrawCard();
           }
@@ -805,7 +889,8 @@ export async function promptInteractiveTurn(
 
         // Printable character
         if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key.ctrl && !key.meta) {
-          input += str;
+          input = input.slice(0, caret) + str + input.slice(caret);
+          caret += 1;
           commandSelection = 0;
           questionHistoryIndex = questionHistory.length;
           redrawCard();
@@ -814,7 +899,22 @@ export async function promptInteractiveTurn(
       })();
     };
 
-    stdin.on('keypress', onKeypress);
+    /**
+     * Mouse reporting is only useful while the composer owns the keyboard: a
+     * click on the composer line places the caret. Popups and sub-prompts take
+     * the keyboard over with mouse reporting off, so they keep the terminal's
+     * normal text selection, and clicks never leak into their filter fields.
+     */
+    const bindComposerInput = (): void => {
+      stdout.write(MOUSE_REPORT_ON);
+      stdin.on('keypress', onKeypress);
+    };
+    const unbindComposerInput = (): void => {
+      stdin.removeListener('keypress', onKeypress);
+      stdout.write(MOUSE_REPORT_OFF);
+    };
+
+    bindComposerInput();
   });
 }
 

@@ -100,6 +100,17 @@ describe('CLI Configuration Storage', () => {
     expect(loadConfig(tempDir).typescriptLanguageServer).toBe('typescript-language-server');
   });
 
+  it('loads an optional web-search endpoint', () => {
+    saveConfig({ webSearchEndpoint: 'https://search.example.test/api' }, tempDir);
+    expect(loadConfig(tempDir).webSearchEndpoint).toBe('https://search.example.test/api');
+  });
+  it('loads a preferred web-search provider', () => {
+    saveConfig({ webSearchProvider: 'parallel' }, tempDir);
+    expect(loadConfig(tempDir).webSearchProvider).toBe('parallel');
+  });
+
+
+
   it('migrates legacy plaintext credentials only after every secure write succeeds', async () => {
     saveConnection({ id: 'openrouter', displayName: 'OpenRouter', kind: 'openai-compatible', baseUrl: 'https://openrouter.ai/api/v1', apiKey: 'sk-legacy' }, tempDir);
     const store = new MemoryCredentialStore();

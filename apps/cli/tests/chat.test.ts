@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import * as chatCommands from '../src/commands/chat.js';
-import { createAgentTask, createMcpToolRegistry, decideApproval, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply } from '../src/commands/chat.js';
+import { buildSearchAnswerTask, createAgentTask, createMcpToolRegistry, decideApproval, formatDirectWebSearchAnswer, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply, replaceEvidenceTurn, resolveWebSearchEndpoint, resolveWebSearchProvider, shouldFastRouteWebSearch } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
-import { ApprovalRequest } from '@moderado/contracts';
+import { ApprovalRequest, ChatMessage } from '@moderado/contracts';
 
 describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   let tempDir: string;
@@ -196,6 +196,70 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['git', 'status'] } } as any)).toBe(false);
     expect(isNetworkConsentReply('yes', 'Would you like me to look up the weather online?')).toBe(true);
     expect(isNetworkConsentReply('yes', 'Here is your answer.')).toBe(false);
+  });
+
+  it('fast-routes current-information questions but leaves ordinary questions to the model', () => {
+    expect(shouldFastRouteWebSearch("What's the weather today?")).toBe(true);
+    expect(shouldFastRouteWebSearch('What is the temperature in Berlin right now?')).toBe(true); expect(shouldFastRouteWebSearch('Any news about the release?')).toBe(true);
+    expect(shouldFastRouteWebSearch('Explain how this function works.')).toBe(false); expect(shouldFastRouteWebSearch('Where can I find the docs?')).toBe(false); expect(shouldFastRouteWebSearch('Refactor the current router.')).toBe(false);
+  });
+
+  it('prefers an explicit web-search endpoint environment setting', () => {
+    const original = process.env.MODERADO_WEB_SEARCH_ENDPOINT;
+    process.env.MODERADO_WEB_SEARCH_ENDPOINT = 'https://environment.example.test/search';
+    expect(resolveWebSearchEndpoint({ webSearchEndpoint: 'https://config.example.test/search' })).toBe('https://environment.example.test/search');
+    if (original === undefined) delete process.env.MODERADO_WEB_SEARCH_ENDPOINT;
+    else process.env.MODERADO_WEB_SEARCH_ENDPOINT = original;
+  });
+
+  it('formats raw provider results into a readable fallback without block metadata', () => {
+    const digest = formatDirectWebSearchAnswer({ toolName: 'web_search', status: 'success', output: 'Title: Weather\nURL: https://example.test/weather\nPublished: N/A\nHighlights:\n# Weather for Calgary\nClear sky. High 24.3°C (76°F).\n---\nhttps://example.test/other' });
+    expect(digest).toContain('Clear sky. High 24.3°C (76°F).');
+    expect(digest).not.toContain('https://example.test/weather');
+    expect(digest).not.toContain('Title:');
+    expect(digest).not.toContain('#');
+    expect(digest).toContain('raw search excerpt');
+    expect(formatDirectWebSearchAnswer({ toolName: 'web_search', status: 'success', output: 'URL: https://example.test/only' })).toBe('Web search returned no readable content.');
+    expect(formatDirectWebSearchAnswer({ toolName: 'web_search', status: 'error', output: 'Search endpoint returned HTTP 500.' })).toContain('Web search failed');
+  });
+  it('prefers the configured search provider and ignores unknown values', () => {
+    const original = process.env.MODERADO_WEB_SEARCH_PROVIDER;
+    process.env.MODERADO_WEB_SEARCH_PROVIDER = 'parallel';
+    expect(resolveWebSearchProvider({ webSearchProvider: 'exa' })).toBe('parallel');
+    delete process.env.MODERADO_WEB_SEARCH_PROVIDER;
+    expect(resolveWebSearchProvider({ webSearchProvider: 'exa' })).toBe('exa');
+    expect(resolveWebSearchProvider({ webSearchProvider: 'nope' as never })).toBeUndefined();
+    if (original !== undefined) process.env.MODERADO_WEB_SEARCH_PROVIDER = original;
+  });
+
+  it('turns live search evidence into a single answering turn', () => {
+    const evidence = buildSearchAnswerTask('What is the weather today?', { toolName: 'web_search', status: 'success', output: 'Overcast, 57F.', metadata: { provider: 'exa', sources: [{ title: 'Weather', url: 'https://example.test/weather' }] } });
+    expect(evidence).toContain('exa');
+    expect(evidence).toContain('Overcast, 57F.');
+    expect(evidence).toContain('untrusted reference data');
+    expect(evidence).toContain('Answer with the facts only');
+    expect(evidence).toContain('Never print URLs');
+    expect(evidence).toContain('3 to 6 short bullets');
+    expect(evidence).toContain('Answer only the question below');
+
+    const failed = buildSearchAnswerTask('What is the weather today?', { toolName: 'web_search', status: 'error', output: 'Web search failed (exa: timed out after 20000ms).' });
+    expect(failed).toContain('Call the web_search tool once');
+    expect(failed).toContain('timed out after 20000ms');
+  });
+
+
+
+  it('keeps the asked question in the transcript instead of the injected search evidence', () => {
+    const evidence = buildSearchAnswerTask('What is the weather in Calgary today?', { toolName: 'web_search', status: 'success', output: 'Overcast, 7C.' });
+    const produced: ChatMessage[] = [
+      { role: 'user', content: evidence },
+      { role: 'assistant', content: 'Currently in Calgary: 7C.' },
+    ];
+    expect(replaceEvidenceTurn(produced, evidence, 'What is the weather in Calgary today?')).toEqual([
+      { role: 'user', content: 'What is the weather in Calgary today?' },
+      { role: 'assistant', content: 'Currently in Calgary: 7C.' },
+    ]);
+    expect(replaceEvidenceTurn([{ role: 'assistant', content: 'hello' }], evidence, 'who are you?')).toEqual([{ role: 'assistant', content: 'hello' }]);
   });
 
   it('does not auto-approve an MCP tool when general auto-approve is enabled', async () => {

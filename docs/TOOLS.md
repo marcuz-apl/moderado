@@ -9,12 +9,22 @@
 
 ## 1. Overview & General Constraints
 
-Moderado equips the agent with bounded workspace tools plus the approval-gated `web_search` tool. Every tool call:
+Moderado equips the agent with bounded workspace tools plus the automatic `web_search` tool. Every tool call:
 - Receives a strongly-typed argument payload validated via runtime schemas.
 - Executes within the canonical workspace jail.
-- Is subjected to per-action approval policies before execution.
+- Is subjected to per-action approval policies before execution, except for bounded `web_search` calls.
 
-`web_search` only calls a user-configured HTTPS endpoint (or localhost in development), limits results, validates titles and URLs, and returns source links. It does not grant general internet access or execute commands.
+`web_search` searches the live web and returns ready-to-use content, with source URLs preserved as tool metadata. It only contacts HTTPS endpoints (or localhost in development), bounds every attempt with a timeout, validates the payload shape, caps the injected context, and never executes commands. Hosted search sites need no credential, and a failing site degrades to the next one instead of failing the question:
+
+| Order | Search site | Endpoint | Notes |
+|---|---|---|---|
+| 1 | Exa | `https://mcp.exa.ai/mcp` | Default site; returns current-event context. `EXA_API_KEY` is optional and only raises limits. |
+| 2 | Parallel | `https://search.parallel.ai/mcp` | Fallback site. `PARALLEL_API_KEY` is optional and only raises limits. |
+| 3 | Custom | `MODERADO_WEB_SEARCH_ENDPOINT` or `webSearchEndpoint` | Moves to the front when configured; must return `{ "results": [{ "title", "url", "snippet?" }] }`. |
+
+`MODERADO_WEB_SEARCH_PROVIDER` or `webSearchProvider` (`exa`, `parallel`, or `custom`) moves a site to the front while the remaining sites stay as fallback. The model supplies only `query`, an optional `objective`, optional `maxResults`, and an advanced `endpoint` override; operator configuration supplies everything else.
+
+Questions about changing public information such as weather, current scores, news, prices, schedules, and traffic search before provider inference. Moderado collects evidence first, then answers in a single model turn shaped for reading: one context line naming the subject with its place or date, then 3–6 short bullets of concrete values with units. That turn is explicitly forbidden from printing URLs, page titles, site names, or search narration, so the user reads the answer instead of the retrieval. Source URLs stay in tool metadata for clients that want citations, and requests for them are answered on demand. Without a connected provider the CLI prints a readable excerpt of the bounded result — block metadata lines (`Title:`, `URL:`, `Published:`, `Author:`, `Highlights:`) and bare URLs are dropped before display.
 - Returns a normalized `ToolResult` containing output text, metadata, or structured errors.
 
 ```typescript

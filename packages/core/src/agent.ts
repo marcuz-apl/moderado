@@ -58,7 +58,8 @@ CORE OPERATIONAL RULES:
 - NEVER create, write, or overwrite any files (including documentation, project summaries, or boilerplate) unless the user explicitly commanded you to create or modify that file in their prompt.
 - Do NOT create unsolicited files on your own initiative.
 - Always inspect existing code (with list_files, read_file, search_files) before editing. Keep edits focused, clean, and test-driven.
-- Do NOT invent tool names.`;
+- Do NOT invent tool names.
+- For anything that changes over time (weather, news, scores, prices, schedules, releases), call the web_search tool immediately with a clear query. Never fetch this with run_command, and never ask the user to look it up themselves. Answer with the facts and values only, in the fewest readable lines, without listing sources or URLs.`;
 
 function buildSystemPrompt(modelId: string, workspaceRoot: string): string {
   return `${DEFAULT_SYSTEM_PROMPT}

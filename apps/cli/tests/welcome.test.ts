@@ -24,6 +24,75 @@ import {
 } from '../src/ui/welcome.js';
 import { handleMcpCommand } from '../src/commands/chat.js';
 
+type ComposerStdin = typeof process.stdin;
+type ComposerContext = { writes: string[]; rows: number };
+
+interface ComposerPosition {
+  row: number;
+  column: number;
+}
+
+/** Parse the composer's absolute cursor position from a cursor write. */
+const parseComposerPosition = (write: string): ComposerPosition | undefined => {
+  const match = /\x1b\[(\d+);(\d+)H/.exec(write);
+  if (!match) return undefined;
+  return { row: Number(match[1]), column: Number(match[2]) };
+};
+
+/** Find the cursor write for the composer's full-screen paint. */
+const lastComposerWrite = (writes: string[]): ComposerPosition => {
+  const positions = writes.map(parseComposerPosition).filter((position) => position !== undefined);
+  if (positions.length === 0) throw new Error('no composer cursor write captured');
+  return positions[positions.length - 1];
+};
+
+/**
+ * Run one composer turn with mocked TTY stdio, capturing caret cursor writes,
+ * then drive the composer through emitted keypress and mouse-report events.
+ */
+const runComposerTurn = async (
+  drive: (stdin: ComposerStdin, context: ComposerContext) => void | Promise<void>
+): Promise<string> => {
+  const stdin = process.stdin;
+  const stdout = process.stdout;
+  const originalIsTTY = Object.getOwnPropertyDescriptor(stdin, 'isTTY');
+  const originalSetRawMode = stdin.setRawMode;
+  const originalColumns = stdout.columns;
+  const originalRows = stdout.rows;
+  const writes: string[] = [];
+  const resume = vi.spyOn(stdin, 'resume').mockImplementation(() => stdin);
+  const pause = vi.spyOn(stdin, 'pause').mockImplementation(() => stdin);
+  const write = vi.spyOn(stdout, 'write').mockImplementation((chunk: string | Uint8Array) => {
+    writes.push(typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
+    return true;
+  });
+  Object.defineProperty(stdin, 'isTTY', { configurable: true, value: true });
+  stdin.setRawMode = () => stdin;
+  Object.defineProperty(stdout, 'columns', { configurable: true, value: 80 });
+  Object.defineProperty(stdout, 'rows', { configurable: true, value: 24 });
+  const controller = new AbortController();
+  try {
+    const turnPromise = promptInteractiveTurn({
+      model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\\\test',
+      signal: controller.signal,
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    await drive(stdin, { writes, rows: 24 });
+    const result = await turnPromise;
+    return result.text;
+  } finally {
+    controller.abort();
+    write.mockRestore();
+    pause.mockRestore();
+    resume.mockRestore();
+    stdin.setRawMode = originalSetRawMode;
+    if (originalIsTTY) Object.defineProperty(stdin, 'isTTY', originalIsTTY);
+    else delete (stdin as { isTTY?: boolean }).isTTY;
+    Object.defineProperty(stdout, 'columns', { configurable: true, value: originalColumns });
+    Object.defineProperty(stdout, 'rows', { configurable: true, value: originalRows });
+  }
+};
+
 describe('OpenCode-style Welcome TUI', () => {
   it('renders the ASCII logo and command hint', () => {
     expect(MODERADO_ASCII_LOGO.length).toBe(5);
@@ -485,5 +554,104 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(selectCommandCandidate('/se', 0, 0)?.name).toBe('/session');
     expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/model');
     expect(selectCommandCandidate('/', 0, -1)?.name).toBe('/exit');
+  });
+
+  it('documents the composer caret shortcuts in the help popup', () => {
+    const plain = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\\\test', 80).join('\n'));
+    expect(plain).toContain('Left/Right   Move the caret inside the bottom input line');
+    expect(plain).toContain('Mouse click  Place the caret on the input line');
+  });
+
+  it('moves the caret with arrow keys to edit inside typed text', async () => {
+    const result = await runComposerTurn(async (stdin) => {
+      for (const character of 'abcd') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '', { name: 'left' });
+      stdin.emit('keypress', '', { name: 'left' });
+      stdin.emit('keypress', 'X', { name: 'x', ctrl: false, meta: false });
+      stdin.emit('keypress', '', { name: 'backspace' });
+      stdin.emit('keypress', '', { name: 'right' });
+      stdin.emit('keypress', '', { name: 'delete' });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('abc');
+  });
+
+  it('clamps the caret at the start and end of the composer text', async () => {
+    const result = await runComposerTurn(async (stdin) => {
+      for (const character of 'ab') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '', { name: 'left' });
+      stdin.emit('keypress', '', { name: 'left' });
+      stdin.emit('keypress', '', { name: 'left' });
+      stdin.emit('keypress', '', { name: 'backspace' });
+      stdin.emit('keypress', '', { name: 'delete' });
+      stdin.emit('keypress', '', { name: 'right' });
+      stdin.emit('keypress', '', { name: 'right' });
+      stdin.emit('keypress', '', { name: 'right' });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('b');
+  });
+
+  it('places the caret where the composer line is clicked', async () => {
+    const result = await runComposerTurn(async (stdin, context) => {
+      for (const character of 'abcd') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      expect(context.writes.length).toBeGreaterThan(0);
+      const composer = lastComposerWrite(context.writes);
+      expect(composer.row).toBeGreaterThan(0);
+      const row = composer.row;
+      const column = composer.column - 2;
+      const pressReport = `\x1b[<0;${column};${row}M`;
+      stdin.emit('data', pressReport);
+      stdin.emit('keypress', '0', { name: '0', ctrl: false, meta: false });
+      stdin.emit('keypress', ';', { name: ';', ctrl: false, meta: false });
+      stdin.emit('keypress', String(context.rows), { name: String(context.rows), ctrl: false, meta: false });
+      stdin.emit('keypress', 'M', { name: 'm', ctrl: false, meta: false });
+      await new Promise((resolve) => setImmediate(resolve));
+      stdin.emit('keypress', 'X', { name: 'x', ctrl: false, meta: false });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('abXcd');
+  });
+
+  it('ignores mouse reports that do not target the composer line', async () => {
+    const result = await runComposerTurn(async (stdin) => {
+      for (const character of 'ab') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('data', `\x1b[<0;1;1M`);
+      stdin.emit('keypress', '0', { name: '0', ctrl: false, meta: false });
+      stdin.emit('keypress', ';', { name: ';', ctrl: false, meta: false });
+      stdin.emit('keypress', '1', { name: '1', ctrl: false, meta: false });
+      stdin.emit('keypress', 'M', { name: 'm', ctrl: false, meta: false });
+      await new Promise((resolve) => setImmediate(resolve));
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('ab');
+  });
+
+  it('keeps every caret hop on the composer row (no cursor escape)', async () => {
+    let positions: ComposerPosition[] = [];
+    const result = await runComposerTurn(async (stdin, context) => {
+      for (const character of 'ab') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      for (let i = 0; i < 10; i++) stdin.emit('keypress', '', { name: 'left' });
+      for (let i = 0; i < 10; i++) stdin.emit('keypress', '', { name: 'right' });
+      positions = context.writes
+        .map(parseComposerPosition)
+        .filter((position): position is ComposerPosition => position !== undefined);
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('ab');
+    expect(positions.length).toBeGreaterThan(0);
+    // Every cursor hop — including the clamped ones past either end — must
+    // land on the single composer row, otherwise the cursor escapes the box.
+    expect(new Set(positions.map((position) => position.row)).size).toBe(1);
   });
 });

@@ -117,12 +117,22 @@ function getSanitizedEnv(): NodeJS.ProcessEnv {
 
 ## 6. Controlled Web Search (M7)
 
-`web_search` is a declared tool with `requiresApproval: true`. It may call only a
-configured HTTPS endpoint (or localhost for offline tests), applies query and
-result limits, validates returned titles and URLs, and preserves source URLs as
-citation metadata. It does not enable arbitrary internet access, shell access,
-or automatic browsing. Network failures, denial, malformed responses, and empty
-results return visible bounded tool results.
+`web_search` is a declared tool that runs without a per-search approval prompt.
+It calls HTTPS search sites (or localhost for offline tests), applies query and
+result limits, validates returned payloads, and preserves source URLs as citation
+metadata. It does not enable arbitrary internet access, shell access, or automatic
+browsing. Network failures, malformed responses, and empty results return visible
+bounded tool results, and every attempt is aborted after a fixed timeout so a
+stalled search site cannot hang a turn.
+
+Out of the box the tool calls two hosted search services — Exa
+(`https://mcp.exa.ai/mcp`) and Parallel (`https://search.parallel.ai/mcp`) — which
+accept unauthenticated requests; `EXA_API_KEY` and `PARALLEL_API_KEY` are optional
+and only raise provider limits. An operator can redirect the tool to a private
+endpoint with `MODERADO_WEB_SEARCH_ENDPOINT` or `webSearchEndpoint`, and
+`MODERADO_WEB_SEARCH_PROVIDER` pins which site is tried first. Search output stays
+untrusted data: it enters the model as bounded reference context that cannot alter
+system prompts, approval rules, or the workspace jail.
 
 ## 7. Local MCP Servers (M7.5)
 

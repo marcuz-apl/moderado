@@ -1,40 +1,48 @@
 # Project Handoff
 
-Updated: 2026-09-19 19:20 UTC
+Updated: 2026-09-20
 Branch: master
-Commit: M6.1 local feature commit
-Status: M6.1 complete locally and ready to push.
+Commit: (pending) single commit covering M7.6 web answers + composer caret fix
+Status: All work implemented and verified locally; ready to commit and push.
 
 ## Summary
 
-Moderado now creates a standalone npm tarball that includes its compiled internal workspace runtime and can be installed into an empty temporary prefix. The release workflow verifies and uploads that artifact without publishing it.
+Web search now answers current-information questions by searching hosted provider sites before model inference, instead of spending a long turn and then telling the user to look the data up manually. The CLI composer also keeps the cursor inside the input line when moving the caret or browsing history.
 
 ## Completed
 
-- M6.1 standalone runtime preparation and tarball verifier in `scripts/`.
-- Windows-safe npm and CLI process invocation without `shell: true`.
-- Artifact-only GitHub Actions workflow at `.github/workflows/release.yml`.
-- User installation and maintainer release documentation in `README.md` and `docs/RELEASING.md`.
+- `web_search` keeps model-facing `query`, `objective`, and `maxResults`, makes `endpoint` optional, and stays automatic without a per-search approval prompt.
+- Search-site cascade: configured custom endpoint first when present, then Exa, then Parallel, with `MODERADO_WEB_SEARCH_PROVIDER`/`webSearchProvider` pinning a site while the rest stay as fallback.
+- Bounded 20-second timeout per attempt, Zod-validated direct-JSON and SSE payloads, 8 KB context cap, and `Title:`/`URL:` source metadata kept out of the user-facing answer.
+- CLI lane searches before inference and answers in a single model turn; that turn is instructed to return the facts only — one context line plus 3–6 value bullets, with no URLs, page titles, or search narration. Without a connected provider the CLI prints a readable excerpt with block metadata and bare URLs stripped.
+- Core system prompt routes time-sensitive questions to `web_search` instead of `run_command` or a manual suggestion.
+- Documentation updates in `docs/TOOLS.md`, `docs/ROUTING.md`, `docs/SECURITY.md`, the roadmap, and the M7.6 plan and design spec.
+- Answer attribution fix: the injected live-evidence turn is written to the provider but never persisted — `replaceEvidenceTurn` swaps it back for the question the user actually typed before the transcript is saved, so an earlier question can no longer be answered again on a later turn and session exports, compaction, and up-arrow question recall stay readable.
+- The evidence turn now ends with an explicit scope rule: answer only the question in that prompt and never restate or answer an earlier question.
+- `web_search`'s optional model-facing `endpoint` override accepts any string and is rejected at execution unless it is HTTPS or localhost, so a hallucinated `"endpoint": "web"` returns a readable tool error instead of an argument-validation failure that burns a model step (observed in session `c4d8db69`).
+- Composer caret fix (`apps/cli/src/ui/welcome.ts`): `positionCursorOnInput()` uses absolute `\x1b[row;colH` addressing via the shared `getComposerAnchor()` instead of relative move-up, so Left/Right while browsing history can no longer walk the cursor out of the edit box. Anchor column corrected to the first text cell (fixes click-to-place math); forward Delete does a full repaint so no ghost characters remain. Help popup documents Left/Right + mouse click.
 
 ## In progress
 
 - No implementation work is in progress.
 
-## Working tree
-
-- Handoff snapshot update pending inclusion in the M6.1 feature commit.
-
 ## Checks
 
-- `npm.cmd test` - PASS (39 files, 180 tests).
-- `npm.cmd run build` - PASS.
-- `npm.cmd run verify:package` - PASS; packed tarball installed and `moderado --help` completed from an empty temporary prefix.
+- `npm run test` - PASS (43 files, 235 tests).
+- `npm run typecheck` - PASS.
+- `npm run build` - PASS.
+- Manual live probe of the compiled default path - Exa returned current weather context in 1.19 s with 3 citations.
+- Manual live probe of the answer shape - Exa returned current weather for Berlin and Calgary; the fast-lane instruction and the no-provider excerpt both produce a context line plus value bullets with no URLs.
 - `git diff --check` - PASS.
 
 ## Decisions and context
 
-- M6.1 uploads a GitHub Actions package artifact only. It does not publish to npm and holds no npm token.
-- A future M7.1 proposal should introduce controlled, approval-gated web search as a separate capability; it requires PRD, tool, architecture, and security documentation changes.
+- Exa is the default search site because a live probe returned current weather context in about one second without a credential; Parallel is the fallback.
+- Contacting hosted search services is an owner-requested relaxation of the earlier "no built-in third-party search service" stance. `docs/SECURITY.md` records the boundary and states that search output is untrusted reference data.
+- Search sites are ordered statically rather than measured per query so behaviour stays predictable and offline testable.
+- Root `VERSION` remains `v0.2.34+260920j`; the versioning hook bumps it on commit.
+- The live-evidence prompt is an internal turn, not user input: it reaches the provider but is replaced with the bare question before persistence, which is what keeps the session JSON and the question recall honest.
+- Single commit for both workstreams (M7.6 + composer caret fix), per owner request ("Git push all").
 
 ## Blockers
 
@@ -42,9 +50,10 @@ Moderado now creates a standalone npm tarball that includes its compiled interna
 
 ## Next action
 
-1. Push the local M6.1 commits when requested, then design M7.1 controlled web search before implementation.
+1. Manual live check of attribution: ask a weather question, then immediately ask an unrelated question such as `who are you?`, and confirm each answer matches its own question and that the saved session shows the bare questions.
+2. Manual terminal check of the composer: browse history with Up, move with Left/Right past both ends, click the input line, and confirm the cursor never leaves the edit box.
 
 ## Resume notes
 
-- Run `npm.cmd run verify:package` for the release-only tarball check.
-- The root `VERSION` is `v0.2.21+260919v`.
+- Automated tests never contact a live search site; tool tests inject `fetchImpl` and clear the search environment variables.
+- A live probe is a manual step: `node -e "import('./packages/tools/dist/tools/web_search.js')..."` after `npm run build`.

@@ -50,7 +50,12 @@ export const DiagnosticSchema = z.object({ severity: DiagnosticSeveritySchema, m
 export type Diagnostic = z.infer<typeof DiagnosticSchema>;
 export const RunDiagnosticsParamsSchema = z.object({ script: z.enum(['typecheck', 'lint', 'test']) });
 export type RunDiagnosticsParams = z.infer<typeof RunDiagnosticsParamsSchema>;
-export const WebSearchParamsSchema = z.object({ query: z.string().min(1).max(500), endpoint: z.string().url(), maxResults: z.number().int().min(1).max(10).default(5) });
+export const WebSearchParamsSchema = z.object({
+  query: z.string().min(1).max(500).describe('Describe the ideal source page to find, for example "current weather conditions and today forecast in San Jose California".'),
+  objective: z.string().min(1).max(1000).describe('The facts the answer must contain, for example the specific figures to report.').optional(),
+  endpoint: z.string().min(1).describe('Advanced override for the configured search endpoint. Anything that is not an HTTPS or localhost URL is rejected, so omit this to use the configured search provider.').optional(),
+  maxResults: z.number().int().min(1).max(10).describe('Number of search results to use as evidence.').default(5),
+});
 export type WebSearchParams = z.infer<typeof WebSearchParamsSchema>;
 // --- Specific Parameter Schemas for the 7 Workspace Tools ---
 

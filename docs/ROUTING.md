@@ -146,7 +146,17 @@ provider transport with explicit provider IDs, names, base URLs, credentials,
 and model classifications. Routing remains free-first and never infers price
 or tool support from a provider name.
 
-Web search is routed separately through the approval-gated `web_search` tool.
-It uses a configured HTTPS search endpoint, returns bounded source metadata,
-and does not participate in model AUTO ranking or grant unrestricted network
-access.
+Web search is routed separately through the automatic `web_search` tool. It
+returns bounded source metadata and does not participate in model AUTO ranking or
+grant unrestricted network access. Search sites are ordered deterministically —
+a configured custom endpoint first, then Exa, then Parallel — and a pinned
+`MODERADO_WEB_SEARCH_PROVIDER` moves one site to the front while the remaining
+sites stay as fallback. Every attempt is bounded by a 20-second timeout.
+
+For current-information questions, the CLI searches before provider inference and
+then sends one evidence-bearing model turn, so answering costs a single inference
+round trip instead of a tool round trip plus an answer. That turn is instructed to
+reply with the values themselves — one context line plus short factual bullets —
+and never to list sources or narrate the search. See
+[TOOLS.md](file:///d:/projects/moderado/docs/TOOLS.md) for the search-site table
+and configuration keys.
