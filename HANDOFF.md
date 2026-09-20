@@ -2,8 +2,8 @@
 
 Updated: 2026-09-20
 Branch: master
-Commit: 2dee9e3 (v0.2.36+260920n) — in sync with origin/master
-Status: Roadmap rewrite approved and pushed; M7.7 is the next implementation item.
+Commit: 3c16145 (v0.2.36+260920o) — in sync with origin/master
+Status: M7.7 OpenRouter free-model discovery implemented, tested, committed, and pushed. Zen/Agnes spike remains open within M7.7.
 
 ## Summary
 
@@ -11,6 +11,14 @@ Web search now answers current-information questions by searching hosted provide
 
 ## Completed
 
+- M7.7 first slice committed (`3c16145`, `feat(providers): M7.7 free-model discovery for /connect (OpenRouter)`):
+  new `packages/providers/src/model_discovery.ts` fetches OpenRouter's public
+  `/api/v1/models`, filters `pricing.prompt === '0'` free models into the
+  `ModelInventory` contract shape with evidence, exported from the providers
+  index, and wired into `/connect`'s OpenRouter preset so the picker lists
+  discovered free models (falls back to manual model-id entry on fetch
+  failure). Zod-validated, `fetchImpl`-injected, fully offline tests
+  (`packages/providers/tests/model_discovery.test.ts`).
 - Roadmap rewritten and pushed (`46d3ecb`): CLI-only `v0.3.0` scope with
   M7.7 `/connect` free-model hub, M7.8 composer context (`/init`, `@`
   mentions, images), M7.9 `/session undo | redo | share`, M7.10 core
@@ -34,9 +42,10 @@ Web search now answers current-information questions by searching hosted provide
 
 ## Checks
 
-- `npm run test` - PASS (43 files, 235 tests).
+- `npm run test` - PASS (44 files, 240 tests).
 - `npm run typecheck` - PASS.
 - `npm run build` - PASS.
+- `git diff --check` - PASS.
 - Manual live probe of the compiled default path - Exa returned current weather context in 1.19 s with 3 citations.
 - Manual live probe of the answer shape - Exa returned current weather for Berlin and Calgary; the fast-lane instruction and the no-provider excerpt both produce a context line plus value bullets with no URLs.
 - `git diff --check` - PASS.
@@ -46,7 +55,7 @@ Web search now answers current-information questions by searching hosted provide
 - Exa is the default search site because a live probe returned current weather context in about one second without a credential; Parallel is the fallback.
 - Contacting hosted search services is an owner-requested relaxation of the earlier "no built-in third-party search service" stance. `docs/SECURITY.md` records the boundary and states that search output is untrusted reference data.
 - Search sites are ordered statically rather than measured per query so behaviour stays predictable and offline testable.
-- Root `VERSION` is `v0.2.36+260920m`; the versioning hook bumps it on commit.
+- Root `VERSION` is `v0.2.37+260920p` (pending for the next commit); the versioning hook bumps it on commit.
 - The live-evidence prompt is an internal turn, not user input: it reaches the provider but is replaced with the bare question before persistence, which is what keeps the session JSON and the question recall honest.
 - Single commit for both workstreams (M7.6 + composer caret fix), per owner request ("Git push all").
 
@@ -56,10 +65,11 @@ Web search now answers current-information questions by searching hosted provide
 
 ## Next action
 
-1. Implement M7.7: spike OpenCode Zen / Agnes for a machine-callable
-   free-model discovery endpoint (auth, ToS, offline-test seams); then
-   `/connect` free-model hub: NIM (done) + OpenRouter-free + generic
-   OpenAI-compatible paid path.
+1. Finish M7.7: spike OpenCode Zen / Agnes for a machine-callable free-model
+   discovery endpoint (auth, ToS, offline-test seams); add them to the
+   `/connect` free-model hub only if the spike passes. NIM (existing) +
+   OpenRouter-free (done, `3c16145`) + generic OpenAI-compatible paid path
+   already cover the hub's core.
 2. Manual live check of attribution: ask a weather question, then immediately ask an unrelated question such as `who are you?`, and confirm each answer matches its own question and that the saved session shows the bare questions.
 3. Manual terminal check of the composer: browse history with Up, move with Left/Right past both ends, click the input line, and confirm the cursor never leaves the edit box.
 
