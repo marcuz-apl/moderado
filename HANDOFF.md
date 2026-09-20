@@ -2,7 +2,7 @@
 
 Updated: 2026-09-20
 Branch: master
-Commit: 46d3ecb (v0.2.36+260920l) — in sync with origin/master
+Commit: 2dee9e3 (v0.2.36+260920n) — in sync with origin/master
 Status: Roadmap rewrite approved and pushed; M7.7 is the next implementation item.
 
 ## Summary
@@ -16,6 +16,7 @@ Web search now answers current-information questions by searching hosted provide
   mentions, images), M7.9 `/session undo | redo | share`, M7.10 core
   subagents + shell aliases, M7.11 Windows/WSL hardening, and M7.3 as the
   final publish gate.
+- Handoff updated and pushed (`c4a1ca7`) to record the rewrite and the M7.7 spike.
 - `web_search` keeps model-facing `query`, `objective`, and `maxResults`, makes `endpoint` optional, and stays automatic without a per-search approval prompt.
 - Search-site cascade: configured custom endpoint first when present, then Exa, then Parallel, with `MODERADO_WEB_SEARCH_PROVIDER`/`webSearchProvider` pinning a site while the rest stay as fallback.
 - Bounded 20-second timeout per attempt, Zod-validated direct-JSON and SSE payloads, 8 KB context cap, and `Title:`/`URL:` source metadata kept out of the user-facing answer.
@@ -45,7 +46,7 @@ Web search now answers current-information questions by searching hosted provide
 - Exa is the default search site because a live probe returned current weather context in about one second without a credential; Parallel is the fallback.
 - Contacting hosted search services is an owner-requested relaxation of the earlier "no built-in third-party search service" stance. `docs/SECURITY.md` records the boundary and states that search output is untrusted reference data.
 - Search sites are ordered statically rather than measured per query so behaviour stays predictable and offline testable.
-- Root `VERSION` is `v0.2.36+260920l`; the versioning hook bumps it on commit.
+- Root `VERSION` is `v0.2.36+260920m`; the versioning hook bumps it on commit.
 - The live-evidence prompt is an internal turn, not user input: it reaches the provider but is replaced with the bare question before persistence, which is what keeps the session JSON and the question recall honest.
 - Single commit for both workstreams (M7.6 + composer caret fix), per owner request ("Git push all").
 
