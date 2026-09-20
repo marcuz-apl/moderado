@@ -1,13 +1,8 @@
-#!/usr/bin/env sh
+#!/bin/sh
 set -eu
 
 version=$(cat VERSION)
-subject=$(sed -n '1p' "$1")
-
-case "$subject" in
-  "$version "*) ;;
-  *)
-    echo "Alfazen: commit subject must start with '$version '." >&2
-    exit 1
-    ;;
-esac
+msgfile=$1
+tmp=$(mktemp)
+awk -v stamp="$version" '!done && $0 !~ /^#/ { sub(/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9][0-9][0-9][0-9][0-9][0-9][0-9a-zA-Z] /, ""); print stamp " " $0; done=1; next } { print }' "$msgfile" > "$tmp"
+mv -f -- "$tmp" "$msgfile"

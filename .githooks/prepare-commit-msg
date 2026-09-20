@@ -1,15 +1,5 @@
 #!/bin/sh
-HOOKDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-. "$HOOKDIR/versionlib.sh"
-
-msgfile=$1
-[ -f "$msgfile" ] || exit 0
-old=$(read_version) || exit 1
-validate_identifier "$old"
-message=$(sed -E '1s/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z] //' "$msgfile" 2>/dev/null || true)
-new=$(next_identifier "$old" "$(utc_yymmdd)" "$(detect_bump_type "$message")") || exit 1
-printf '%s\n' "$new" > "$VERSION_FILE"
-git add -- "$VERSION_FILE"
-
-tmp=$(mktemp) || exit 1
-awk -v stamp="$new" '!done && $0 !~ /^#/ { sub(/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9][0-9][0-9][0-9][0-9][0-9][0-9a-zA-Z] /, ""); print stamp " " $0; done=1; next } { print }' "$msgfile" > "$tmp" && mv -f -- "$tmp" "$msgfile"
+# The pre-commit hook updates VERSION and prefixes the subject before Git
+# snapshots the index. Keeping this hook intentionally empty prevents a late
+# VERSION update that Git would leave unstaged.
+exit 0
