@@ -154,31 +154,31 @@ and update.
 - Release documentation reflects the current `VERSION` identifier and supported
   providers.
 
-## Milestone 6 — Public distribution and release trust
+## Milestone 6 ï¿½ Public distribution and release trust
 
 **Goal:** Turn the CLI into an installable, reproducible public product without
 exposing publishing credentials or implying that an unpublished artifact is
 already a release.
 
-### M6.1 — Standalone npm installation and release gate ?
+### M6.1 ï¿½ Standalone npm installation and release gate ?
 
 - Build a self-contained npm package and verify it in an empty temporary directory.
 - Add a guarded npm and GitHub Release publication workflow using trusted publishing.
 
-### M6.2 — Standalone binaries and checksums ?
+### M6.2 â€” Standalone binaries and checksums [planned]
 
 - Build Windows x64, macOS ARM64, and Linux x64 executables with `@yao-pkg/pkg`.
 - Generate SHA-256 checksums and a versioned artifact manifest.
 - Verify the manifest and host-compatible executable offline.
 
-### M6.3 — Package-manager manifests ?
+### M6.3 â€” Package-manager manifests [planned]
 
 - Generate reviewable Homebrew, Scoop, winget, and AUR manifests from verified
   release artifacts and checksums.
 - Keep npm as the canonical channel for npm and Bun users.
 - Generation is deliberately separate from external package-manager submission.
 
-### M6.4 — Release execution and channel publication
+### M6.4 ï¿½ Release execution and channel publication
 
 - Run the guarded publication workflow only after the owner selects a release version.
 - Validate the uploaded npm package and every platform artifact from the GitHub Release.
@@ -208,36 +208,36 @@ For each milestone:
 Milestones 1 through 5 are complete. M6 establishes distribution foundations;
 M6.4 begins only for an explicitly chosen public release.
 
-## Milestone 7 — Controlled internet access and release completion
+## Milestone 7 ï¿½ Controlled internet access and release completion
 
 **Goal:** Let Moderado retrieve current public information and complete its MCP
 surface while preserving approval-first security, bounded context, and source
 traceability.
 
-### M7.1 — Approved web search foundation ?
+### M7.1 â€” Approved web search foundation [planned]
 
 - Add the approval-gated `web_search` tool with a configured HTTPS endpoint.
 - Bound query length and result count, validate response shape, and return source URLs.
 - Keep automated tests local and offline; no implicit shell or unrestricted network access.
 
-### M7.2 — Web-aware answer evidence ?
+### M7.2 â€” Web-aware answer evidence [planned]
 
 - Preserve source URLs as tool metadata so a client can render citations.
 - Keep result size and context injection bounded.
 - Surface search availability and endpoint configuration in the release gate before claiming user-facing web search support.
 
-### M7.3 — Guarded public-release workflow ?
+### M7.3 â€” Guarded public-release workflow [planned]
 
 - Add deliberate maintainer workflows for npm and GitHub Release publication.
 - Require verified artifacts and explicit release approval before any publish action.
 - Keep credentials out of development commits.
 
-### M7.4 — Provider expansion foundation ?
+### M7.4 â€” Provider expansion foundation [planned]
 
 - Add a shared OpenAI-compatible adapter through provider-independent contracts.
 - Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
 
-### M7.5 — MCP CLI management and release gate ?
+### M7.5 â€” MCP CLI management and release gate [complete]
 
 - Add `/mcp` discovery, server status, add, disable, enable, and remove controls.
 - Keep local stdio MCP servers explicit, approval-gated, and unable to bypass core policy.
