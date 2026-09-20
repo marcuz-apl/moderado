@@ -1,6 +1,8 @@
 import { ProviderConnection } from '../config.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
+import { fetchOpenRouterFreeModels } from '@moderado/providers';
+import type { ModelInventoryEntry } from '@moderado/contracts';
 
 export interface ConnectionInput {
   kind: ProviderConnection['kind'];
@@ -149,7 +151,29 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   if (!displayName) return undefined;
   const baseUrl = preset?.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
   const apiKey = await askPopupText('API key', options, true);
-  const defaultModel = await askPopupText('Default model ID', options);
+  let defaultModel: string | undefined;
+  if (selectedValue === 'openrouter') {
+    // Free-first: offer the live free-model catalog (no key needed to list);
+    // fall back to manual entry on any discovery failure.
+    let freeModels: ModelInventoryEntry[] = [];
+    try { freeModels = await fetchOpenRouterFreeModels({ signal: options.signal }); } catch { /* fall through to manual */ }
+    if (freeModels.length > 0) {
+      const choices = [
+        ...freeModels.slice(0, 50).map((entry) => ({
+          label: entry.id,
+          value: entry.id,
+          description: 'Free tier model',
+        })),
+        { label: 'Enter a model ID manually', value: '__manual__', description: 'Any OpenRouter model ID' },
+      ];
+      const picked = options.drawFrame
+        ? await selectListPopup('Choose a free model', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
+        : (await askSelect('Choose a free model', choices, 0, { signal: options.signal })).value;
+      if (!picked) return undefined;
+      defaultModel = picked === '__manual__' ? undefined : picked;
+    }
+  }
+  defaultModel = defaultModel ?? await askPopupText('Default model ID', options);
   if (!baseUrl || !apiKey || !defaultModel) return undefined;
   return buildConnection({ kind: 'openai-compatible', displayName, baseUrl, apiKey, defaultModel });
 }
