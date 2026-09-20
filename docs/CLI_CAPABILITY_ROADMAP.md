@@ -25,7 +25,7 @@ Moderado will differentiate itself through:
 The product should learn from OpenCode and Cline's workflows without copying
 their code or attempting to reproduce every feature.
 
-## Milestone 1 — Trustworthy model responses
+## Milestone 1 — Trustworthy model responses ✅
 
 **Goal:** A request must never appear to succeed when it produced no usable
 answer.
@@ -78,7 +78,7 @@ it grows.
 - Offline tests cover persistence, corruption recovery, export redaction, and
   compaction.
 
-## Milestone 3 — Practical coding workflow
+## Milestone 3 — Practical coding workflow ✅
 
 **Goal:** Moderado helps users inspect, plan, apply, and recover code changes.
 
@@ -104,7 +104,7 @@ it grows.
 - Offline tests cover patch application, checkpoints, undo conflicts, and
   approvals.
 
-## Milestone 4 — Code intelligence and controlled extensibility
+## Milestone 4 — Code intelligence and controlled extensibility ✅
 
 **Goal:** Give the agent better evidence from the codebase while preserving the
 security model.
@@ -154,31 +154,31 @@ and update.
 - Release documentation reflects the current `VERSION` identifier and supported
   providers.
 
-## Milestone 6 � Public distribution and release trust
+## Milestone 6 — Public distribution and release trust
 
 **Goal:** Turn the CLI into an installable, reproducible public product without
 exposing publishing credentials or implying that an unpublished artifact is
 already a release.
 
-### M6.1 � Standalone npm installation and release gate ?
+### M6.1 — Standalone npm installation and release gate ✅
 
 - Build a self-contained npm package and verify it in an empty temporary directory.
 - Add a guarded npm and GitHub Release publication workflow using trusted publishing.
 
-### M6.2 — Standalone binaries and checksums [planned]
+### M6.2 — Standalone binaries and checksums ✅
 
 - Build Windows x64, macOS ARM64, and Linux x64 executables with `@yao-pkg/pkg`.
 - Generate SHA-256 checksums and a versioned artifact manifest.
 - Verify the manifest and host-compatible executable offline.
 
-### M6.3 — Package-manager manifests [planned]
+### M6.3 — Package-manager manifests ✅
 
 - Generate reviewable Homebrew, Scoop, winget, and AUR manifests from verified
   release artifacts and checksums.
 - Keep npm as the canonical channel for npm and Bun users.
 - Generation is deliberately separate from external package-manager submission.
 
-### M6.4 � Release execution and channel publication
+### M6.4 — Release execution and channel publication
 
 - Run the guarded publication workflow only after the owner selects a release version.
 - Validate the uploaded npm package and every platform artifact from the GitHub Release.
@@ -208,7 +208,7 @@ For each milestone:
 Milestones 1 through 5 are complete. M6 establishes distribution foundations;
 M6.4 begins only for an explicitly chosen public release.
 
-## Milestone 7 � Controlled internet access and release completion
+## Milestone 7 — Controlled internet access and release completion
 
 **Goal:** Let Moderado retrieve current public information and complete its MCP
 surface while preserving approval-first security, bounded context, and source
@@ -237,7 +237,7 @@ traceability.
 - Add a shared OpenAI-compatible adapter through provider-independent contracts.
 - Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
 
-### M7.5 — MCP CLI management and release gate [complete]
+### M7.5 — MCP CLI management and release gate ✅
 
 - Add `/mcp` discovery, server status, add, disable, enable, and remove controls.
 - Keep local stdio MCP servers explicit, approval-gated, and unable to bypass core policy.
