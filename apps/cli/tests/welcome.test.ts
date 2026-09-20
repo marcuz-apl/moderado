@@ -19,6 +19,7 @@ import {
   promptInteractiveTurn,
   selectCommandCandidate,
 } from '../src/ui/welcome.js';
+import { handleMcpCommand } from '../src/commands/chat.js';
 
 describe('OpenCode-style Welcome TUI', () => {
   it('renders the ASCII logo and command hint', () => {
@@ -286,6 +287,103 @@ describe('OpenCode-style Welcome TUI', () => {
 
       await expect(turnPromise).resolves.toMatchObject({ text: '' });
       expect(commands).toEqual(['/mcp status']);
+    } finally {
+      controller.abort();
+      write.mockRestore();
+      pause.mockRestore();
+      resume.mockRestore();
+      stdin.setRawMode = originalSetRawMode;
+      if (originalIsTTY) Object.defineProperty(stdin, 'isTTY', originalIsTTY);
+      else delete (stdin as { isTTY?: boolean }).isTTY;
+    }
+  });
+
+  it('keeps an MCP result popup active until dismissal before rebinding the composer', async () => {
+    const stdin = process.stdin as typeof process.stdin & { setRawMode?: (mode: boolean) => typeof process.stdin };
+    const originalIsTTY = Object.getOwnPropertyDescriptor(stdin, 'isTTY');
+    const originalSetRawMode = stdin.setRawMode;
+    const resume = vi.spyOn(stdin, 'resume').mockImplementation(() => stdin);
+    const pause = vi.spyOn(stdin, 'pause').mockImplementation(() => stdin);
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    Object.defineProperty(stdin, 'isTTY', { configurable: true, value: true });
+    stdin.setRawMode = () => stdin;
+    const controller = new AbortController();
+    let dismissalStarted = false;
+    let releaseDismissal!: () => void;
+    const dismissal = new Promise<void>((resolve) => { releaseDismissal = resolve; });
+    let callbackReturned = false;
+
+    try {
+      const turnPromise = promptInteractiveTurn({
+        model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\test', signal: controller.signal,
+        onMcp: async (command, drawFrame) => {
+          await handleMcpCommand(command, drawFrame, {
+            reloadMcpTools: async () => {},
+            promptText: async (label) => label.includes('name') ? 'broken' : label.includes('executable') ? 'missing-server' : '',
+            discoverMcpServers: async () => [{ name: 'broken', enabled: true, tools: [], error: 'spawn failed' }],
+            selectListPopup: async (_title, _items, options) => {
+              dismissalStarted = true;
+              options.drawFrame(['MCP add failed', 'spawn failed', 'Press Esc or Enter to return.']);
+              await dismissal;
+              return null;
+            },
+          });
+          callbackReturned = true;
+        },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of '/mcp add') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '\r', { name: 'return' });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(dismissalStarted).toBe(true);
+      expect(callbackReturned).toBe(false);
+      releaseDismissal();
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of 'after-popup') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '\r', { name: 'return' });
+      await expect(turnPromise).resolves.toMatchObject({ text: 'after-popup' });
+      expect(callbackReturned).toBe(true);
+    } finally {
+      controller.abort();
+      releaseDismissal();
+      write.mockRestore();
+      pause.mockRestore();
+      resume.mockRestore();
+      stdin.setRawMode = originalSetRawMode;
+      if (originalIsTTY) Object.defineProperty(stdin, 'isTTY', originalIsTTY);
+      else delete (stdin as { isTTY?: boolean }).isTTY;
+    }
+  });
+
+  it('does not route slash inputs that only begin with /mcp', async () => {
+    const stdin = process.stdin as typeof process.stdin & { setRawMode?: (mode: boolean) => typeof process.stdin };
+    const originalIsTTY = Object.getOwnPropertyDescriptor(stdin, 'isTTY');
+    const originalSetRawMode = stdin.setRawMode;
+    const resume = vi.spyOn(stdin, 'resume').mockImplementation(() => stdin);
+    const pause = vi.spyOn(stdin, 'pause').mockImplementation(() => stdin);
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    Object.defineProperty(stdin, 'isTTY', { configurable: true, value: true });
+    stdin.setRawMode = () => stdin;
+    const controller = new AbortController();
+    const commands: string[] = [];
+
+    try {
+      const turnPromise = promptInteractiveTurn({
+        model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\test', signal: controller.signal,
+        onMcp: async (command) => { commands.push(command); },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of '/mcpx') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '\r', { name: 'return' });
+      await expect(turnPromise).resolves.toMatchObject({ text: '/mcpx' });
+      expect(commands).toEqual([]);
     } finally {
       controller.abort();
       write.mockRestore();

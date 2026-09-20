@@ -137,9 +137,25 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(reloads).toBe(1);
   });
 
+  it('preserves an MCP server and skips reload when removal is cancelled', async () => {
+    saveMcpServer('docs', { executable: 'node', args: ['server.mjs'], enabled: true }, tempDir);
+    let reloads = 0;
+    const handleMcpCommand = (chatCommands as unknown as { handleMcpCommand?: Function }).handleMcpCommand;
+
+    await handleMcpCommand?.('/mcp remove docs', () => {}, {
+      configHome: tempDir,
+      reloadMcpTools: async () => { reloads++; },
+      selectConfirmPopup: async () => false,
+    });
+
+    expect(loadConfig(tempDir).mcpServers?.docs).toBeDefined();
+    expect(reloads).toBe(0);
+  });
+
   it('shows MCP status with enabled state, executable, tool count, and errors', async () => {
     saveMcpServer('docs', { executable: 'node', args: ['docs.mjs'], enabled: true }, tempDir);
     saveMcpServer('broken', { executable: 'missing', args: [], enabled: true }, tempDir);
+    saveMcpServer('offline', { executable: 'offline', args: [], enabled: false }, tempDir);
     let items: Array<{ label: string; tag?: string; description?: string }> = [];
     const handleMcpCommand = (chatCommands as unknown as { handleMcpCommand?: Function }).handleMcpCommand;
 
@@ -149,6 +165,7 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       discoverMcpServers: async () => [
         { name: 'docs', enabled: true, tools: [{ name: 'search' }, { name: 'open' }] },
         { name: 'broken', enabled: true, tools: [], error: 'spawn failed' },
+        { name: 'offline', enabled: false, tools: [] },
       ],
       selectListPopup: async (_title: string, statusItems: typeof items) => { items = statusItems; return null; },
     });
@@ -156,6 +173,7 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(items).toEqual([
       { label: 'docs', value: 'docs', tag: 'Enabled', description: 'node · 2 tools' },
       { label: 'broken', value: 'broken', tag: 'Enabled', description: 'missing · Error: spawn failed' },
+      { label: 'offline', value: 'offline', tag: 'Disabled', description: 'offline · 0 tools' },
     ]);
   });
 

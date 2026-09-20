@@ -427,6 +427,11 @@ export interface PromptInteractiveTurnOptions {
   onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
 }
 
+function isMcpCommandInput(value: string): boolean {
+  const command = value.trim();
+  return command === '/mcp' || command.startsWith('/mcp ');
+}
+
 export async function promptInteractiveTurn(
   options: PromptInteractiveTurnOptions
 ): Promise<InteractiveTurnResult> {
@@ -672,7 +677,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/mcp')) {
+        if (key && (key.name === 'return' || key.name === 'enter') && isMcpCommandInput(input)) {
           const command = input.trim();
           input = '';
           stdin.removeListener('keypress', onKeypress);

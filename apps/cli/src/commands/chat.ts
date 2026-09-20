@@ -75,7 +75,22 @@ export async function handleMcpCommand(
     const answer = await askModalChoice('\n> ', { signal: options.signal });
     return answer === 'q' ? undefined : answer.trim();
   });
-  const show = (title: string, lines: string[]): void => drawFrame(renderBoxLines(title, [...lines, '', 'Press Esc or Enter to return.'], 72));
+  const show = async (title: string, lines: string[]): Promise<void> => {
+    const popupLines = [...lines, '', 'Press Esc or Enter to return.'];
+    if (!process.stdin.isTTY) {
+      drawFrame(renderBoxLines(title, popupLines, 72));
+      return;
+    }
+    await choose(title, [{
+      label: 'Close',
+      value: 'close',
+      description: lines.join('\n'),
+    }], {
+      drawFrame,
+      signal: options.signal,
+      hint: 'Enter close · Esc cancel',
+    });
+  };
   const currentServers = (): Record<string, McpServerConfig> => loadConfig(options.configHome).mcpServers ?? {};
   const pickServer = async (title: string, predicate: (server: McpServerConfig) => boolean = () => true): Promise<string | undefined> => {
     const entries = Object.entries(currentServers()).filter(([, server]) => predicate(server));
@@ -111,7 +126,7 @@ export async function handleMcpCommand(
     if (action === 'status' || action === 'list') {
       const servers = currentServers();
       if (!Object.keys(servers).length) {
-        show('Local MCP servers', ['No local MCP servers are configured.']);
+        await show('Local MCP servers', ['No local MCP servers are configured.']);
         return;
       }
       const statuses = await discover(servers);
@@ -135,12 +150,12 @@ export async function handleMcpCommand(
       const server = McpServerConfigSchema.parse({ executable: executable.trim(), args: argsText.trim() ? argsText.trim().split(/\s+/) : [], enabled: true });
       const [status] = await discover({ [name]: server });
       if (!status || status.error) {
-        show('MCP add failed', [status?.error ?? 'The server did not return a valid tools/list response.', 'Configuration was not changed.']);
+        await show('MCP add failed', [status?.error ?? 'The server did not return a valid tools/list response.', 'Configuration was not changed.']);
         return;
       }
       saveMcpServer(name, server, options.configHome);
       await options.reloadMcpTools();
-      show('MCP server added', [`${name} · ${status.tools.length} ${status.tools.length === 1 ? 'tool' : 'tools'}`]);
+      await show('MCP server added', [`${name} · ${status.tools.length} ${status.tools.length === 1 ? 'tool' : 'tools'}`]);
       return;
     }
 
@@ -154,7 +169,7 @@ export async function handleMcpCommand(
       if (!name) return;
       setMcpServerEnabled(name, action === 'enable', options.configHome);
       await options.reloadMcpTools();
-      show('MCP server updated', [`${name} is now ${action === 'enable' ? 'enabled' : 'disabled'}.`]);
+      await show('MCP server updated', [`${name} is now ${action === 'enable' ? 'enabled' : 'disabled'}.`]);
       return;
     }
 
@@ -164,19 +179,19 @@ export async function handleMcpCommand(
       if (!(await confirm('Remove MCP server', [`Remove '${name}' from local configuration?`], { drawFrame, signal: options.signal }))) return;
       removeMcpServer(name, options.configHome);
       await options.reloadMcpTools();
-      show('MCP server removed', [`Removed ${name}.`]);
+      await show('MCP server removed', [`Removed ${name}.`]);
       return;
     }
 
     if (action === 'reload') {
       await options.reloadMcpTools();
-      show('MCP tools reloaded', ['Configured local MCP tools were rebuilt for this chat session.']);
+      await show('MCP tools reloaded', ['Configured local MCP tools were rebuilt for this chat session.']);
       return;
     }
 
-    show('Local MCP servers', ['Use status, add, enable NAME, disable NAME, remove NAME, or reload.']);
+    await show('Local MCP servers', ['Use status, add, enable NAME, disable NAME, remove NAME, or reload.']);
   } catch (error) {
-    show('MCP management error', [error instanceof Error ? error.message : 'MCP management failed.']);
+    await show('MCP management error', [error instanceof Error ? error.message : 'MCP management failed.']);
   }
 }
 
