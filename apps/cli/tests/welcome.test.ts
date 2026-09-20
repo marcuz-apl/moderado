@@ -1,4 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   renderModeradoHeader,
   renderCenteredWelcomeScreen,
@@ -392,6 +395,71 @@ describe('OpenCode-style Welcome TUI', () => {
       stdin.setRawMode = originalSetRawMode;
       if (originalIsTTY) Object.defineProperty(stdin, 'isTTY', originalIsTTY);
       else delete (stdin as { isTTY?: boolean }).isTTY;
+    }
+  });
+
+  it('keeps a no-match MCP popup attached until dismissal before rebinding the composer', async () => {
+    const stdin = process.stdin as typeof process.stdin & { setRawMode?: (mode: boolean) => typeof process.stdin };
+    const originalIsTTY = Object.getOwnPropertyDescriptor(stdin, 'isTTY');
+    const originalSetRawMode = stdin.setRawMode;
+    const resume = vi.spyOn(stdin, 'resume').mockImplementation(() => stdin);
+    const pause = vi.spyOn(stdin, 'pause').mockImplementation(() => stdin);
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    Object.defineProperty(stdin, 'isTTY', { configurable: true, value: true });
+    stdin.setRawMode = () => stdin;
+    const controller = new AbortController();
+    const configHome = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-mcp-popup-test-'));
+    let popupActive = false;
+    let releaseDismissal!: () => void;
+    const dismissal = new Promise<void>((resolve) => { releaseDismissal = resolve; });
+    let callbackReturned = false;
+
+    try {
+      const turnPromise = promptInteractiveTurn({
+        model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\test', signal: controller.signal,
+        onMcp: async (command, drawFrame) => {
+          await handleMcpCommand(command, drawFrame, {
+            configHome,
+            reloadMcpTools: async () => {},
+            selectListPopup: async (_title, _items, options) => {
+              popupActive = true;
+              options.drawFrame(['No matching local MCP servers are configured.', 'Press Esc or Enter to return.']);
+              await dismissal;
+              popupActive = false;
+              return null;
+            },
+          });
+          callbackReturned = true;
+        },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of '/mcp enable') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '\r', { name: 'return' });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      expect(popupActive).toBe(true);
+      expect(callbackReturned).toBe(false);
+      releaseDismissal();
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of 'after-no-match') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '\r', { name: 'return' });
+      await expect(turnPromise).resolves.toMatchObject({ text: 'after-no-match' });
+      expect(popupActive).toBe(false);
+      expect(callbackReturned).toBe(true);
+    } finally {
+      controller.abort();
+      releaseDismissal();
+      write.mockRestore();
+      pause.mockRestore();
+      resume.mockRestore();
+      stdin.setRawMode = originalSetRawMode;
+      if (originalIsTTY) Object.defineProperty(stdin, 'isTTY', originalIsTTY);
+      else delete (stdin as { isTTY?: boolean }).isTTY;
+      fs.rmSync(configHome, { recursive: true, force: true });
     }
   });
 

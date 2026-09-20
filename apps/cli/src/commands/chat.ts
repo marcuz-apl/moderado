@@ -95,7 +95,7 @@ export async function handleMcpCommand(
   const pickServer = async (title: string, predicate: (server: McpServerConfig) => boolean = () => true): Promise<string | undefined> => {
     const entries = Object.entries(currentServers()).filter(([, server]) => predicate(server));
     if (!entries.length) {
-      show(title, ['No matching local MCP servers are configured.']);
+      await show(title, ['No matching local MCP servers are configured.']);
       return undefined;
     }
     return (await choose(title, entries.map(([name, server]) => ({
