@@ -1,7 +1,8 @@
 # Moderado CLI Capability Roadmap
 
-**Status:** Approved roadmap  
-**Scope:** CLI product maturity before desktop expansion  
+**Status:** Approved roadmap
+**Scope:** CLI-only `v0.3.0` product maturity. Desktop application and IDE
+extensions are explicitly deferred past `v0.3.0` and are not release blockers.
 **Parent documents:** [PRD.md](../PRD.md), [ARCHITECTURE.md](ARCHITECTURE.md), [SECURITY.md](SECURITY.md)
 
 ## Purpose
@@ -16,14 +17,20 @@ usable before work begins on the next one.
 
 Moderado will differentiate itself through:
 
-- free-first, provider-neutral model routing;
+- free-first, provider-neutral model routing with a `/connect` free-model hub
+  (NVIDIA NIM, OpenRouter free tier, plus further free sources only after a
+  machine-callable discovery endpoint is verified) alongside a single generic
+  OpenAI-compatible path for paid models (OpenAI GPT, Claude, Gemini, Meta,
+  Mistral, Z-ai/GLM, DeepSeek, Moonshot, and equivalents);
 - transparent model capability, usage, and cost information;
 - approval-first workspace actions; and
 - a core that can later be hosted by a desktop application without rewriting the
   agent loop.
 
 The product should learn from OpenCode and Cline's workflows without copying
-their code or attempting to reproduce every feature.
+their code or attempting to reproduce every feature. `v0.3.0` is CLI-only and
+does not imply parity with OpenCode extras such as themes, keybinds,
+formatters, IDE extensions, plugins, or SDK surfaces.
 
 ## Milestone 1 — Trustworthy model responses ✅
 
@@ -210,17 +217,19 @@ M6.4 begins only for an explicitly chosen public release.
 
 ## Milestone 7 — Controlled internet access and release completion
 
-**Goal:** Let Moderado retrieve current public information and complete its MCP
-surface while preserving approval-first security, bounded context, and source
-traceability.
+**Goal:** Ship CLI `v0.3.0` as a dependable free-first coding assistant: current
+public information on demand, a `/connect` free-model hub, composer context
+(`init`, `@`, images), reversible sessions, core subagents, and hardened
+Windows/WSL paths — while preserving approval-first security, bounded
+context, and source traceability. M7.3 runs last and certifies the release.
 
-### M7.1 — Approved web search foundation [planned]
+### M7.1 — Approved web search foundation ✅
 
 - Add the approval-gated `web_search` tool with a configured HTTPS endpoint.
 - Bound query length and result count, validate response shape, and return source URLs.
 - Keep automated tests local and offline; no implicit shell or unrestricted network access.
 
-### M7.2 — Web-aware answer evidence [planned]
+### M7.2 — Web-aware answer evidence ✅
 
 - Preserve source URLs as tool metadata so a client can render citations.
 - Keep result size and context injection bounded.
@@ -232,10 +241,11 @@ traceability.
 - Require verified artifacts and explicit release approval before any publish action.
 - Keep credentials out of development commits.
 
-### M7.4 — Provider expansion foundation [planned]
+### M7.4 — Provider expansion foundation ✅
 
-- Add a shared OpenAI-compatible adapter through provider-independent contracts.
-- Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
+- Added a shared OpenAI-compatible adapter through provider-independent contracts.
+- Preserved free-first AUTO routing and explicit opt-in for paid or unknown-cost
+  models.
 
 ### M7.5 — MCP CLI management and release gate ✅
 
@@ -276,8 +286,60 @@ traceability.
 - `docs/TOOLS.md`, `docs/ROUTING.md`, and `docs/SECURITY.md` describe the search
   sites, configuration keys, and the untrusted-context trust boundary.
 
-### M7 acceptance criteria
+### M7.7 — `/connect` free-model hub [planned]
 
+- Keep `/connect` as the single entry point for model provisioning: first-class
+  free sources plus one generic OpenAI-compatible path for paid models (OpenAI
+  GPT, Claude, Gemini, Meta, Mistral, Z-ai/GLM, DeepSeek, Moonshot, equivalents).
+- Reuse the NVIDIA NIM discovery pattern; add OpenRouter free-tier discovery
+  with free filtering through its machine-callable `/models` endpoint.
+- Add a further free source (OpenCode Zen, Agnes, or equivalent) only after a
+  spike verifies a machine-callable free-model discovery endpoint, auth flow,
+  key-reuse terms, and offline-testable seams — no screen scraping.
+- Preserve free-first AUTO routing and explicit opt-in for paid or
+  unknown-cost models; keep provider additions behind the
+  provider-independent contracts.
+
+### M7.8 — Composer context: `/init`, `@` mentions, images [planned]
+
+- Add `/init` to scaffold `AGENTS.md` from a workspace scan through the
+  workspace jail with `write_file` approval.
+- Add an `@` file-mention picker as an extension of the existing composer
+  autocomplete, backed by `list_files`/`search_files` reads (auto-approved).
+- Attach images by path as model context through existing read tooling; no
+  terminal-dependent drag-and-drop promise for Windows/WSL.
+
+### M7.9 — `/session undo | redo | share` [planned]
+
+- Add `undo`, `redo`, and `share` as `/session` subcommands, not new
+  top-level slash commands.
+- Wire `undo`/`redo` to the existing snapshot/restore infrastructure in
+  `packages/tools/src/checkpoints.ts` plus the session store.
+- Implement `share` on top of the existing session export with an explicit
+  output path; no hosted link service for CLI `v0.3.0`.
+
+### M7.10 — Core subagents and shell aliases [planned]
+
+- Add subagent delegation inside `packages/core` via dependency injection: a
+  child agent loop reuses the same tool registry and approval handler, and
+  cannot bypass core policy. No new package. No LSP work.
+- Do not add new `bash`/`grep` tool contracts: `run_command`
+  (`shell: false`, allowlist) already covers shell execution and
+  `search_files` already covers regex search. Ship them as UX aliases and
+  grep-flavored output, reusing existing schemas and approval surfaces.
+
+### M7.11 — Hardened Windows/WSL paths [planned]
+
+- Canonicalize `\\wsl$\<distro>\...`, `/mnt/c/...`, and `C:\...` forms to the
+  same jail root in `packages/tools/src/jail.ts`, with tests.
+- Cover Windows edge cases with jail tests: drive-letter case, UNC,
+  symlink escape, and `.git`/`.env` denial. Code-light, test-heavy.
+
+### M7 acceptance criteria (gate for CLI `v0.3.0`)
+
+- M7.7–M7.11 are complete, tested offline, and usable in order.
+- M7.3 runs last: npm publish dry-run plus GitHub Release workflow,
+  `verify:package` and `verify:binaries` green, explicit owner approval.
 - Internet access is available only through declared, approval-gated tools.
 - Search responses are bounded, validated, and attributable to source URLs.
 - Offline tests never contact external services.
