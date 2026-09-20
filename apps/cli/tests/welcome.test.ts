@@ -91,7 +91,7 @@ describe('OpenCode-style Welcome TUI', () => {
     // Card centered on an 80-col terminal → 1-space indent
     expect(stripAnsi(lines[1])).toBe(' ❯ refactor database layer');
     expect(stripAnsi(lines[3])).toContain('[Plan] / Execute (Tab)');
-    expect(stripAnsi(lines[4])).toContain('Auto-approve all enabled (Shift+Tab)');
+    expect(stripAnsi(lines[4])).toContain('Auto-approve enabled (Shift+Tab)');
   });
 
   it('renders the full welcome screen correctly', () => {
@@ -468,9 +468,10 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(navigateQuestionHistory(['first', 'second'], 1, 1, 'draft')).toEqual({ input: 'draft', index: 2, draft: 'draft' });
   });
 
-  it('includes session management in the help popup without an extra content indent', () => {
+  it('includes session and MCP management in the help popup without an extra content indent', () => {
     const plain = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n'));
     expect(plain).toContain('/session   Create, list, resume, export, or compact sessions');
+    expect(plain).toContain('/mcp       Manage local MCP servers');
     expect(plain).not.toContain('│   /session');
   });
 

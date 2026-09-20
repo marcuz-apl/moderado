@@ -123,3 +123,36 @@ result limits, validates returned titles and URLs, and preserves source URLs as
 citation metadata. It does not enable arbitrary internet access, shell access,
 or automatic browsing. Network failures, denial, malformed responses, and empty
 results return visible bounded tool results.
+
+## 7. Local MCP Servers (M7.5)
+
+MCP support is limited to local stdio servers that the user explicitly adds
+through `/mcp` or the local `~/.moderado/config.json` file:
+
+```json
+{
+  "mcpServers": {
+    "docs": {
+      "executable": "node",
+      "args": ["/absolute/path/to/server.mjs", "--stdio"],
+      "enabled": true
+    }
+  }
+}
+```
+
+`/mcp add` validates the name and probes `tools/list` before saving. `/mcp
+status` reports each server independently; `/mcp disable NAME` preserves its
+record but removes its tools from the active registry, while enable, remove,
+and reload update the current session without reconnecting the provider.
+
+Server processes use `shell: false`, fixed arguments, a sanitized environment,
+timeouts, and bounded input and output. Discovered tools are namespaced
+`mcp.<server>.<tool>`, and every invocation goes through interactive approval
+even when general TUI auto-approve is enabled. Non-interactive calls fail
+closed. Server output remains untrusted and cannot change approval, provider,
+workspace, or configuration policy.
+
+Remote HTTP/SSE transports, OAuth, marketplaces, automatic installation,
+persistent server processes, prompts, and resources are outside this local-only
+workflow.

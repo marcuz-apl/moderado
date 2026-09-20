@@ -24,13 +24,13 @@
 
 | Document | Purpose |
 |---|---|
-| [**PRD.md**](file:///d:/projects/moderado/PRD.md) | **Product Requirements Document**: Personas, requirements, CLI specs, and acceptance criteria |
-| [**AGENTS.md**](file:///d:/projects/moderado/AGENTS.md) | **Agent Operational Manual**: Rules of engagement, Ponytail Decision Ladder, and subagent patterns |
-| [**docs/ARCHITECTURE.md**](file:///d:/projects/moderado/docs/ARCHITECTURE.md) | **System Architecture**: Workspaces, Dependency Injection, state machines, and event streams |
-| [**docs/TOOLS.md**](file:///d:/projects/moderado/docs/TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the 7 tools |
-| [**docs/ROUTING.md**](file:///d:/projects/moderado/docs/ROUTING.md) | **Discovery & Routing**: Classification taxonomy, AUTO selection algorithm, and retry/fallback cascades |
-| [**docs/SECURITY.md**](file:///d:/projects/moderado/docs/SECURITY.md) | **Security Model**: Workspace jail, `shell: false` isolation, environment cleansing, and injection defense |
-| [**HANDOFF.md**](file:///d:/projects/moderado/HANDOFF.md) | **Project Handoff Snapshot**: Real-time status, decisions, blockers, and next implementation milestones |
+| [**PRD.md**](./PRD.md) | **Product Requirements Document**: Personas, requirements, CLI specs, and acceptance criteria |
+| [**AGENTS.md**](./AGENTS.md) | **Agent Operational Manual**: Rules of engagement, Ponytail Decision Ladder, and subagent patterns |
+| [**docs/ARCHITECTURE.md**](./docs/ARCHITECTURE.md) | **System Architecture**: Workspaces, Dependency Injection, state machines, and event streams |
+| [**docs/TOOLS.md**](./docs/TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the 7 tools |
+| [**docs/ROUTING.md**](./docs/ROUTING.md) | **Discovery & Routing**: Classification taxonomy, AUTO selection algorithm, and retry/fallback cascades |
+| [**docs/SECURITY.md**](./docs/SECURITY.md) | **Security Model**: Workspace jail, `shell: false` isolation, environment cleansing, and injection defense |
+| [**HANDOFF.md**](./HANDOFF.md) | **Project Handoff Snapshot**: Real-time status, decisions, blockers, and next implementation milestones |
 
 ---
 
@@ -168,11 +168,6 @@ node scripts/smoke_test.js
 
 ---
 
-## License
-
-This project is licensed under the MIT License.
-*NVIDIA NIM, NGC, and model weights/APIs are subject to their respective terms and licenses. Moderado is independent and not endorsed by NVIDIA.*
-
 ### Practical coding workflow
 
 Use `/workflow` from the TUI to work through a change safely:
@@ -193,7 +188,37 @@ Install `typescript-language-server` yourself, then set `typescriptLanguageServe
 
 ### Local MCP tools
 
-Configure trusted local stdio MCP servers under `mcpServers` in `~/.moderado/config.json`, with an executable and fixed `args` list. Moderado discovers server tools at session startup, namespaces them as `mcp.<server>.<tool>`, and requires approval for every call. MCP network transports and automatic server installation are not supported.
+Use `/mcp` in the interactive TUI to manage trusted local stdio servers. The
+popup can show fresh status, add and probe a server, enable or disable it,
+remove it after confirmation, or reload its tools in the current chat session.
+The direct commands are `/mcp status`, `/mcp add`, `/mcp enable NAME`,
+`/mcp disable NAME`, `/mcp remove NAME`, and `/mcp reload`.
+
+Servers are stored locally in `~/.moderado/config.json` with this shape:
+
+```json
+{
+  "mcpServers": {
+    "docs": {
+      "executable": "node",
+      "args": ["/absolute/path/to/server.mjs", "--stdio"],
+      "enabled": true
+    }
+  }
+}
+```
+
+An older record without `enabled` is treated as enabled. Disabling a server
+keeps its configuration and status entry but removes its tools from the active
+registry; enabling, removing, and reloading also take effect without restarting
+the provider session. Tools are namespaced as `mcp.<server>.<tool>`. Every MCP
+call requires its own interactive approval even when general auto-approve is
+enabled, and non-interactive sessions deny the call.
+
+M7.5 supports only explicitly configured local stdio processes with a fixed
+executable and argument list. It does not install servers or support remote
+HTTP/SSE transports, OAuth, marketplaces, persistent processes, prompts, or
+resources.
 
 ### Host event protocol
 
@@ -206,3 +231,8 @@ Run `moderado doctor` to check the local Node runtime, workspace, Moderado home 
 ## Windows credential storage
 
 On Windows, /connect saves provider API keys in Windows Credential Manager and stores only a provider credential reference in ~/.moderado/config.json. Existing plaintext keys remain usable for compatibility. Migrate them explicitly with moderado doctor --migrate-credentials; a failed migration leaves the existing configuration unchanged. On other platforms, set the provider environment variable (for example, NVIDIA_API_KEY or OPENROUTER_API_KEY).
+
+## License
+
+This project is licensed under the MIT License.
+*NVIDIA NIM, NGC, and model weights/APIs are subject to their respective terms and licenses. Moderado is independent and not endorsed by NVIDIA.*

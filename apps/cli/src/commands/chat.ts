@@ -48,6 +48,26 @@ export function isNetworkConsentReply(input: string, previousAnswer: string): bo
   return /^(y|yes)$/i.test(input.trim()) && /\b(weather|internet|online|look up|web|curl)\b/i.test(previousAnswer);
 }
 
+export interface ApprovalPolicyOptions {
+  autoApprove: boolean;
+  networkAccessApproved: boolean;
+  requestInteractiveApproval: (request: ApprovalRequest, signal?: AbortSignal) => Promise<ApprovalDecision>;
+}
+
+export async function decideApproval(
+  request: ApprovalRequest,
+  options: ApprovalPolicyOptions,
+  signal?: AbortSignal
+): Promise<ApprovalDecision> {
+  if (isNetworkCommand(request) && !options.networkAccessApproved) {
+    return { requestId: request.requestId, status: 'denied', reason: 'Network access requires an explicit Yes reply to the model first.' };
+  }
+  if (options.autoApprove && !request.toolName.startsWith('mcp.')) {
+    return { requestId: request.requestId, status: 'approved' };
+  }
+  return options.requestInteractiveApproval(request, signal);
+}
+
 export async function createMcpToolRegistry(servers: Record<string, McpServerConfig> | undefined): Promise<IToolRegistry> {
   return createDefaultToolRegistry(await createMcpTools(servers));
 }
@@ -248,15 +268,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const checkpoints = new WorkspaceCheckpointStore();
   let networkAccessApproved = false;
   let suspendGenerationInput: (() => (() => void) | undefined) | undefined;
-  const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> => {
-    if (isNetworkCommand(req) && !networkAccessApproved) {
-      return { requestId: req.requestId, status: 'denied', reason: 'Network access requires an explicit Yes reply to the model first.' };
-    }
-    if (activeAutoApprove) return { requestId: req.requestId, status: 'approved' };
-    const resumeGenerationInput = suspendGenerationInput?.();
-    try { return await terminalApproval.requestApproval(req, sig); }
-    finally { resumeGenerationInput?.(); }
-  } };
+  const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> => decideApproval(req, {
+    autoApprove: activeAutoApprove,
+    networkAccessApproved,
+    requestInteractiveApproval: async (request, approvalSignal) => {
+      const resumeGenerationInput = suspendGenerationInput?.();
+      try { return await terminalApproval.requestApproval(request, approvalSignal); }
+      finally { resumeGenerationInput?.(); }
+    },
+  }, sig) };
   const router = new Router();
   const loop = new AgentLoop();
   let conversationHistory: ChatMessage[] = [...activeSession.messages];

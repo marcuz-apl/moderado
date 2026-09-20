@@ -93,10 +93,10 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const left5 = `\x1b[38;5;245m${shortWs}\x1b[0m`;
 
   const right5 = options.autoApprove
-    ? '\x1b[38;5;114mAuto-approve all enabled (Shift+Tab)\x1b[0m'
+    ? '\x1b[38;5;114mAuto-approve enabled (Shift+Tab)\x1b[0m'
     : '\x1b[38;5;242mAuto-approve off (Shift+Tab)\x1b[0m';
   const right5Raw = options.autoApprove
-    ? 'Auto-approve all enabled (Shift+Tab)'
+    ? 'Auto-approve enabled (Shift+Tab)'
     : 'Auto-approve off (Shift+Tab)';
   const spaces5Count = Math.max(1, width - shortWs.length - right5Raw.length);
   const line5 = left5 + ' '.repeat(spaces5Count) + right5;
@@ -327,6 +327,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
     '\x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
     '\x1b[1m/connect\x1b[0m     Connect NVIDIA NIM or another compatible provider',
+    '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
     '\x1b[1m/session\x1b[0m   Create, list, resume, export, or compact sessions',
     '\x1b[1m/clear\x1b[0m       Reset conversation memory and context history',
     '\x1b[1m/help\x1b[0m        Display this commands, shortcuts & version guide',

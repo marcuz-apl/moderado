@@ -3,9 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import * as chatCommands from '../src/commands/chat.js';
-import { createAgentTask, createMcpToolRegistry, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply } from '../src/commands/chat.js';
+import { createAgentTask, createMcpToolRegistry, decideApproval, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
+import { ApprovalRequest } from '@moderado/contracts';
 
 describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   let tempDir: string;
@@ -195,5 +196,35 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['git', 'status'] } } as any)).toBe(false);
     expect(isNetworkConsentReply('yes', 'Would you like me to look up the weather online?')).toBe(true);
     expect(isNetworkConsentReply('yes', 'Here is your answer.')).toBe(false);
+  });
+
+  it('does not auto-approve an MCP tool when general auto-approve is enabled', async () => {
+    const decision = await decideApproval(
+      { requestId: 'mcp-approval', toolName: 'mcp.docs.search', exactPayload: { query: 'safe' } } as ApprovalRequest,
+      {
+        autoApprove: true,
+        networkAccessApproved: false,
+        requestInteractiveApproval: async () => ({ requestId: 'mcp-approval', status: 'denied' }),
+      }
+    );
+
+    expect(decision).toEqual({ requestId: 'mcp-approval', status: 'denied' });
+  });
+
+  it('denies unconsented network commands before considering auto-approval', async () => {
+    const decision = await decideApproval(
+      { requestId: 'network-approval', toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as ApprovalRequest,
+      {
+        autoApprove: true,
+        networkAccessApproved: false,
+        requestInteractiveApproval: async () => ({ requestId: 'network-approval', status: 'approved' }),
+      }
+    );
+
+    expect(decision).toEqual({
+      requestId: 'network-approval',
+      status: 'denied',
+      reason: 'Network access requires an explicit Yes reply to the model first.',
+    });
   });
 });

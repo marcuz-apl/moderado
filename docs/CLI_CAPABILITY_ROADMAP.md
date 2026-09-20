@@ -243,6 +243,18 @@ traceability.
 - Keep local stdio MCP servers explicit, approval-gated, and unable to bypass core policy.
 - Validate configuration, lifecycle errors, and fake-server interaction end-to-end.
 - Update help, security, and release documentation before the `v0.3.0` decision.
+
+#### M7.5 completion criteria
+
+- `/mcp` can show status, add and probe, enable, disable, remove with
+  confirmation, and reload local stdio servers in the active session.
+- Disabled or failing servers contribute no tools and do not remove built-in
+  tools or tools from healthy peers.
+- Every `mcp.<server>.<tool>` call requires interactive approval even when
+  general auto-approve is enabled; non-interactive calls fail closed.
+- Focused MCP/TUI tests, the full offline suite, the TypeScript build, the
+  manual popup flow, and `git diff --check` all pass.
+
 ### M7 acceptance criteria
 
 - Internet access is available only through declared, approval-gated tools.
