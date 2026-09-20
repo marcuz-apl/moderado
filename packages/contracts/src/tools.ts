@@ -34,7 +34,7 @@ export interface IToolRegistry {
   getDeclarations(): ProviderToolDeclaration[];
 }
 
-export const McpServerConfigSchema = z.object({ executable: z.string().min(1), args: z.array(z.string()).max(32).default([]) });
+export const McpServerConfigSchema = z.object({ executable: z.string().min(1), args: z.array(z.string()).max(32).default([]), enabled: z.boolean().default(true) });
 export type McpServerConfig = z.infer<typeof McpServerConfigSchema>;
 export const SourcePositionSchema = z.object({ path: z.string().min(1), line: z.number().int().positive(), column: z.number().int().positive() });
 export type SourcePosition = z.infer<typeof SourcePositionSchema>;

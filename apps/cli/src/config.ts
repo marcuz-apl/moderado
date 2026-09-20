@@ -165,6 +165,33 @@ export function saveConnection(connection: ProviderConnection, customHome?: stri
   );
 }
 
+function validateMcpServerName(name: string): void {
+  if (!/^[a-z0-9_-]+$/i.test(name)) throw new Error(`Invalid MCP server name '${name}'.`);
+}
+
+export function saveMcpServer(name: string, server: McpServerConfig, customHome?: string): void {
+  validateMcpServerName(name);
+  const validated = McpServerConfigSchema.parse(server);
+  const config = loadConfig(customHome);
+  saveConfig({ mcpServers: { ...config.mcpServers, [name]: validated } }, customHome);
+}
+
+export function setMcpServerEnabled(name: string, enabled: boolean, customHome?: string): void {
+  validateMcpServerName(name);
+  const config = loadConfig(customHome);
+  const server = config.mcpServers?.[name];
+  if (!server) throw new Error(`MCP server '${name}' is not configured.`);
+  saveConfig({ mcpServers: { ...config.mcpServers, [name]: { ...server, enabled } } }, customHome);
+}
+
+export function removeMcpServer(name: string, customHome?: string): void {
+  validateMcpServerName(name);
+  const config = loadConfig(customHome);
+  if (!config.mcpServers?.[name]) throw new Error(`MCP server '${name}' is not configured.`);
+  const { [name]: _removed, ...remaining } = config.mcpServers;
+  saveConfig({ mcpServers: Object.keys(remaining).length ? remaining : undefined }, customHome);
+}
+
 export async function storeConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
   if (!connection.apiKey?.trim()) throw new Error('A provider API key is required.');
   const reference = credentialReference(connection.id);

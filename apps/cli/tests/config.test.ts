@@ -9,6 +9,9 @@ import {
   resolveApiKey,
   saveConfig,
   saveConnection,
+  saveMcpServer,
+  setMcpServerEnabled,
+  removeMcpServer,
   migrateLegacyCredentials,
 } from '../src/config.js';
 import { MemoryCredentialStore } from '../src/credentials.js';
@@ -107,5 +110,21 @@ describe('CLI Configuration Storage', () => {
     expect(raw).not.toContain('sk-legacy');
     expect(loadConfig(tempDir).connections?.openrouter?.credentialReference).toBe('moderado/provider/openrouter');
     expect(await store.get('moderado/provider/openrouter')).toBe('sk-legacy');
+  });
+
+  it('treats a persisted MCP server without enabled as enabled', () => {
+    fs.mkdirSync(path.dirname(getConfigPath(tempDir)), { recursive: true });
+    fs.writeFileSync(getConfigPath(tempDir), JSON.stringify({
+      mcpServers: { docs: { executable: 'node', args: ['server.mjs'] } },
+    }));
+    expect(loadConfig(tempDir).mcpServers?.docs).toMatchObject({ enabled: true });
+  });
+
+  it('adds, disables, and removes a validated MCP server', () => {
+    saveMcpServer('docs', { executable: 'node', args: ['server.mjs'], enabled: true }, tempDir);
+    setMcpServerEnabled('docs', false, tempDir);
+    expect(loadConfig(tempDir).mcpServers?.docs.enabled).toBe(false);
+    removeMcpServer('docs', tempDir);
+    expect(loadConfig(tempDir).mcpServers).toBeUndefined();
   });
 });
