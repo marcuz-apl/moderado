@@ -2,8 +2,8 @@
 
 Updated: 2026-09-20
 Branch: master
-Commit: (pending) single commit covering M7.6 web answers + composer caret fix
-Status: All work implemented and verified locally; ready to commit and push.
+Commit: 46d3ecb (v0.2.36+260920l) — in sync with origin/master
+Status: Roadmap rewrite approved and pushed; M7.7 is the next implementation item.
 
 ## Summary
 
@@ -11,6 +11,11 @@ Web search now answers current-information questions by searching hosted provide
 
 ## Completed
 
+- Roadmap rewritten and pushed (`46d3ecb`): CLI-only `v0.3.0` scope with
+  M7.7 `/connect` free-model hub, M7.8 composer context (`/init`, `@`
+  mentions, images), M7.9 `/session undo | redo | share`, M7.10 core
+  subagents + shell aliases, M7.11 Windows/WSL hardening, and M7.3 as the
+  final publish gate.
 - `web_search` keeps model-facing `query`, `objective`, and `maxResults`, makes `endpoint` optional, and stays automatic without a per-search approval prompt.
 - Search-site cascade: configured custom endpoint first when present, then Exa, then Parallel, with `MODERADO_WEB_SEARCH_PROVIDER`/`webSearchProvider` pinning a site while the rest stay as fallback.
 - Bounded 20-second timeout per attempt, Zod-validated direct-JSON and SSE payloads, 8 KB context cap, and `Title:`/`URL:` source metadata kept out of the user-facing answer.
@@ -40,7 +45,7 @@ Web search now answers current-information questions by searching hosted provide
 - Exa is the default search site because a live probe returned current weather context in about one second without a credential; Parallel is the fallback.
 - Contacting hosted search services is an owner-requested relaxation of the earlier "no built-in third-party search service" stance. `docs/SECURITY.md` records the boundary and states that search output is untrusted reference data.
 - Search sites are ordered statically rather than measured per query so behaviour stays predictable and offline testable.
-- Root `VERSION` remains `v0.2.34+260920j`; the versioning hook bumps it on commit.
+- Root `VERSION` is `v0.2.36+260920l`; the versioning hook bumps it on commit.
 - The live-evidence prompt is an internal turn, not user input: it reaches the provider but is replaced with the bare question before persistence, which is what keeps the session JSON and the question recall honest.
 - Single commit for both workstreams (M7.6 + composer caret fix), per owner request ("Git push all").
 
@@ -50,8 +55,12 @@ Web search now answers current-information questions by searching hosted provide
 
 ## Next action
 
-1. Manual live check of attribution: ask a weather question, then immediately ask an unrelated question such as `who are you?`, and confirm each answer matches its own question and that the saved session shows the bare questions.
-2. Manual terminal check of the composer: browse history with Up, move with Left/Right past both ends, click the input line, and confirm the cursor never leaves the edit box.
+1. Implement M7.7: spike OpenCode Zen / Agnes for a machine-callable
+   free-model discovery endpoint (auth, ToS, offline-test seams); then
+   `/connect` free-model hub: NIM (done) + OpenRouter-free + generic
+   OpenAI-compatible paid path.
+2. Manual live check of attribution: ask a weather question, then immediately ask an unrelated question such as `who are you?`, and confirm each answer matches its own question and that the saved session shows the bare questions.
+3. Manual terminal check of the composer: browse history with Up, move with Left/Right past both ends, click the input line, and confirm the cursor never leaves the edit box.
 
 ## Resume notes
 
