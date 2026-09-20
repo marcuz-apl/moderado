@@ -127,6 +127,7 @@ export interface SlashCommand {
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/connect', desc: 'Connect a model provider' },
   { name: '/model', desc: 'Switch active AI model' },
+  { name: '/mcp', desc: 'Manage local MCP servers' },
   { name: '/session', desc: 'Create, list, resume, export, or compact sessions' },
   { name: '/workflow', desc: 'Inspect Git, build plans, or undo agent changes' },
   { name: '/clear', desc: 'Reset conversation memory' },
@@ -421,6 +422,7 @@ export interface PromptInteractiveTurnOptions {
   onConnect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
+  onMcp?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
 }
@@ -666,6 +668,25 @@ export async function promptInteractiveTurn(
           stdout.write('\x1b[H\x1b[J');
           stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();
+          stdin.on('keypress', onKeypress);
+          return;
+        }
+
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/mcp')) {
+          const command = input.trim();
+          input = '';
+          stdin.removeListener('keypress', onKeypress);
+          if (options.onMcp) {
+            await options.onMcp(command, (popupLines) => {
+              stdout.write('\x1b[H\x1b[J');
+              stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+            });
+          }
+          if (options.signal?.aborted) return;
+          readlineModule.emitKeypressEvents(stdin);
+          stdin.resume();
+          stdin.setRawMode(true);
+          redrawFull();
           stdin.on('keypress', onKeypress);
           return;
         }

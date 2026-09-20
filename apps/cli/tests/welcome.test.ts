@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   renderModeradoHeader,
   renderCenteredWelcomeScreen,
@@ -15,6 +15,8 @@ import {
   MODERADO_ASCII_LOGO,
   COMMAND_HINT,
   stripAnsi,
+  getMatchingCommands,
+  promptInteractiveTurn,
   selectCommandCandidate,
 } from '../src/ui/welcome.js';
 
@@ -249,6 +251,50 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/model');
     expect(plain).not.toContain('/clear');
     expect(plain).not.toContain('/help');
+  });
+
+  it('offers /mcp in slash-command completion', () => {
+    expect(getMatchingCommands('/mc').map((command) => command.name)).toEqual(['/mcp']);
+  });
+
+  it('routes /mcp input through the MCP callback before submitting an agent turn', async () => {
+    const stdin = process.stdin as typeof process.stdin & { setRawMode?: (mode: boolean) => typeof process.stdin };
+    const originalIsTTY = Object.getOwnPropertyDescriptor(stdin, 'isTTY');
+    const originalSetRawMode = stdin.setRawMode;
+    const resume = vi.spyOn(stdin, 'resume').mockImplementation(() => stdin);
+    const pause = vi.spyOn(stdin, 'pause').mockImplementation(() => stdin);
+    const write = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    Object.defineProperty(stdin, 'isTTY', { configurable: true, value: true });
+    stdin.setRawMode = () => stdin;
+    const controller = new AbortController();
+    const commands: string[] = [];
+
+    try {
+      const turnPromise = promptInteractiveTurn({
+        model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\test',
+        signal: controller.signal,
+        onMcp: async (command) => {
+          commands.push(command);
+          controller.abort();
+        },
+      });
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of '/mcp status') {
+        stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      }
+      stdin.emit('keypress', '\r', { name: 'return' });
+
+      await expect(turnPromise).resolves.toMatchObject({ text: '' });
+      expect(commands).toEqual(['/mcp status']);
+    } finally {
+      controller.abort();
+      write.mockRestore();
+      pause.mockRestore();
+      resume.mockRestore();
+      stdin.setRawMode = originalSetRawMode;
+      if (originalIsTTY) Object.defineProperty(stdin, 'isTTY', originalIsTTY);
+      else delete (stdin as { isTTY?: boolean }).isTTY;
+    }
   });
 
   it('recalls prior questions and restores the unfinished draft', () => {

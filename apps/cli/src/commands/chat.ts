@@ -2,10 +2,10 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { AgentLoop, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
-import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, WorkspaceCheckpointStore } from '@moderado/tools';
-import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig } from '@moderado/contracts';
+import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, discoverMcpServers, WorkspaceCheckpointStore } from '@moderado/tools';
+import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
-import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, resolveConnectionCredential, saveConnection, storeConnectionCredential } from '../config.js';
+import { getActiveConnection, loadConfig, ProviderConnection, removeMcpServer, resolveApiKey, resolveConnectionCredential, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
 import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
@@ -13,7 +13,8 @@ import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRe
 import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
 import { promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
-import { renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
+import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
+import { askModalChoice } from '../ui/prompt.js';
 import { findModelPricing } from '../model_pricing.js';
 import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
 
@@ -49,6 +50,134 @@ export function isNetworkConsentReply(input: string, previousAnswer: string): bo
 
 export async function createMcpToolRegistry(servers: Record<string, McpServerConfig> | undefined): Promise<IToolRegistry> {
   return createDefaultToolRegistry(await createMcpTools(servers));
+}
+
+export interface McpCommandOptions {
+  reloadMcpTools: () => Promise<void>;
+  signal?: AbortSignal;
+  configHome?: string;
+  promptText?: (label: string) => Promise<string | undefined>;
+  discoverMcpServers?: typeof discoverMcpServers;
+  selectListPopup?: typeof selectListPopup;
+  selectConfirmPopup?: typeof selectConfirmPopup;
+}
+
+export async function handleMcpCommand(
+  command: string,
+  drawFrame: (popupLines: string[]) => void,
+  options: McpCommandOptions
+): Promise<void> {
+  const choose = options.selectListPopup ?? selectListPopup;
+  const confirm = options.selectConfirmPopup ?? selectConfirmPopup;
+  const discover = options.discoverMcpServers ?? discoverMcpServers;
+  const promptText = options.promptText ?? (async (label: string): Promise<string | undefined> => {
+    layerPromptBox(drawFrame, label);
+    const answer = await askModalChoice('\n> ', { signal: options.signal });
+    return answer === 'q' ? undefined : answer.trim();
+  });
+  const show = (title: string, lines: string[]): void => drawFrame(renderBoxLines(title, [...lines, '', 'Press Esc or Enter to return.'], 72));
+  const currentServers = (): Record<string, McpServerConfig> => loadConfig(options.configHome).mcpServers ?? {};
+  const pickServer = async (title: string, predicate: (server: McpServerConfig) => boolean = () => true): Promise<string | undefined> => {
+    const entries = Object.entries(currentServers()).filter(([, server]) => predicate(server));
+    if (!entries.length) {
+      show(title, ['No matching local MCP servers are configured.']);
+      return undefined;
+    }
+    return (await choose(title, entries.map(([name, server]) => ({
+      label: name,
+      value: name,
+      tag: server.enabled === false ? 'Disabled' : 'Enabled',
+      description: server.executable,
+    })), { drawFrame, signal: options.signal, filterable: true })) ?? undefined;
+  };
+
+  let actionText = command.slice('/mcp'.length).trim();
+  if (!actionText) {
+    actionText = (await choose('Local MCP servers', [
+      { label: 'List/status', value: 'status', description: 'Probe configured servers and show their current tools.' },
+      { label: 'Add', value: 'add', description: 'Probe and save a trusted local stdio server.' },
+      { label: 'Enable/disable', value: 'toggle', description: 'Change whether a configured server contributes tools.' },
+      { label: 'Remove', value: 'remove', description: 'Delete a server after confirmation.' },
+      { label: 'Reload', value: 'reload', description: 'Rebuild MCP tools for this chat session.' },
+    ], { drawFrame, signal: options.signal })) ?? '';
+  }
+  if (!actionText) return;
+
+  const [requestedAction, requestedName] = actionText.split(/\s+/, 2);
+  let action = requestedAction.toLowerCase();
+  let name: string | undefined = requestedName;
+
+  try {
+    if (action === 'status' || action === 'list') {
+      const servers = currentServers();
+      if (!Object.keys(servers).length) {
+        show('Local MCP servers', ['No local MCP servers are configured.']);
+        return;
+      }
+      const statuses = await discover(servers);
+      await choose('Local MCP servers', statuses.map((status) => ({
+        label: status.name,
+        value: status.name,
+        tag: status.enabled ? 'Enabled' : 'Disabled',
+        description: `${servers[status.name]?.executable ?? 'Unknown executable'} · ${status.error ? `Error: ${status.error}` : `${status.tools.length} ${status.tools.length === 1 ? 'tool' : 'tools'}`}`,
+      })), { drawFrame, signal: options.signal, filterable: true, hint: '↑↓ inspect · Esc close' });
+      return;
+    }
+
+    if (action === 'add') {
+      name = await promptText('MCP server name (letters, numbers, dash, underscore)');
+      if (!name) return;
+      if (!/^[a-z0-9_-]+$/i.test(name)) throw new Error(`Invalid MCP server name '${name}'.`);
+      const executable = await promptText('Local executable');
+      if (!executable) return;
+      const argsText = await promptText('Fixed arguments (space-delimited, optional)');
+      if (argsText === undefined) return;
+      const server = McpServerConfigSchema.parse({ executable: executable.trim(), args: argsText.trim() ? argsText.trim().split(/\s+/) : [], enabled: true });
+      const [status] = await discover({ [name]: server });
+      if (!status || status.error) {
+        show('MCP add failed', [status?.error ?? 'The server did not return a valid tools/list response.', 'Configuration was not changed.']);
+        return;
+      }
+      saveMcpServer(name, server, options.configHome);
+      await options.reloadMcpTools();
+      show('MCP server added', [`${name} · ${status.tools.length} ${status.tools.length === 1 ? 'tool' : 'tools'}`]);
+      return;
+    }
+
+    if (action === 'toggle') {
+      name = await pickServer('Enable or disable MCP server');
+      if (!name) return;
+      action = currentServers()[name]?.enabled === false ? 'enable' : 'disable';
+    }
+    if (action === 'enable' || action === 'disable') {
+      name ??= await pickServer(`${action === 'enable' ? 'Enable' : 'Disable'} MCP server`, (server) => (server.enabled !== false) !== (action === 'enable'));
+      if (!name) return;
+      setMcpServerEnabled(name, action === 'enable', options.configHome);
+      await options.reloadMcpTools();
+      show('MCP server updated', [`${name} is now ${action === 'enable' ? 'enabled' : 'disabled'}.`]);
+      return;
+    }
+
+    if (action === 'remove') {
+      name ??= await pickServer('Remove MCP server');
+      if (!name) return;
+      if (!(await confirm('Remove MCP server', [`Remove '${name}' from local configuration?`], { drawFrame, signal: options.signal }))) return;
+      removeMcpServer(name, options.configHome);
+      await options.reloadMcpTools();
+      show('MCP server removed', [`Removed ${name}.`]);
+      return;
+    }
+
+    if (action === 'reload') {
+      await options.reloadMcpTools();
+      show('MCP tools reloaded', ['Configured local MCP tools were rebuilt for this chat session.']);
+      return;
+    }
+
+    show('Local MCP servers', ['Use status, add, enable NAME, disable NAME, remove NAME, or reload.']);
+  } catch (error) {
+    show('MCP management error', [error instanceof Error ? error.message : 'MCP management failed.']);
+  }
 }
 
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
@@ -172,6 +301,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
         activeSession.messages = [];
         sessionStore.save(activeSession);
+      },
+      onMcp: async (command, drawFrame) => {
+        await handleMcpCommand(command, drawFrame, { reloadMcpTools, signal });
       },
       onWorkflow: async (command, drawFrame) => {
         const action = command.slice('/workflow'.length).trim();

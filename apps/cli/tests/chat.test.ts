@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import * as chatCommands from '../src/commands/chat.js';
 import { createAgentTask, createMcpToolRegistry, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
-import { saveConfig } from '../src/config.js';
+import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
 
 describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   let tempDir: string;
@@ -67,6 +68,95 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
 
     expect(registry.get('read_file')).toBeDefined();
     expect(registry.get('mcp.disabled.search')).toBeUndefined();
+  });
+
+  it('probes an added MCP server before saving it and reloading the registry', async () => {
+    const prompts = ['docs', process.execPath, 'server.mjs --stdio'];
+    const discovered: unknown[] = [];
+    let reloads = 0;
+    const handleMcpCommand = (chatCommands as unknown as { handleMcpCommand?: Function }).handleMcpCommand;
+
+    await handleMcpCommand?.('/mcp add', () => {}, {
+      configHome: tempDir,
+      reloadMcpTools: async () => { reloads++; },
+      promptText: async () => prompts.shift(),
+      discoverMcpServers: async (servers: unknown) => {
+        discovered.push(servers);
+        return [{ name: 'docs', enabled: true, tools: [{ name: 'search' }] }];
+      },
+    });
+
+    expect(discovered).toEqual([{ docs: { executable: process.execPath, args: ['server.mjs', '--stdio'], enabled: true } }]);
+    expect(loadConfig(tempDir).mcpServers?.docs).toEqual({ executable: process.execPath, args: ['server.mjs', '--stdio'], enabled: true });
+    expect(reloads).toBe(1);
+  });
+
+  it('leaves persisted MCP configuration unchanged when an add probe fails', async () => {
+    saveMcpServer('existing', { executable: 'node', args: ['existing.mjs'], enabled: true }, tempDir);
+    const prompts = ['broken', 'missing-server', ''];
+    let reloads = 0;
+    const handleMcpCommand = (chatCommands as unknown as { handleMcpCommand?: Function }).handleMcpCommand;
+
+    await handleMcpCommand?.('/mcp add', () => {}, {
+      configHome: tempDir,
+      reloadMcpTools: async () => { reloads++; },
+      promptText: async () => prompts.shift(),
+      discoverMcpServers: async () => [{ name: 'broken', enabled: true, tools: [], error: 'spawn failed' }],
+    });
+
+    expect(loadConfig(tempDir).mcpServers).toEqual({ existing: { executable: 'node', args: ['existing.mjs'], enabled: true } });
+    expect(reloads).toBe(0);
+  });
+
+  it('persists enable and disable changes and reloads the MCP registry', async () => {
+    saveMcpServer('docs', { executable: 'node', args: ['server.mjs'], enabled: true }, tempDir);
+    let reloads = 0;
+    const handleMcpCommand = (chatCommands as unknown as { handleMcpCommand?: Function }).handleMcpCommand;
+    const options = { configHome: tempDir, reloadMcpTools: async () => { reloads++; } };
+
+    await handleMcpCommand?.('/mcp disable docs', () => {}, options);
+    expect(loadConfig(tempDir).mcpServers?.docs.enabled).toBe(false);
+    await handleMcpCommand?.('/mcp enable docs', () => {}, options);
+    expect(loadConfig(tempDir).mcpServers?.docs.enabled).toBe(true);
+    await handleMcpCommand?.('/mcp reload', () => {}, options);
+    expect(reloads).toBe(3);
+  });
+
+  it('requires confirmation before removing an MCP server and reloads after deletion', async () => {
+    saveMcpServer('docs', { executable: 'node', args: ['server.mjs'], enabled: true }, tempDir);
+    let reloads = 0;
+    const handleMcpCommand = (chatCommands as unknown as { handleMcpCommand?: Function }).handleMcpCommand;
+
+    await handleMcpCommand?.('/mcp remove docs', () => {}, {
+      configHome: tempDir,
+      reloadMcpTools: async () => { reloads++; },
+      selectConfirmPopup: async () => true,
+    });
+
+    expect(loadConfig(tempDir).mcpServers?.docs).toBeUndefined();
+    expect(reloads).toBe(1);
+  });
+
+  it('shows MCP status with enabled state, executable, tool count, and errors', async () => {
+    saveMcpServer('docs', { executable: 'node', args: ['docs.mjs'], enabled: true }, tempDir);
+    saveMcpServer('broken', { executable: 'missing', args: [], enabled: true }, tempDir);
+    let items: Array<{ label: string; tag?: string; description?: string }> = [];
+    const handleMcpCommand = (chatCommands as unknown as { handleMcpCommand?: Function }).handleMcpCommand;
+
+    await handleMcpCommand?.('/mcp status', () => {}, {
+      configHome: tempDir,
+      reloadMcpTools: async () => {},
+      discoverMcpServers: async () => [
+        { name: 'docs', enabled: true, tools: [{ name: 'search' }, { name: 'open' }] },
+        { name: 'broken', enabled: true, tools: [], error: 'spawn failed' },
+      ],
+      selectListPopup: async (_title: string, statusItems: typeof items) => { items = statusItems; return null; },
+    });
+
+    expect(items).toEqual([
+      { label: 'docs', value: 'docs', tag: 'Enabled', description: 'node · 2 tools' },
+      { label: 'broken', value: 'broken', tag: 'Enabled', description: 'missing · Error: spawn failed' },
+    ]);
   });
 
   it('recognizes only a bare exit input for an exit reminder', () => {
