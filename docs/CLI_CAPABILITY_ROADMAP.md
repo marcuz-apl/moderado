@@ -7,9 +7,7 @@
 ## Purpose
 
 Moderado already has a clean provider-independent core, a safe coding-tool boundary,
-and an interactive terminal interface. This roadmap identifies the next five
-capability areas needed to make it dependable for real coding work and ready
-for public distribution.
+and an interactive terminal interface. This roadmap records the capability areas needed to make Moderado dependable for real coding work and ready for public distribution.
 
 The milestones are deliberately sequential. Each must be complete, tested, and
 usable before work begins on the next one.
@@ -156,42 +154,36 @@ and update.
 - Release documentation reflects the current `VERSION` identifier and supported
   providers.
 
-## Milestone 6 â€” Public distribution and release trust
+## Milestone 6 — Public distribution and release trust
 
-**Goal:** Turn the release-ready CLI into an installable, reproducible public
-product without exposing publishing credentials or shipping an incomplete npm
-package.
+**Goal:** Turn the CLI into an installable, reproducible public product without
+exposing publishing credentials or implying that an unpublished artifact is
+already a release.
 
-### M6.1 â€” Standalone npm installation and release gate âœ…
+### M6.1 — Standalone npm installation and release gate ?
 
-- Build one self-contained npm package whose compiled CLI can resolve its
-  internal workspace modules after a global install.
-- Verify the packed tarball by installing it into an empty temporary directory
-  and running `moderado --help`; this check must not contact a provider.
-- Add a GitHub Actions release workflow that runs the offline verification and
-  produces the package as a release artifact. It must require an explicit tag
-  or manual release action before publication is even considered.
-- Use npm trusted publishing (OIDC) when publication is deliberately enabled;
-  no long-lived npm token belongs in the repository or workflow configuration.
-- Document release-artifact installation and the maintainer release
-  prerequisites; public npm installation awaits an explicit publishing step.
+- Build a self-contained npm package and verify it in an empty temporary directory.
+- Add a guarded npm and GitHub Release publication workflow using trusted publishing.
 
-### M6.2 â€” Standalone binaries and checksums
+### M6.2 — Standalone binaries and checksums ?
 
-- Produce platform-specific Windows, macOS, and Linux artifacts from the
-  verified CLI runtime using `@yao-pkg/pkg`.
-- Generate SHA-256 checksum files and a versioned release manifest for every
-  artifact.
-- Build and smoke-test the artifacts through the existing release workflow.
-- Label M6.2 artifacts unsigned; certificate-backed code signing is a separate
-  maintainer-controlled release step.
-- Add a checksum-verifying install script only after those artifacts exist.
+- Build Windows x64, macOS ARM64, and Linux x64 executables with `@yao-pkg/pkg`.
+- Generate SHA-256 checksums and a versioned artifact manifest.
+- Verify the manifest and host-compatible executable offline.
 
-### M6.3 â€” Package-manager channels
+### M6.3 — Package-manager manifests ?
 
-- Publish and maintain Homebrew, Scoop/winget, and AUR manifests from stable
-  binary releases.
-- Keep npm as the canonical package for npm and Bun users.
+- Generate reviewable Homebrew, Scoop, winget, and AUR manifests from verified
+  release artifacts and checksums.
+- Keep npm as the canonical channel for npm and Bun users.
+- Generation is deliberately separate from external package-manager submission.
+
+### M6.4 — Release execution and channel publication
+
+- Run the guarded publication workflow only after the owner selects a release version.
+- Validate the uploaded npm package and every platform artifact from the GitHub Release.
+- Submit the reviewed M6.3 manifests to the chosen third-party package-manager channels.
+- Record signing status accurately; unsigned binaries remain clearly labelled.
 
 ### Done when
 
@@ -213,48 +205,44 @@ For each milestone:
 5. Review the user-facing CLI flow manually.
 6. Commit using the repository's Alfazen versioning hook only after verification.
 
-Milestones 1 through 5 are complete. M6 begins the public-distribution phase
-on top of the stable CLI foundation.
+Milestones 1 through 5 are complete. M6 establishes distribution foundations;
+M6.4 begins only for an explicitly chosen public release.
 
-## Milestone 7 â€” Controlled internet access
+## Milestone 7 — Controlled internet access and release completion
 
-**Goal:** Let Moderado retrieve current public information while preserving
-approval-first security, bounded context, and source traceability.
+**Goal:** Let Moderado retrieve current public information and complete its MCP
+surface while preserving approval-first security, bounded context, and source
+traceability.
 
-### M7.1 â€” Approved web search âœ…
+### M7.1 — Approved web search foundation ?
 
 - Add the approval-gated `web_search` tool with a configured HTTPS endpoint.
 - Bound query length and result count, validate response shape, and return source URLs.
 - Keep automated tests local and offline; no implicit shell or unrestricted network access.
 
-### M7.2 â€” Web-aware answers âœ…
+### M7.2 — Web-aware answer evidence ?
 
-- Add search results to agent context only after approved search completes.
-- Preserve source URLs and render citations in the answer area.
-- Clearly report when search is unavailable, denied, or returns no results.
+- Preserve source URLs as tool metadata so a client can render citations.
 - Keep result size and context injection bounded.
+- Surface search availability and endpoint configuration in the release gate before claiming user-facing web search support.
 
-### M7.3 â€” Public release channels âœ…
+### M7.3 — Guarded public-release workflow ?
 
 - Add deliberate maintainer workflows for npm and GitHub Release publication.
-- Enable Homebrew, Scoop, winget, and AUR submissions only from verified artifacts.
-- Keep credentials out of development commits and require explicit release approval.
+- Require verified artifacts and explicit release approval before any publish action.
+- Keep credentials out of development commits.
 
-### M7.4 â€” Provider expansion âœ…
+### M7.4 — Provider expansion foundation ?
 
-- Add provider adapters through the existing provider-independent contracts.
-- Extend model discovery, pricing metadata, capability classification, and routing.
+- Add a shared OpenAI-compatible adapter through provider-independent contracts.
 - Preserve free-first AUTO routing and explicit opt-in for paid or unknown-cost models.
 
-## Milestone 8 â€” Desktop host expansion
+### M7.5 — MCP CLI management and release gate
 
-### M8.1 â€” Desktop host architecture
-
-- Define a versioned, typed IPC boundary between a Tauri host and the Node agent.
-- Reuse the existing core, providers, tools, approvals, sessions, and web search.
-- Keep credentials, workspace access, and approval enforcement inside the agent process.
-- Require offline protocol tests before implementing desktop UI.
-
+- Add `/mcp` discovery, server status, add, disable, enable, and remove controls.
+- Keep local stdio MCP servers explicit, approval-gated, and unable to bypass core policy.
+- Validate configuration, lifecycle errors, and fake-server interaction end-to-end.
+- Update help, security, and release documentation before the `v0.3.0` decision.
 ### M7 acceptance criteria
 
 - Internet access is available only through declared, approval-gated tools.
