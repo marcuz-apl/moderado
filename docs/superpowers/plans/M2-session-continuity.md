@@ -44,7 +44,7 @@
 - Consumes: ChatCompletionChunk.usage from contracts.
 - Produces: AgentRunResult.usage of type ChatUsage or undefined.
 
-- [ ] **Step 1: Write a failing core test**
+- [x] **Step 1: Write a failing core test**
 
 Queue a fake response containing usage and assert that the completed result has
 the same values.
@@ -58,18 +58,18 @@ const result = await loop.run('Answer', options);
 expect(result.usage).toEqual({ promptTokens: 11, completionTokens: 7, totalTokens: 18 });
 ~~~
 
-- [ ] **Step 2: Verify the test fails**
+- [x] **Step 2: Verify the test fails**
 
 Run: npm test -- packages/core/tests/agent.test.ts
 Expected: FAIL because AgentRunResult has no usage value.
 
-- [ ] **Step 3: Implement the smallest core change**
+- [x] **Step 3: Implement the smallest core change**
 
 Add optional usage to AgentRunResult, retain the most recent chunk.usage while
 iterating, and include it in every successful, failed, cancelled, and
 step-limited return object.
 
-- [ ] **Step 4: Verify the focused test passes**
+- [x] **Step 4: Verify the focused test passes**
 
 Run: npm run build; npm test -- packages/core/tests/agent.test.ts
 Expected: PASS.
@@ -85,7 +85,7 @@ Expected: PASS.
 - Produces: StoredSessionSchema, SessionStore, createSession,
   loadLatestSession, listSessions, saveSession, and calculateSessionCost.
 
-- [ ] **Step 1: Write failing storage tests**
+- [x] **Step 1: Write failing storage tests**
 
 Cover creation and loading, latest-first ordering, malformed JSON skip, atomic
 save replacement, and the absence of an apiKey key in serialized output.
@@ -98,18 +98,18 @@ expect(store.loadLatestSession('C:/repo')?.id).toBe(session.id);
 expect(JSON.stringify(store.loadLatestSession('C:/repo'))).not.toContain('apiKey');
 ~~~
 
-- [ ] **Step 2: Verify the tests fail**
+- [x] **Step 2: Verify the tests fail**
 
 Run: npm test -- apps/cli/tests/sessions.test.ts
 Expected: FAIL because the session module does not exist.
 
-- [ ] **Step 3: Implement the store**
+- [x] **Step 3: Implement the store**
 
 Use node:crypto SHA-256 for workspace directories and randomUUID for IDs. Parse
 records with Zod. Write JSON to a random same-directory temporary name and
 rename it into place. Keep only the fields in the specification.
 
-- [ ] **Step 4: Add usage and pricing tests**
+- [x] **Step 4: Add usage and pricing tests**
 
 Test known pricing, missing pricing, and missing usage.
 
@@ -120,7 +120,7 @@ expect(calculateSessionCost(
 )).toEqual({ costKnown: true, costUsd: 0.005 });
 ~~~
 
-- [ ] **Step 5: Verify the focused tests pass**
+- [x] **Step 5: Verify the focused tests pass**
 
 Run: npm run build; npm test -- apps/cli/tests/sessions.test.ts
 Expected: PASS.
@@ -135,7 +135,7 @@ Expected: PASS.
 - Consumes: StoredSession.
 - Produces: exportSessionMarkdown(session) and compactSessionMessages(messages).
 
-- [ ] **Step 1: Write failing export and compaction tests**
+- [x] **Step 1: Write failing export and compaction tests**
 
 Verify export includes user and assistant content, omits a simulated secret, and
 compaction preserves the newest four conversational messages while replacing
@@ -147,18 +147,18 @@ expect(compacted[0]).toMatchObject({ role: 'system' });
 expect(compacted.some((m) => JSON.stringify(m).includes('nvapi-secret'))).toBe(false);
 ~~~
 
-- [ ] **Step 2: Verify the tests fail**
+- [x] **Step 2: Verify the tests fail**
 
 Run: npm test -- apps/cli/tests/sessions.test.ts
 Expected: FAIL because export and compaction helpers do not exist.
 
-- [ ] **Step 3: Implement deterministic redaction and reduction**
+- [x] **Step 3: Implement deterministic redaction and reduction**
 
 Render Markdown from normalized message fields only. Omit tool payload details.
 Build one summary from older user/assistant excerpts and tool name/status pairs;
 retain the newest four conversational messages and their adjacent tool results.
 
-- [ ] **Step 4: Verify the focused tests pass**
+- [x] **Step 4: Verify the focused tests pass**
 
 Run: npm test -- apps/cli/tests/sessions.test.ts
 Expected: PASS.
@@ -174,18 +174,18 @@ Expected: PASS.
 - Produces: restored conversationHistory, persisted active session, actual status
   tokens/cost, and testable store injection options.
 
-- [ ] **Step 1: Write failing chat integration tests**
+- [x] **Step 1: Write failing chat integration tests**
 
 Inject a temporary store containing a prior session. Assert the chat handler
 passes restored history into the agent run and saves a changed session after the
 turn.
 
-- [ ] **Step 2: Verify the tests fail**
+- [x] **Step 2: Verify the tests fail**
 
 Run: npm test -- apps/cli/tests/chat.test.ts
 Expected: FAIL because chat has no session-store lifecycle.
 
-- [ ] **Step 3: Implement lifecycle integration**
+- [x] **Step 3: Implement lifecycle integration**
 
 Create or load the workspace session before the prompt loop. Restore only
 messages, mode, and model label. After each agent result, replace session
@@ -193,7 +193,7 @@ messages, apply returned usage, calculate cost from discovered pricing when
 available, update timestamps, and save atomically. Replace character-count
 token estimation with provider usage display.
 
-- [ ] **Step 4: Verify the focused tests pass**
+- [x] **Step 4: Verify the focused tests pass**
 
 Run: npm run build; npm test -- apps/cli/tests/chat.test.ts apps/cli/tests/sessions.test.ts
 Expected: PASS.
@@ -211,7 +211,7 @@ Expected: PASS.
 - Produces: /session, /session new, /session list, /session resume,
   /session export, and /session compact command dispatch.
 
-- [ ] **Step 1: Write failing command-completion tests**
+- [x] **Step 1: Write failing command-completion tests**
 
 Assert slash completion lists only /session for a slash prefix and that the
 description explains the five session actions.
@@ -222,12 +222,12 @@ expect(getMatchingCommands('/s')).toEqual([
 ]);
 ~~~
 
-- [ ] **Step 2: Verify the tests fail**
+- [x] **Step 2: Verify the tests fail**
 
 Run: npm test -- apps/cli/tests/welcome.test.ts
 Expected: FAIL because /session is not registered.
 
-- [ ] **Step 3: Implement popup actions**
+- [x] **Step 3: Implement popup actions**
 
 Register the one top-level command. Route /session and each spaced subcommand
 to a dark-grey popup. Use the existing selectListPopup and selectConfirmPopup
@@ -235,7 +235,7 @@ components. /session new starts a record, list/resume loads a selection, export
 writes only inside the canonical workspace after confirmation, and compact
 shows the proposed reduction before confirmation.
 
-- [ ] **Step 4: Verify focused UI and chat tests pass**
+- [x] **Step 4: Verify focused UI and chat tests pass**
 
 Run: npm run build; npm test -- apps/cli/tests/welcome.test.ts apps/cli/tests/chat.test.ts
 Expected: PASS.
@@ -247,23 +247,23 @@ Expected: PASS.
 - Modify: HANDOFF.md
 - Modify: docs/CLI_CAPABILITY_ROADMAP.md
 
-- [ ] **Step 1: Update user documentation**
+- [x] **Step 1: Update user documentation**
 
 Document session location, each /session action, local privacy limits, and the
 meaning of Usage unavailable and Cost unknown.
 
-- [ ] **Step 2: Mark M2 complete in the roadmap and handoff**
+- [x] **Step 2: Mark M2 complete in the roadmap and handoff**
 
 Record the implementation result, test evidence, and the next roadmap
 milestone.
 
-- [ ] **Step 3: Run the full validation set**
+- [x] **Step 3: Run the full validation set**
 
 Run: npm run build; npm test; git diff --check
 Expected: build succeeds, every offline test passes, and the patch contains no
 whitespace errors.
 
-- [ ] **Step 4: Commit after validation**
+- [x] **Step 4: Commit after validation**
 
 Run the configured Alfazen hook through a conventional commit subject:
 git commit -m "feat(cli): add persistent session workflows"

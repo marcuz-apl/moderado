@@ -1,6 +1,6 @@
 # Trustworthy Model Responses Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Validate assistant output and provide capability-aware, provider-neutral AUTO fallback.
 
@@ -25,10 +25,10 @@
 - Modify: `packages/core/src/agent.ts`
 - Test: `packages/core/tests/agent.test.ts`
 
-- [ ] Write failing tests for an empty final response and a chat-only model.
-- [ ] Run the focused tests and confirm empty output is currently accepted.
-- [ ] Add tool-call capability metadata and reject empty final assistant content with a provider-neutral event.
-- [ ] Run the focused tests and confirm they pass.
+- [x] Write failing tests for an empty final response and a chat-only model.
+- [x] Run the focused tests and confirm empty output is currently accepted.
+- [x] Add tool-call capability metadata and reject empty final assistant content with a provider-neutral event.
+- [x] Run the focused tests and confirm they pass.
 
 ### Task 2: Free-first fallback
 
@@ -38,10 +38,10 @@
 - Test: `packages/core/tests/router.test.ts`
 - Test: `tests/integration/e2e_model_failover.test.ts`
 
-- [ ] Write failing tests for AUTO fallback after an empty or unavailable model response and for pinned-model no-switch behavior.
-- [ ] Run focused tests and confirm they fail.
-- [ ] Retry eligible free-first candidates only and emit the replacement model identity.
-- [ ] Run focused tests and confirm they pass.
+- [x] Write failing tests for AUTO fallback after an empty or unavailable model response and for pinned-model no-switch behavior.
+- [x] Run focused tests and confirm they fail.
+- [x] Retry eligible free-first candidates only and emit the replacement model identity.
+- [x] Run focused tests and confirm they pass.
 
 ### Task 3: Provider-neutral presentation and verification
 
@@ -49,6 +49,6 @@
 - Modify: `apps/cli/src/ui/renderer.ts`
 - Test: `apps/cli/tests/renderer.test.ts`
 
-- [ ] Write a failing renderer test for a provider/model-specific error and sub-second duration.
-- [ ] Implement compact provider-neutral output without raw transport details.
-- [ ] Run `npm test`, `npm run build`, and `git diff --check`.
+- [x] Write a failing renderer test for a provider/model-specific error and sub-second duration.
+- [x] Implement compact provider-neutral output without raw transport details.
+- [x] Run `npm test`, `npm run build`, and `git diff --check`.
