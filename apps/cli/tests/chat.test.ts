@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { createAgentTask, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply } from '../src/commands/chat.js';
+import { createAgentTask, createMcpToolRegistry, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { saveConfig } from '../src/config.js';
 
@@ -58,6 +58,15 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   it('creates a read-only checklist instruction in Plan mode', () => {
     expect(createAgentTask('Add a command', 'Plan')).toContain('do not modify files or run commands');
     expect(createAgentTask('Add a command', 'Execute')).toBe('Add a command');
+  });
+
+  it('rebuilds the registry with built-in tools when no MCP server is enabled', async () => {
+    const registry = await createMcpToolRegistry({
+      disabled: { executable: 'unused-disabled-server', args: [], enabled: false },
+    });
+
+    expect(registry.get('read_file')).toBeDefined();
+    expect(registry.get('mcp.disabled.search')).toBeUndefined();
   });
 
   it('recognizes only a bare exit input for an exit reminder', () => {

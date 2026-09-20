@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import { AgentLoop, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, WorkspaceCheckpointStore } from '@moderado/tools';
-import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler } from '@moderado/contracts';
+import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { getActiveConnection, loadConfig, ProviderConnection, resolveApiKey, resolveConnectionCredential, saveConnection, storeConnectionCredential } from '../config.js';
 import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
@@ -45,6 +45,10 @@ export function isNetworkCommand(request: Pick<ApprovalRequest, 'toolName' | 'ex
 
 export function isNetworkConsentReply(input: string, previousAnswer: string): boolean {
   return /^(y|yes)$/i.test(input.trim()) && /\b(weather|internet|online|look up|web|curl)\b/i.test(previousAnswer);
+}
+
+export async function createMcpToolRegistry(servers: Record<string, McpServerConfig> | undefined): Promise<IToolRegistry> {
+  return createDefaultToolRegistry(await createMcpTools(servers));
 }
 
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
@@ -90,8 +94,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let sessionTokens = activeSession.usage.totalTokens;
   let isFirst = true;
   if (config.typescriptLanguageServer) process.env.MODERADO_TYPESCRIPT_LANGUAGE_SERVER = config.typescriptLanguageServer;
-  const mcpTools = await createMcpTools(config.mcpServers);
-  const tools = createDefaultToolRegistry(mcpTools);
+  let tools = createDefaultToolRegistry();
+  const reloadMcpTools = async (): Promise<void> => {
+    config = loadConfig();
+    tools = await createMcpToolRegistry(config.mcpServers);
+  };
+  await reloadMcpTools();
   const terminalApproval = new TerminalApprovalHandler();
   const checkpoints = new WorkspaceCheckpointStore();
   let networkAccessApproved = false;
