@@ -61,14 +61,19 @@ function centerBlock(lines: string[], width?: number): string[] {
 export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const width = getWelcomeCardWidth(options.width);
   const indent = ' '.repeat(getWelcomeIndent(width, options.width));
-  const hr = `\x1b[38;5;238m${'─'.repeat(width)}\x1b[0m`;
 
   const displayInput =
     options.input && options.input.length > 0
       ? options.input
       : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m';
 
-  const textBox = `\x1b[1;38;5;75m❯\x1b[0m ${displayInput}`;
+  const promptMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
+  const textBox = `${promptMarker} ${displayInput}`;
+  const surface = '\x1b[48;5;236m';
+  const surfaceLine = (content: string = '') => {
+    const preserved = content.replace(/\x1b\[0m/g, '\x1b[0;48;5;236m');
+    return surface + preserved + ' '.repeat(Math.max(0, width - visibleLen(content))) + '\x1b[0m';
+  };
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
   const outputRate = options.outputTokenRate === undefined ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
@@ -102,9 +107,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const line5 = left5 + ' '.repeat(spaces5Count) + right5;
 
   const cardLines = [
-    hr,
-    textBox,
-    hr,
+    surfaceLine(),
+    surfaceLine(textBox),
+    surfaceLine(),
     line4,
     line5,
   ].map((line) => indent + line);
@@ -204,17 +209,16 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   const terminalHeight = height ?? process.stdout.rows ?? 24;
   const maxWidth = Math.max(40, terminalWidth - 4);
   const width = Math.max(40, terminalWidth - 2);
-  const hr = `\x1b[38;5;238m${'─'.repeat(width)}\x1b[0m`;
 
   const lines: string[] = [];
 
   lines.push(...renderModeradoHeader().split('\n'));
   lines.push('');
-  lines.push(hr);
 
   // Row 1: the user's question
-  lines.push(`\x1b[1;38;5;75m❯\x1b[0m ${options.chatQuestion ?? ''}`);
-  lines.push(hr);
+  const questionMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
+  const questionText = `${questionMarker} ${options.chatQuestion ?? ''}`;
+  lines.push(String.fromCharCode(27) + '[48;5;236m' + questionText + ' '.repeat(Math.max(0, width - visibleLen(questionText))) + String.fromCharCode(27) + '[0m');
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
   lines.push(options.chatAnswer?.trim() ? `\x1b[38;5;244mThought for ${thoughtTimeLabel}\x1b[0m` : '');
@@ -307,7 +311,7 @@ export function renderWelcomePopupLayer(
   const cols = width ?? process.stdout.columns ?? 80;
   const rows = height ?? process.stdout.rows ?? 24;
   const background = dimLines(renderCenteredWelcomeScreen(options, rows).split('\n')).join('\n');
-  const surface = '\x1b[48;5;236m\x1b[38;5;255m';
+  const surface = '\x1b[48;5;236m';
   const lightPopup = popupLines.map((line) =>
     surface + line.replace(/\x1b\[0m/g, `\x1b[0m${surface}`) + '\x1b[0m'
   );

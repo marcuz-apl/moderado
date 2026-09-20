@@ -54,14 +54,15 @@ describe('OpenCode-style Welcome TUI', () => {
     const expectedWidth = 78;
     const expectedIndent = ' '.repeat(1);
 
-    // Line 1: top dash line (OpenCode box-drawing style, centered)
-    expect(stripAnsi(lines[0])).toBe(expectedIndent + '─'.repeat(expectedWidth));
+    // Line 1: top dark-gray surface row
+    expect(stripAnsi(lines[0])).toBe(expectedIndent + ' '.repeat(expectedWidth));
+    expect(output).toContain(String.fromCharCode(27) + '[48;5;236m');
 
     // Line 2: command taking text box with placeholder (centered)
-    expect(stripAnsi(lines[1])).toBe(expectedIndent + '❯ Ask anything, I am all ears...');
+    expect(stripAnsi(lines[1])).toContain(' ❯ Ask anything, I am all ears...');
 
-    // Line 3: bottom dash line (OpenCode box-drawing style, centered)
-    expect(stripAnsi(lines[2])).toBe(expectedIndent + '─'.repeat(expectedWidth));
+    // Line 3: bottom dark-gray surface row
+    expect(stripAnsi(lines[2])).toBe(expectedIndent + ' '.repeat(expectedWidth));
 
     // Line 4: model name, tokens, cost, mode
     const line4Plain = stripAnsi(lines[3]);
@@ -89,7 +90,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
     const lines = output.split('\n');
     // Card centered on an 80-col terminal → 1-space indent
-    expect(stripAnsi(lines[1])).toBe(' ❯ refactor database layer');
+    expect(stripAnsi(lines[1])).toMatch(/^ ❯ refactor database layer\s+$/);
     expect(stripAnsi(lines[3])).toContain('[Plan] / Execute (Tab)');
     expect(stripAnsi(lines[4])).toContain('Auto-approve enabled (Shift+Tab)');
   });
@@ -212,7 +213,6 @@ describe('OpenCode-style Welcome TUI', () => {
 
     expect(rendered).toContain('\x1b[2m');
     expect(rendered).toContain('\x1b[?25l');
-    expect(rendered).toContain('\x1b[48;5;236m\x1b[38;5;255m');
     expect(rendered).toContain('NVIDIA NIM');
   });
 
