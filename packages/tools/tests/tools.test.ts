@@ -12,6 +12,9 @@ import {
   RunCommandTool,
   splitCommandString,
   parseCommandLine,
+  stripAnsi,
+  detectServerReadiness,
+  isLongRunningDevCommand,
   GitDiffTool,
   createDefaultToolRegistry,
 } from '../src/index.js';
@@ -290,6 +293,83 @@ describe('Workspace Tools Suite', () => {
 
       expect(result.status).toBe('success');
       expect(result.output.trim()).toBe('default timeout works');
+    });
+
+    it('identifies long-running dev server commands and strips ANSI styling', () => {
+      expect(isLongRunningDevCommand('vite', [])).toBe(true);
+      expect(isLongRunningDevCommand('npx', ['vite', '--host'])).toBe(true);
+      expect(isLongRunningDevCommand('npm', ['run', 'dev'])).toBe(true);
+      expect(isLongRunningDevCommand('pnpm', ['dev'])).toBe(true);
+      expect(isLongRunningDevCommand('next', ['dev'])).toBe(true);
+      expect(isLongRunningDevCommand('python', ['-m', 'http.server', '8000'])).toBe(true);
+      expect(isLongRunningDevCommand('git', ['status'])).toBe(false);
+      expect(isLongRunningDevCommand('node', ['index.js'])).toBe(false);
+
+      const ansiText = '\u001b[32m➜\u001b[39m  \u001b[1mLocal:\u001b[22m   \u001b[36mhttp://localhost:5173/\u001b[39m';
+      expect(stripAnsi(ansiText)).toBe('➜  Local:   http://localhost:5173/');
+    });
+
+    it('detects server readiness and extracts URLs from various server outputs', () => {
+      const viteOutput = `
+  VITE v5.4.2  ready in 240 ms
+
+  ➜  Local:   http://localhost:5173/
+  ➜  Network: use --host to expose
+`;
+      expect(detectServerReadiness(viteOutput)).toBe('http://localhost:5173/');
+
+      const nextOutput = `
+  ▲ Next.js 14.2.5
+  - Local:        http://localhost:3000
+  - Network:      http://192.168.1.5:3000
+
+  ✓ Ready in 1500ms
+`;
+      expect(detectServerReadiness(nextOutput)).toBe('http://localhost:3000');
+
+      const genericOutput = `Server running and listening on http://127.0.0.1:8080/api`;
+      expect(detectServerReadiness(genericOutput)).toBe('http://127.0.0.1:8080/api');
+
+      const nonServerOutput = `Compiling files...\nDone in 2.5s`;
+      expect(detectServerReadiness(nonServerOutput)).toBeNull();
+    });
+
+    it('detects dev server banner, background-runs the process, and returns immediately with URL', async () => {
+      // Mock dev server that prints a Vite-like banner and remains alive indefinitely
+      const serverScript = `
+        console.log('  VITE v5.4.2  ready in 120 ms\\n\\n  ➜  Local:   http://localhost:5173/\\n');
+        setInterval(() => {}, 10000);
+      `;
+      const result = await RunCommandTool.execute(
+        {
+          command: process.execPath,
+          args: ['-e', serverScript],
+          timeoutSeconds: 15,
+        },
+        { workspaceRoot: tempDir }
+      );
+
+      try {
+        expect(result.status).toBe('success');
+        expect(result.output).toContain('Dev server started and running in background');
+        expect(result.output).toContain('http://localhost:5173/');
+        expect(result.metadata?.backgrounded).toBe(true);
+        expect(result.metadata?.serverUrl).toBe('http://localhost:5173/');
+        expect(typeof result.metadata?.pid).toBe('number');
+      } finally {
+        if (result.metadata?.pid) {
+          try {
+            if (process.platform === 'win32') {
+              const { execSync } = await import('node:child_process');
+              execSync(`taskkill /pid ${result.metadata.pid} /T /F`, { stdio: 'ignore' });
+            } else {
+              process.kill(result.metadata.pid, 'SIGKILL');
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
     });
   });
 

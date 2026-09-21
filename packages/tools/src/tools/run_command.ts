@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, execSync } from 'node:child_process';
 import {
   IToolDefinition,
   RunCommandParams,
@@ -29,6 +29,69 @@ export function getSanitizedEnv(): NodeJS.ProcessEnv {
     delete cleanEnv[key];
   }
   return cleanEnv;
+}
+
+export function stripAnsi(text: string): string {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '');
+}
+
+export function isLongRunningDevCommand(executable: string, args: string[] = []): boolean {
+  const fullCmd = [executable, ...args].join(' ').toLowerCase();
+  const devPatterns = [
+    /\bvite\b/,
+    /\bwebpack-dev-server\b/,
+    /\bwebpack\s+serve\b/,
+    /\bhttp-server\b/,
+    /\blive-server\b/,
+    /\bserv(e|ing)\b/,
+    /\bnodemon\b/,
+    /\bconcurrently\b/,
+    /\b(npm|pnpm|yarn|bun)\s+(run\s+)?(dev|start|serve|watch)\b/,
+    /\b(next|remix|astro|nuxt|gatsby)\s+dev\b/,
+    /\bnode\s+--watch\b/,
+    /\btsx?\s+watch\b/,
+    /\b(fastapi|uvicorn)\b.*--reload/,
+    /\bflask\s+run\b/,
+    /\bpython\b.*-m\s+http\.server/,
+  ];
+  return devPatterns.some((pattern) => pattern.test(fullCmd));
+}
+
+export function detectServerReadiness(output: string): string | null {
+  const clean = stripAnsi(output);
+
+  // Common URL patterns (localhost, 127.0.0.1, 0.0.0.0, [::1])
+  const urlMatch = clean.match(/(https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):\d+[\w/-]*)/i);
+
+  // Readiness indicators
+  const readyKeywords = [
+    /ready in\s+\d+/i,
+    /local:\s+https?:\/\//i,
+    /network:\s+https?:\/\//i,
+    /listening on/i,
+    /server running/i,
+    /serving http on/i,
+    /available on/i,
+    /compiled successfully/i,
+    /started server on/i,
+    /dev server running/i,
+    /application is running at/i,
+  ];
+
+  const hasIndicator = readyKeywords.some((re) => re.test(clean));
+
+  if (urlMatch && hasIndicator) {
+    return urlMatch[1];
+  }
+
+  // Fallback: if "Local:" is printed followed by a URL
+  const localMatch = clean.match(/Local:\s+(https?:\/\/[^\s]+)/i);
+  if (localMatch) {
+    return localMatch[1];
+  }
+
+  return null;
 }
 
 export function splitCommandString(str: string): string[] {
@@ -170,6 +233,10 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
       let stderrTruncated = false;
       let timedOut = false;
       let settled = false;
+      let serverDetected = false;
+      let serverUrl: string | null = null;
+      let readinessTimer: NodeJS.Timeout | null = null;
+      let exitSafetyTimer: NodeJS.Timeout | null = null;
 
       let child: ReturnType<typeof spawn>;
       try {
@@ -187,6 +254,42 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
         });
       }
 
+      function checkReadiness() {
+        if (settled || serverDetected) return;
+        const combined = stdoutBuffer + '\n' + stderrBuffer;
+        const detected = detectServerReadiness(combined);
+        if (detected) {
+          serverDetected = true;
+          serverUrl = detected;
+          // Wait 800ms stabilization window to make sure the process doesn't immediately crash
+          readinessTimer = setTimeout(() => {
+            if (settled) return;
+            if (child.exitCode === null && !child.killed) {
+              cleanup();
+              try {
+                child.stdout?.removeAllListeners('data');
+                child.stderr?.removeAllListeners('data');
+                child.stdout?.resume();
+                child.stderr?.resume();
+                child.unref();
+              } catch {
+                // ignore
+              }
+              return resolve({
+                toolName: 'run_command',
+                status: 'success',
+                output: `Dev server started and running in background at ${serverUrl}.\n${stripAnsi(stdoutBuffer).trim()}`,
+                metadata: {
+                  backgrounded: true,
+                  serverUrl,
+                  pid: child.pid,
+                },
+              });
+            }
+          }, 800);
+        }
+      }
+
       // Output buffer capture with size capping
       child.stdout?.on('data', (chunk: Buffer) => {
         if (stdoutBuffer.length + chunk.length > MAX_BUFFER_BYTES) {
@@ -196,6 +299,7 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
         } else {
           stdoutBuffer += chunk.toString('utf8');
         }
+        checkReadiness();
       });
 
       child.stderr?.on('data', (chunk: Buffer) => {
@@ -206,6 +310,7 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
         } else {
           stderrBuffer += chunk.toString('utf8');
         }
+        checkReadiness();
       });
 
       const timeoutSecs = typeof params.timeoutSeconds === 'number' && !isNaN(params.timeoutSeconds) ? params.timeoutSeconds : 60;
@@ -216,6 +321,21 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
         timedOut = true;
         killProcess();
       }, timeoutSecs * 1000);
+
+      // Hard fallback watchdog: force settlement if 'close' never emits (e.g. child leaked pipe handles)
+      const forceSettleTimer = setTimeout(() => {
+        if (settled) return;
+        cleanup();
+        killProcess();
+        let output = stdoutBuffer;
+        if (stderrBuffer) output += `\n[stderr]\n${stderrBuffer}`;
+        resolve({
+          toolName: 'run_command',
+          status: 'error',
+          output: `Command timed out after ${timeoutSecs} seconds.\n${output.trim()}`,
+          metadata: { timedOut: true },
+        });
+      }, (timeoutSecs + 2) * 1000);
 
       // Abort signal listener
       const onAbort = () => {
@@ -228,6 +348,14 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
       }
 
       function killProcess() {
+        if (process.platform === 'win32' && child.pid) {
+          try {
+            execSync(`taskkill /pid ${child.pid} /T /F`, { stdio: 'ignore' });
+            return;
+          } catch {
+            // Process may already be dead
+          }
+        }
         try {
           child.kill('SIGTERM');
           setTimeout(() => {
@@ -236,7 +364,7 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
             } catch {
               // ignore
             }
-          }, 2000);
+          }, 1500);
         } catch {
           // ignore
         }
@@ -245,21 +373,16 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
       function cleanup() {
         settled = true;
         clearTimeout(timeoutTimer);
+        clearTimeout(forceSettleTimer);
+        if (readinessTimer) clearTimeout(readinessTimer);
+        if (exitSafetyTimer) clearTimeout(exitSafetyTimer);
         if (context.abortSignal) {
           context.abortSignal.removeEventListener('abort', onAbort);
         }
       }
 
-      child.on('error', (err) => {
-        cleanup();
-        resolve({
-          toolName: 'run_command',
-          status: 'error',
-          output: `Process error while executing '${params.command}': ${err.message}`,
-        });
-      });
-
-      child.on('close', (code, signal) => {
+      function handleClose(code: number | null, signal: NodeJS.Signals | null) {
+        if (settled) return;
         cleanup();
 
         let output = '';
@@ -306,6 +429,29 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
             stderrTruncated,
           },
         });
+      }
+
+      child.on('error', (err) => {
+        cleanup();
+        resolve({
+          toolName: 'run_command',
+          status: 'error',
+          output: `Process error while executing '${params.command}': ${err.message}`,
+        });
+      });
+
+      child.on('exit', (code, signal) => {
+        // If stdio 'close' does not fire within 500ms after exit (e.g. grandchild holding pipes), force settle
+        if (!settled) {
+          exitSafetyTimer = setTimeout(() => {
+            if (settled) return;
+            handleClose(code ?? 0, signal);
+          }, 500);
+        }
+      });
+
+      child.on('close', (code, signal) => {
+        handleClose(code, signal);
       });
     });
   },

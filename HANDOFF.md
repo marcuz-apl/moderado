@@ -1,46 +1,48 @@
 # Project Handoff
 
-Updated: 2026-09-21 15:25 UTC
+Updated: 2026-09-21 19:07 UTC
 Branch: master
-Commit: pending (`v0.2.46+260921f`)
-Status: Local meta query fast path and repeat-question cache implemented. All 306 tests passing, packaging certified, and typecheck clean.
+Commit: pending (`v0.2.46+260921g`)
+Status: Dev server readiness backgrounding, Windows process tree cleanup, and execution watchdog implemented. All 309 tests passing, packaging certified, and typecheck clean.
 
 ## Summary
 
-1. **Local Fast-Path for Model & Provider Queries**:
-   - Implemented `isLocalModelQuery`, `isLocalProviderQuery`, and `resolveLocalMetaQuery` in `apps/cli/src/commands/chat.ts`.
-   - Natural language queries inquiring about the running model (e.g. `"which model are you running against?"`, `"what model are you using?"`, `"current model"`) or connected provider (e.g. `"what provider are you using?"`) are now answered immediately from local runtime state in `<1ms` without making any network calls or consuming tokens.
-2. **Consecutive Repeat-Question In-Memory Turn Cache**:
-   - If the user re-enters the exact same question consecutively, Moderado replays the previous turn response instantly (`thoughtTime = <1s`) instead of waiting for a redundant remote LLM inference round-trip.
-3. **Verified Zero Token / Zero Network Latency**:
-   - State queries never trigger remote model prefill, queuing delays, or network streaming.
+1. **Dev Server Readiness Backgrounding**:
+   - Added `detectServerReadiness`, `isLongRunningDevCommand`, and `stripAnsi` in `packages/tools/src/tools/run_command.ts`.
+   - When external dev servers (Vite, Next.js, Astro, Python http.server, etc.) emit server readiness banners or local host URLs (e.g. `http://localhost:5173/`), Moderado stabilizes for 800ms to verify startup integrity, unrefs the child process, and immediately returns `status: 'success'` with the server URL.
+   - Prevents dev servers from hanging the CLI for thousands of seconds (such as the 8320s hang reported by the user).
+2. **Windows Process Tree Clean Termination**:
+   - `killProcess()` on Windows (`process.platform === 'win32'`) now executes `taskkill /pid ${child.pid} /T /F` so child process trees (e.g. `cmd.exe -> node.exe -> vite.js`) are forcefully terminated together, eliminating orphaned background processes that keep stdio pipes open.
+3. **Pipes and Watchdog Hard Settlement Guarantee**:
+   - Added a 500ms safety timer on `child.on('exit')` to settle the command if stdio `'close'` lags due to leaked handles.
+   - Added a hard fallback watchdog timer `(timeoutSecs + 2) * 1000` to guarantee `run_command` can never hang indefinitely under any edge case.
+4. **Comprehensive Unit Testing**:
+   - Added tests in `packages/tools/tests/tools.test.ts` for ANSI stripping, dev server command detection, multi-framework URL extraction, and live backgrounding resolution.
 
 ## Completed
 
-- `apps/cli/src/commands/chat.ts`:
-  - Added `isLocalModelQuery` detecting questions about active model/LLM.
-  - Added `isLocalProviderQuery` detecting questions about connected provider.
-  - Added `resolveLocalMetaQuery` returning instant formatted runtime details.
-  - Added fast-path interceptor in `handleChatSession` before network inference.
-  - Added consecutive duplicate question cache replay.
-- `apps/cli/tests/chat.test.ts`:
-  - Added unit tests for `isLocalModelQuery` and `isLocalProviderQuery`.
-  - Added unit tests for `resolveLocalMetaQuery`.
+- `packages/tools/src/tools/run_command.ts`:
+  - Added `stripAnsi`, `detectServerReadiness`, and `isLongRunningDevCommand`.
+  - Added dev server readiness detection and automatic backgrounding.
+  - Added `taskkill /pid ${child.pid} /T /F` on Windows.
+  - Added `exitSafetyTimer` and `forceSettleTimer` watchdog.
+- `packages/tools/tests/tools.test.ts`:
+  - Added unit test for `stripAnsi` and `isLongRunningDevCommand`.
+  - Added unit test for `detectServerReadiness`.
+  - Added unit test verifying dev server banner detection, backgrounding, and immediate URL return.
+- `VERSION`: Bumped to `v0.2.46+260921g`.
 
 ## Checks
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build` — PASS (all packages compile cleanly)
-- `npm test` — PASS (48 test files, 306 passed)
+- `npm test` — PASS (48 test files, 309 passed)
 - `npm run verify:package` — PASS (clean tarball packaging and smoke test)
 
 ## Decisions and context
 
-- Local runtime meta-queries should never leave the machine. Intercepting them client-side makes Moderado feel instantaneously responsive while conserving user API quota.
+- Dev servers are intended to run continuously. Moderado should not wait indefinitely for a dev server to exit or kill it upon timeout; detecting its readiness banner and transitioning it to a background process provides an optimal developer experience.
 
 ## Blockers
 
 - None.
-
-
-
