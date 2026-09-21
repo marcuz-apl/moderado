@@ -59,10 +59,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: moderado-binary-${{ matrix.target }}
-          # Upload the target directory contents so each downloaded artifact has
-          # manifest.json and its checksum file at the source root, which is what
-          # `merge-binaries --source` expects.
-          path: artifacts/*/${{ matrix.target }}/*
+          path: artifacts/*/${{ matrix.target }}
 
   binary-metadata:
     needs: binary-package
@@ -86,7 +83,9 @@ jobs:
         with:
           name: moderado-binary-node22-linux-x64
           path: collected/linux
-      - run: npm run merge-binaries -- --source collected/win,collected/macos,collected/linux --output artifacts/release --revision ${{ github.sha }}
+      # Each downloaded artifact keeps the artifacts/<version>/<target>/ layout, so
+      # resolve the per-target source directories through the connected version.
+      - run: npm run merge-binaries -- --source "collected/win/$(cat VERSION)/node22-win-x64,collected/macos/$(cat VERSION)/node22-macos-arm64,collected/linux/$(cat VERSION)/node22-linux-x64" --output artifacts/release --revision ${{ github.sha }}
       - uses: actions/upload-artifact@v4
         with:
           name: moderado-binaries
