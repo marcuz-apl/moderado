@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import * as chatCommands from '../src/commands/chat.js';
-import { buildSearchAnswerTask, createAgentTask, createMcpToolRegistry, decideApproval, formatDirectWebSearchAnswer, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply, replaceEvidenceTurn, resolveWebSearchEndpoint, resolveWebSearchProvider, shouldFastRouteWebSearch } from '../src/commands/chat.js';
+import { buildSearchAnswerTask, createAgentTask, createMcpToolRegistry, decideApproval, formatDirectWebSearchAnswer, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply, replaceEvidenceTurn, resolveSessionSharePath, resolveWebSearchEndpoint, resolveWebSearchProvider, shouldFastRouteWebSearch } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
 import { ApprovalRequest, ChatMessage } from '@moderado/contracts';
@@ -60,6 +60,12 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   it('creates a read-only checklist instruction in Plan mode', () => {
     expect(createAgentTask('Add a command', 'Plan')).toContain('do not modify files or run commands');
     expect(createAgentTask('Add a command', 'Execute')).toBe('Add a command');
+  });
+
+  it('requires a workspace-contained output path for session sharing', () => {
+    expect(resolveSessionSharePath(tempDir, 'exports/session.md')).toBe(path.join(tempDir, 'exports', 'session.md'));
+    expect(() => resolveSessionSharePath(tempDir, '')).toThrow('requires an output path');
+    expect(() => resolveSessionSharePath(tempDir, '../session.md')).toThrow(/escapes workspace jail/);
   });
 
   it('rebuilds the registry with built-in tools when no MCP server is enabled', async () => {

@@ -14,6 +14,7 @@ import { ApplyPatchTool } from './tools/apply_patch.js';
 import { RunDiagnosticsTool } from './tools/run_diagnostics.js';
 import { FindReferencesTool, GetDefinitionTool } from './tools/language_intelligence.js';
 import { WebSearchTool } from './tools/web_search.js';
+import { SubagentTool } from './tools/subagent.js';
 
 export class ToolRegistry implements IToolRegistry {
   private readonly tools = new Map<string, IToolDefinition<any>>();

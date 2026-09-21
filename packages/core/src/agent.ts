@@ -78,6 +78,7 @@ const PSEUDO_ANSWER_TOOLS = new Set([
   'message',
   'final_answer',
   'reply',
+  'subagent',
 ]);
 
 export class AgentLoop {
@@ -258,6 +259,7 @@ export class AgentLoop {
             });
             currentModel = fallback;
             step--; // Retry current step without consuming step limit
+    const delegator = new SubagentDelegator(workspaceRoot, tools, approvalHandler, eventListener);
             continue;
           }
         }
@@ -396,7 +398,26 @@ export class AgentLoop {
             (typeof call.arguments.response === 'string' && call.arguments.response) ||
             (typeof call.arguments.answer === 'string' && call.arguments.answer) ||
             (typeof call.arguments._raw === 'string' && call.arguments._raw) ||
+            (call.name.toLowerCase() === 'subagent' && typeof call.arguments.detail === 'string' ? call.arguments.detail : undefined) ||
             JSON.stringify(call.arguments);
+
+          // Subagent tool: delegate to a bounded child agent loop
+          if (call.name.toLowerCase() === 'subagent' && typeof call.arguments.detail === 'string') {
+            const task = call.arguments.detail;
+            emit({ type: 'progress', step: -1, status: `Delegating sub-task: ${task.slice(0, 80)}...`, timestamp: Date.now() });
+            const subagentResult = await delegator.delegate(task, options.provider, { maxSteps: policy.maxSteps ?? 5, signal });
+            const subResultText = subagentResult.finalMessage ?? subagentResult.status;
+            emit({
+              type: 'assistant_delta',
+              delta: `\n**Subagent result:**\n${subResultText}`,
+              timestamp: Date.now(),
+            });
+            assistantText = (assistantText ? assistantText + '\n' : '') + `\n**Subagent result:**\n${subResultText}`;
+            finalAssistantText = assistantText;
+            emit({ type: 'tool_result', toolCallId: call.id, result: { toolName: call.name, status: 'success', output: subResultText }, timestamp: Date.now() });
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, content: subResultText, status: 'success' });
+            continue;
+          }
 
           emit({
             type: 'assistant_delta',

@@ -75,12 +75,14 @@ export class WorkspaceCheckpointStore {
     }
     for (const entry of checkpoint.entries) entry.postHash = currentDigest(resolveInJail(prepared.root, entry.path));
     this.writeJson(this.target(prepared.root), checkpoint);
+    const redo = this.target(prepared.root, '.redo');
+    if (fs.existsSync(redo)) fs.unlinkSync(redo);
     fs.unlinkSync(pending);
   }
 
-  restoreLatest(root: string): { restored: string[]; conflicts: string[] } {
+  private restore(root: string, sourceSuffix: string, reverseSuffix: string): { restored: string[]; conflicts: string[] } {
     const canonicalRoot = canonicalizeRoot(root);
-    const target = this.target(canonicalRoot);
+    const target = this.target(canonicalRoot, sourceSuffix);
     if (!fs.existsSync(target)) return { restored: [], conflicts: [] };
     const checkpoint = this.readJson(target);
     if (checkpoint.workspace !== canonicalRoot) throw new Error('Checkpoint workspace does not match the active workspace.');
@@ -109,6 +111,31 @@ export class WorkspaceCheckpointStore {
       }
       throw error;
     }
+    const reverse: Checkpoint = {
+      workspace: canonicalRoot,
+      entries: backups.map(({ file, existed, bytes }) => ({
+        path: path.relative(canonicalRoot, file).split(path.sep).join('/'),
+        existed,
+        content: bytes?.toString('base64'),
+        postHash: currentDigest(file),
+      })),
+    };
+    this.writeJson(this.target(canonicalRoot, reverseSuffix), reverse);
     return { restored: checkpoint.entries.map((entry) => entry.path), conflicts: [] };
+  }
+
+  /** Restore the last completed mutation and retain a safe redo snapshot. */
+  undoLatest(root: string): { restored: string[]; conflicts: string[] } {
+    return this.restore(root, '', '.redo');
+  }
+
+  /** Reapply the last safely undone mutation and retain a safe undo snapshot. */
+  redoLatest(root: string): { restored: string[]; conflicts: string[] } {
+    return this.restore(root, '.redo', '');
+  }
+
+  /** @deprecated Use undoLatest to make redo available after a restore. */
+  restoreLatest(root: string): { restored: string[]; conflicts: string[] } {
+    return this.undoLatest(root);
   }
 }

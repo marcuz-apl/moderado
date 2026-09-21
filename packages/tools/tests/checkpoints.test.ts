@@ -4,6 +4,42 @@ import { WorkspaceCheckpointStore } from '../src/checkpoints.js';
 describe('WorkspaceCheckpointStore', () => { const dirs: string[]=[]; afterEach(()=>dirs.splice(0).forEach(d=>fs.rmSync(d,{recursive:true,force:true})));
   it('restores only when files retain the recorded post-write digest', () => { const root=fs.mkdtempSync(path.join(os.tmpdir(),'moderado-cp-')); const home=fs.mkdtempSync(path.join(os.tmpdir(),'moderado-cp-home-')); dirs.push(root,home); const file=path.join(root,'a.txt'); fs.writeFileSync(file,'old'); const store=new WorkspaceCheckpointStore(home); store.capture(root,['a.txt']); fs.writeFileSync(file,'new'); store.recordPostWrite(root,['a.txt']); expect(store.restoreLatest(root)).toEqual({restored:['a.txt'],conflicts:[]}); expect(fs.readFileSync(file,'utf8')).toBe('old'); });
 
+  it('restores the undone mutation only when the undo result has not changed', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-cp-redo-'));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-cp-home-'));
+    dirs.push(root, home);
+    const file = path.join(root, 'a.txt');
+    fs.writeFileSync(file, 'before');
+    const store = new WorkspaceCheckpointStore(home);
+    store.capture(root, ['a.txt']);
+    fs.writeFileSync(file, 'after');
+    store.recordPostWrite(root, ['a.txt']);
+
+    expect(store.undoLatest(root)).toEqual({ restored: ['a.txt'], conflicts: [] });
+    expect(fs.readFileSync(file, 'utf8')).toBe('before');
+    expect(store.redoLatest(root)).toEqual({ restored: ['a.txt'], conflicts: [] });
+    expect(fs.readFileSync(file, 'utf8')).toBe('after');
+  });
+
+  it('invalidates redo when a newer mutation is checkpointed', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-cp-redo-stale-'));
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-cp-home-'));
+    dirs.push(root, home);
+    fs.writeFileSync(path.join(root, 'a.txt'), 'before a');
+    fs.writeFileSync(path.join(root, 'b.txt'), 'before b');
+    const store = new WorkspaceCheckpointStore(home);
+    store.capture(root, ['a.txt']);
+    fs.writeFileSync(path.join(root, 'a.txt'), 'after a');
+    store.recordPostWrite(root, ['a.txt']);
+    store.undoLatest(root);
+    store.capture(root, ['b.txt']);
+    fs.writeFileSync(path.join(root, 'b.txt'), 'after b');
+    store.recordPostWrite(root, ['b.txt']);
+
+    expect(store.redoLatest(root)).toEqual({ restored: [], conflicts: [] });
+    expect(fs.readFileSync(path.join(root, 'a.txt'), 'utf8')).toBe('before a');
+  });
+
   it('reports conflicts without restoring any file after an external change', () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-cp-conflict-'));
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-cp-home-'));

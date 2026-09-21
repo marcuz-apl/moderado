@@ -539,7 +539,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('includes session and MCP management in the help popup without an extra content indent', () => {
     const plain = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n'));
-    expect(plain).toContain('/session   Create, list, resume, export, or compact sessions');
+    expect(plain).toContain('/session   Create, resume, undo, redo, share, export, or compact sessions');
     expect(plain).toContain('/mcp       Manage local MCP servers');
     expect(plain).not.toContain('│   /session');
   });

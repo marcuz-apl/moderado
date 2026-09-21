@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { AgentLoop, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
-import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, WorkspaceCheckpointStore } from '@moderado/tools';
+import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, resolveInJail, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
@@ -33,6 +33,12 @@ export function createAgentTask(request: string, mode: 'Plan' | 'Execute'): stri
 
 export function isBareExitCommand(input: string): boolean {
   return input.trim().toLowerCase() === 'exit';
+}
+
+/** Resolve the required, explicit local destination for `/session share`. */
+export function resolveSessionSharePath(workspaceRoot: string, outputPath: string): string {
+  if (!outputPath.trim()) throw new Error('/session share requires an output path within the workspace.');
+  return resolveInJail(workspaceRoot, outputPath.trim());
 }
 
 export function isGenerationCancelKey(key: { name?: string } | undefined): boolean {
@@ -445,6 +451,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         drawFrame(renderBoxLines('Coding Workflow', ['Choose Git status, Review diff, Build plan, or Undo latest agent change.', '', 'Press Esc or Enter to return.'], 72));
         return undefined;
       },
+      onInit: async (drawFrame) => {
+        await initWorkspace(canonicalWorkspace, drawFrame);
+      },
+      onMentionComplete: async (token) => {
+        const listFiles = (await import('@moderado/tools')).listFiles;
+        const results = await listFiles(canonicalWorkspace, token, { recursive: false, maxDepth: 3, limit: 50 });
+        return results;
+      },
       onSession: async (command, drawFrame) => {
         let action = command.slice('/session'.length).trim();
         if (!action) {
@@ -452,6 +466,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             { label: 'New session', value: 'new', description: 'Start with an empty conversation.' },
             { label: 'List or resume', value: 'resume', description: 'Load a saved session for this workspace.' },
             { label: 'Export transcript', value: 'export', description: 'Write a redacted Markdown transcript in this workspace.' },
+            { label: 'Undo latest agent change', value: 'undo', description: 'Restore the last checkpoint when safe.' },
+            { label: 'Redo latest agent change', value: 'redo', description: 'Reapply the last safely undone checkpoint.' },
+            { label: 'Share transcript', value: 'share', description: 'Choose an explicit workspace output path.' },
             { label: 'Compact history', value: 'compact', description: 'Reduce older messages without calling a model.' },
           ], { drawFrame, signal })) ?? '';
         }
@@ -485,6 +502,56 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           const output = path.join(canonicalWorkspace, 'moderado-session.md');
           fs.writeFileSync(output, exportSessionMarkdown(activeSession), 'utf8');
           drawFrame(renderBoxLines('Session exported', ['Saved redacted transcript:', output, '', 'Press Esc or Enter to return.'], 70));
+          return;
+        }
+        if (action === 'undo' || action === 'redo') {
+          const request: ApprovalRequest = {
+            requestId: `session_${action}_${Date.now()}`,
+            toolName: `${action} latest agent change`,
+            actionSummary: action === 'undo' ? 'Restore the latest completed agent checkpoint.' : 'Reapply the latest safely undone agent checkpoint.',
+            exactPayload: { cwd: canonicalWorkspace },
+            timestamp: Date.now(),
+          };
+          const decision = await terminalApproval.requestApproval(request, signal);
+          if (decision.status !== 'approved') {
+            drawFrame(renderBoxLines(`${action === 'undo' ? 'Undo' : 'Redo'} latest change`, [`${action === 'undo' ? 'Undo' : 'Redo'} was not approved.`, '', 'Press Esc or Enter to return.'], 72));
+            return;
+          }
+          const restored = action === 'undo' ? checkpoints.undoLatest(canonicalWorkspace) : checkpoints.redoLatest(canonicalWorkspace);
+          const title = `${action === 'undo' ? 'Undo' : 'Redo'} latest change`;
+          const none = action === 'undo' ? 'No completed agent checkpoint is available.' : 'No safely undone agent checkpoint is available.';
+          drawFrame(renderBoxLines(title, restored.conflicts.length ? ['No files changed because the workspace changed since the checkpoint:', ...restored.conflicts] : restored.restored.length ? ['Restored:', ...restored.restored] : [none], 72));
+          return;
+        }
+        if (action === 'share' || action.startsWith('share ')) {
+          const sharePath = action === 'share' ? await askModalChoice('Session share destination: ', { signal }) : action.slice('share'.length).trim();
+          if (!sharePath || sharePath === 'q') return;
+          let output: string;
+          try {
+            output = resolveSessionSharePath(canonicalWorkspace, sharePath);
+          } catch (error) {
+            drawFrame(renderBoxLines('Share session', [error instanceof Error ? error.message : 'Invalid output path.', '', 'Press Esc or Enter to return.'], 72));
+            return;
+          }
+          const request: ApprovalRequest = {
+            requestId: `session_share_${Date.now()}`,
+            toolName: 'share session transcript',
+            actionSummary: `Write the redacted session transcript to ${output}.`,
+            exactPayload: { targetFile: output },
+            timestamp: Date.now(),
+          };
+          const decision = await terminalApproval.requestApproval(request, signal);
+          if (decision.status !== 'approved') {
+            drawFrame(renderBoxLines('Share session', ['Share was not approved.', '', 'Press Esc or Enter to return.'], 72));
+            return;
+          }
+          const relativePath = path.relative(canonicalWorkspace, output);
+          const write = await WriteFileTool.execute({ path: relativePath, content: exportSessionMarkdown(activeSession) }, { workspaceRoot: canonicalWorkspace });
+          if (write.status !== 'success') {
+            drawFrame(renderBoxLines('Share session', [write.output, '', 'Press Esc or Enter to return.'], 72));
+            return;
+          }
+          drawFrame(renderBoxLines('Session shared', ['Saved redacted transcript:', output, '', 'Press Esc or Enter to return.'], 72));
         }
       },
     });
