@@ -1,40 +1,53 @@
 # Project Handoff
 
-Updated: 2026-09-21 22:10 UTC
+Updated: 2026-09-21 22:30 UTC
 Branch: master
-Commit: `v0.2.61+260921F`
-Status: Raised default output token limit from 250 to 4,096 tokens, suppressed NVIDIA NIM reasoning mirror content leaks, and added untagged thinking process stripping. All 343 tests across 49 suites passing offline, typecheck clean, binary rebuilt and linked globally.
+Commit: `v0.2.61+260921H` (release preparation over verified candidate `v0.2.61+260921G`)
+Status: Release preparation complete for Moderado CLI `v0.2.61`. Fixed a blocking version drift where the publishable npm package still declared `0.2.20`, so the `v0.2.61` tag would have attached a `moderado-0.2.20.tgz` artifact and `moderado --version` on npm installs reported `v0.2.20`. All 343 tests across 49 suites pass offline, typecheck is clean, and the standalone package gate builds and smoke-tests `moderado-0.2.61.tgz`. Only the owner-gated tag push and `PUBLISH` workflow dispatch remain.
 
 ## Summary
 
-1. **Token Budget Default Increased ([`packages/core/src/agent.ts`](file:///d:/projects/moderado/packages/core/src/agent.ts), [`apps/cli/src/commands/chat.ts`](file:///d:/projects/moderado/apps/cli/src/commands/chat.ts), [`apps/cli/src/commands/run.ts`](file:///d:/projects/moderado/apps/cli/src/commands/run.ts))**:
-   - **Root Cause**: Reasoning models (Nemotron, DeepSeek-R1) generate 200–500 tokens of chain-of-thought before emitting visible answer text. The previous default limit of 250 tokens caused models to exhaust their budget mid-reasoning, terminating on `finish_reason: "length"` without ever producing an answer.
-   - Defined and exported `DEFAULT_MAX_OUTPUT_TOKENS = 4096` in `@moderado/core`.
-   - Wired `DEFAULT_MAX_OUTPUT_TOKENS` across `AgentLoop`, CLI `run`, and CLI `chat`.
-   - Increased ephemeral `/btw` token budget from 250 to 2,048 tokens to support quick side inquiries with reasoning models.
+1. **Publishable version aligned with the connected version ([`apps/cli/package.json`](file:///d:/projects/moderado/apps/cli/package.json), [`package-lock.json`](file:///d:/projects/moderado/package-lock.json))**:
+   - `.github/workflows/release.yml` requires the pushed tag to equal `cut -d+ -f1 VERSION` (`v0.2.61`), while the publishable manifest still declared `0.2.20`; `npm run verify:package` therefore produced `moderado-0.2.20.tgz`.
+   - `getVersion()` in [`apps/cli/src/index.ts`](file:///d:/projects/moderado/apps/cli/src/index.ts) falls back to `package.json` when the repository `VERSION` file is absent, so npm-installed users would have seen `v0.2.20`.
+   - Set the CLI package version to `0.2.61` and synced the `apps/cli` workspace entry in `package-lock.json`. No source or contract change.
 
-2. **NVIDIA NIM Fallback Mirror Suppression ([`packages/providers/src/nvidia/sse_parser.ts`](file:///d:/projects/moderado/packages/providers/src/nvidia/sse_parser.ts))**:
-   - When a model terminates or sends deltas containing both `reasoning_content` and `content`, NVIDIA NIM mirrors the accumulated reasoning trace into `delta.content` as a fallback.
-   - `sse_parser` now checks if `reasoning` is present on the delta; if present, mirrored `delta.content` is suppressed so that only true incremental reasoning tokens are emitted as `reasoningDelta`, preventing duplicate dumps into `contentDelta`.
+2. **Release documentation corrected ([`docs/RELEASING.md`](file:///d:/projects/moderado/docs/RELEASING.md))**:
+   - Added a pre-flight Step 0 that syncs `apps/cli/package.json` with the SemVer portion of `VERSION`, with the explicit rule that the tag and the tarball must share `major.minor.patch`.
+   - Replaced the stale `v0.3.0` examples with the derived tag (`cut -d+ -f1 VERSION`, currently `v0.2.61`) and refreshed the test-count line to 49 suites / 343 tests.
 
-3. **Untagged Thinking Process Cleanup ([`packages/core/src/agent.ts`](file:///d:/projects/moderado/packages/core/src/agent.ts))**:
-   - Enhanced `cleanConversationalFiller` to detect and strip untagged thinking process blocks (e.g. `Here's a thinking process:...` or `Thinking process:...`), either extracting the subsequent answer paragraph or discarding truncated thoughts when no answer was produced.
+3. **Version badges refreshed ([`README.md`](file:///d:/projects/moderado/README.md), [`apps/cli/README.md`](file:///d:/projects/moderado/apps/cli/README.md))**:
+   - Both badges now read `v0.2.61+260921H`, matching the `VERSION` file at the release commit (the publishable tag itself is `v0.2.61`).
 
-4. **Verification & Package Preparation**:
-   - Added unit test in [`packages/providers/tests/nvidia_adapter.test.ts`](file:///d:/projects/moderado/packages/providers/tests/nvidia_adapter.test.ts) asserting mirrored content suppression.
-   - Updated token boundary and filler tests in [`packages/core/tests/agent.test.ts`](file:///d:/projects/moderado/packages/core/tests/agent.test.ts).
-   - All 49 test suites and 343 tests pass offline (`npm test`).
-   - Clean TypeScript build and package preparation (`npm run build && npm run typecheck && npm run prepare:package`).
-   - Globally linked with `npm --prefix apps/cli link` (`moderado --version` reports `v0.2.61+260921F`).
+4. **Verification & package preparation**:
+   - `npm run typecheck` — clean; `npm run build` — clean.
+   - `npm test` — 49 suites, 343 tests passing offline.
+   - `npm run verify:package` — vendored bundle, importer rewrite, tarball policy, isolated install, and `moderado --help` smoke test all pass as `moderado-0.2.61.tgz`.
+   - Confirmed the packed tarball contains only `dist`, `README.md`, and `LICENSE`, and reports `"version": "0.2.61"`.
+   - Deleted the stale superseded `apps/cli/moderado-0.2.20.tgz` so a local `npm publish apps/cli/*.tgz` glob cannot ship two versions.
+
+5. **Alfazen hook finding (unfixed, owner decision)**:
+   - `.githooks/pre-commit` reads `.git/COMMIT_EDITMSG`. With `git commit -m` that file still holds the *previous* commit's subject, so the new commit is classified against the old message. The release-prep commit was therefore misclassified as a patch bump (`v0.2.61` → `v0.2.62`) because the preceding subject was a `feat(...)` commit.
+   - The stamp was corrected to `v0.2.61+260921H` (the value a `build`-type commit produces) and the prep commit was amended with hooks bypassed, matching the M6.2 precedent for keeping the connected version unchanged.
+   - Not repaired here because `versionlib.sh` is shared Alfazen versioning infrastructure; a fix belongs in the skill/hook itself (for example classifying `git log -1 --pretty=%s` or `--amend`-aware messages) and needs owner approval.
 
 ## Checks
 
 - `npm run typecheck` — PASS (0 errors)
-- `npm run build && npm run prepare:package` — PASS
+- `npm run build` — PASS
 - `npm test` — PASS (49 test files, 343 tests passed)
-- `npm --prefix apps/cli link` — PASS
-- `node apps/cli/dist/index.js --version` — PASS (`v0.2.61+260921F`)
+- `npm run verify:package` — PASS (`Verified moderado-0.2.61.tgz`)
+- `git diff --check` — PASS (CRLF advisories only)
+
+## Guarded release steps awaiting owner approval
+
+Publication is an explicit maintainer action (M7.3); nothing below was executed.
+
+1. Push the verified tag, which triggers the read-only artifact verification workflow:
+   `git tag "$(cut -d+ -f1 VERSION)"` then `git push origin "$(cut -d+ -f1 VERSION)"`.
+2. Download the `moderado-npm-package` and `moderado-binaries` artifacts and smoke-test them.
+3. Dispatch **Publish Moderado release** (`workflow_dispatch`) with `confirm: PUBLISH` and `tag: v0.2.61` to publish with npm provenance and create the GitHub Release.
 
 ## Blockers
 
-- None.
+- None. The release is gated only on explicit owner approval for the steps above.
