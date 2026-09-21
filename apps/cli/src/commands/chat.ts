@@ -133,7 +133,7 @@ export async function decideApproval(
   if (options.autoApprove && !request.toolName.startsWith('mcp.')) {
     return { requestId: request.requestId, status: 'approved' };
   }
-  if (['write_file', 'edit_file', 'apply_patch'].includes(request.toolName)) {
+  if (['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'].includes(request.toolName)) {
     return { requestId: request.requestId, status: 'approved' };
   }
   return options.requestInteractiveApproval(request, signal);

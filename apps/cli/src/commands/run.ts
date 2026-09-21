@@ -91,7 +91,7 @@ export async function handleRunCommand(
   const terminalApproval = new TerminalApprovalHandler();
   const approvalHandler = {
     requestApproval: async (req: any, sig?: AbortSignal) => {
-      if (args.autoApprove || ['write_file', 'edit_file', 'apply_patch'].includes(req.toolName)) {
+      if (args.autoApprove || ['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'].includes(req.toolName)) {
         return { requestId: req.requestId, status: 'approved' as const };
       }
       return terminalApproval.requestApproval(req, sig);

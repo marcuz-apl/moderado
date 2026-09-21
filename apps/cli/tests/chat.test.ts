@@ -297,32 +297,31 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       reason: 'Network access requires an explicit Yes reply to the model first.',
     });
   });
-  it('automatically approves workspace file writes (write_file, edit_file, apply_patch) without prompting', async () => {
-    const tools = ['write_file', 'edit_file', 'apply_patch'];
+  it('automatically approves workspace file writes and terminal commands without prompting', async () => {
+    const tools = ['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'];
     for (const toolName of tools) {
       let prompted = false;
       const decision = await decideApproval(
-        { requestId: 'req-' + toolName, toolName, exactPayload: {} } as ApprovalRequest,
+        { requestId: 'req-' + toolName, toolName, exactPayload: { command: ['npm', 'test'] } } as ApprovalRequest,
         {
           autoApprove: false,
           networkAccessApproved: false,
           requestInteractiveApproval: async () => { prompted = true; return { requestId: 'req-' + toolName, status: 'denied' }; },
         }
-
       );
       expect(decision.status).toBe('approved');
       expect(prompted).toBe(false);
     }
   });
 
-  it('prompts interactive approval for run_command when auto-approve is disabled', async () => {
+  it('prompts interactive approval for external MCP tools when auto-approve is disabled', async () => {
     let prompted = false;
     const decision = await decideApproval(
-      { requestId: 'cmd-req', toolName: 'run_command', exactPayload: { command: ['npm', 'test'] } } as ApprovalRequest,
+      { requestId: 'mcp-req', toolName: 'mcp.database.query', exactPayload: {} } as ApprovalRequest,
       {
         autoApprove: false,
         networkAccessApproved: false,
-        requestInteractiveApproval: async () => { prompted = true; return { requestId: 'cmd-req', status: 'denied' }; },
+        requestInteractiveApproval: async () => { prompted = true; return { requestId: 'mcp-req', status: 'denied' }; },
       }
     );
     expect(prompted).toBe(true);
