@@ -1,34 +1,40 @@
 # Project Handoff
 
-Updated: 2026-09-21 19:33 UTC
+Updated: 2026-09-21 20:00 UTC
 Branch: master
-Commit: `v0.2.50+260921j`
+<<<<<<< HEAD
+Commit: `v0.2.51+260921k`
 Status: Widened /help popup box and slash command candidate suggestions box to hold long descriptions without spearing out. All 317 tests passing, packaging certified, and typecheck clean.
+=======
+Commit: `v0.2.51+260921p`
+Status: Fixed silent failure on model inference errors and rate limits; added instant zero-network identity resolution ("who are you?"); restored active connection to responsive provider. All 318 tests passing, packaging certified, and typecheck clean.
+>>>>>>> c938df6 (v0.2.51+260921q fix(chat): prevent silent failure on inference errors and add instant identity query resolution)
 
 ## Summary
 
-1. **Widened `/help` Popup Box**:
-   - Updated `renderHelpPopupBox` in `apps/cli/src/ui/welcome.ts` to use a dynamic width calculation (`boxWidth = Math.max(76, Math.min(terminalWidth, 82))`) instead of the previous hard cap of 74 columns.
-   - Long command descriptions like `/session Create, resume, undo, redo, share, export, or compact sessions` (72 columns) now fit comfortably with 4+ spaces of right-hand margin inside the box.
-   - Added overflow truncation fallback (`displayItem = plain.slice(0, innerW - 1) + '…'`) for extremely narrow terminal windows (< 76 columns) so borders never break or spear out under any resolution.
-   - Added `/workflow` to the slash commands list in `/help`.
-2. **Slash Command Candidates Popup Box (`renderSuggestionsBox`)**:
-   - Fixed popup candidates window when typing `/` so descriptions (like `/session`'s 62-character description) no longer spear out past the right border.
-   - Dynamically calculates `boxWidth = Math.max(78, Math.min(terminalWidth, targetWidth))` and inner width so all descriptions fit comfortably and all borders align.
-   - Added safety truncation for narrow terminals.
-3. **Verified Exact Box Geometry & Testing**:
-   - Added unit tests in `apps/cli/tests/welcome.test.ts` asserting that all lines in `renderHelpPopupBox` and `renderSuggestionsBox` have identical visual length (`boxWidth = 80`) and that borders enclose all text seamlessly.
-   - Added test asserting that `renderWelcomeCard` encloses the candidates popup properly when typing `/`.
+1. **Root Cause of Silent No-Answer Bug**:
+   - The user's active connection was set to `openrouter`, whose free tier daily limit (50 requests/day) was completely exhausted (`429 Rate limit exceeded: free-models-per-day`).
+   - When `loop.run()` failed with `status: 'failed'`, `handleChatSession` did not check `status === 'failed'` or listen for `event.type === 'error'`.
+   - Because no assistant message was generated, `lastAnswer` fell back to `''`. The screen repainted with `chatAnswer: ''`, clearing `stderr` and showing complete silence with zero error feedback.
+2. **Actionable Diagnostics on Model Errors**:
+   - `handleChatSession` now captures `event.type === 'error'` and inspects `result.status === 'failed'`.
+   - When an inference failure or rate limit occurs, `lastAnswer` is populated with a clear diagnostic card explaining the exact error (e.g. rate limit, unavailable model) and suggesting remedies (e.g. switch models with `/model`, switch providers with `/connect`, or use other configured providers).
+3. **Instant Zero-Network Identity Resolution ("who are you?")**:
+   - Added `isLocalIdentityQuery` and wired it into `resolveLocalMetaQuery`.
+   - Natural questions like `"who are you?"`, `"what are you?"`, `"tell me about yourself"`, or `"introduce yourself"` now resolve locally in `<1ms` without network calls or token consumption, reporting the active model, provider, mode, and workspace.
+4. **Active Provider Restored**:
+   - Verified that the `agnes` provider (`agnes-3.0-flash`) is fully functional and responsive (<1s latency). Active connection in config restored to `agnes`.
 
 ## Completed
 
-- `apps/cli/src/ui/welcome.ts`:
-  - Widened `renderHelpPopupBox` and `renderSuggestionsBox` to hold all content comfortably.
-  - Added safety truncation for narrow terminals.
-  - Added `/workflow` to commands table.
-- `apps/cli/tests/welcome.test.ts`:
-  - Added tests validating that all box lines match `boxWidth` without spearing out for both `/help` and `/` suggestions.
-- `VERSION`: `v0.2.50+260921n`.
+- `apps/cli/src/commands/chat.ts`:
+  - Added `isLocalIdentityQuery` and handled in `resolveLocalMetaQuery`.
+  - Added `lastErrorEvent` tracking in `runAgent` event listener.
+  - Added actionable diagnostic card formatting on inference failure / rate limits.
+  - Ensured `catch` block renders full error screen instead of getting wiped by next turn.
+- `apps/cli/tests/chat.test.ts`:
+  - Added unit tests for `isLocalIdentityQuery` and `resolveLocalMetaQuery("who are you?")`.
+- `VERSION`: `v0.2.51+260921p`.
 
 ## Checks
 

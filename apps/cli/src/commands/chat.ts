@@ -308,6 +308,14 @@ export function isLocalProviderQuery(input: string): boolean {
   return false;
 }
 
+export function isLocalIdentityQuery(input: string): boolean {
+  const text = input.trim().toLowerCase().replace(/[?!.]+$/, '').trim();
+  if (!text) return false;
+  return /^(who|what)\s+are\s+you$/i.test(text) ||
+    /^(tell\s+me\s+about\s+yourself|introduce\s+yourself)$/i.test(text) ||
+    /^(who\s+made\s+you|who\s+built\s+you)$/i.test(text);
+}
+
 export interface LocalMetaQueryContext {
   currentModel?: string;
   providerName?: string;
@@ -316,6 +324,16 @@ export interface LocalMetaQueryContext {
 }
 
 export function resolveLocalMetaQuery(input: string, context: LocalMetaQueryContext): string | undefined {
+  if (isLocalIdentityQuery(input)) {
+    const model = context.currentModel ?? 'no model connected';
+    const provider = context.providerName ?? 'unconnected';
+    return `I am **Moderado**, a lightweight, pragmatic AI coding assistant built on the Ponytail Decision Ladder: minimalist, standard-library-first, and bloat-free.\n\n` +
+      `• **Active Model:** ${model}\n` +
+      `• **Provider:** ${provider}\n` +
+      `• **Mode:** [${context.activeMode}]\n` +
+      `• **Workspace:** \`${context.workspace}\`\n\n` +
+      `To switch models, type \`/model\`. To switch or connect providers, type \`/connect\`.`;
+  }
   if (isLocalModelQuery(input)) {
     const model = context.currentModel ?? 'no model connected';
     const provider = context.providerName ?? 'unconnected';
@@ -1017,6 +1035,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
 
     const policy = new PolicyManager({ maxSteps: args.maxSteps, readOnly: activeMode === 'Plan' || args.readOnly, nonInteractive: args.nonInteractive, timeoutSeconds: args.timeout });
+    const startedAt = Date.now();
     let thinkingTimer: ReturnType<typeof setInterval> | undefined;
     let removeGenerationListener: (() => void) | undefined;
     try {
@@ -1055,13 +1074,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           suspendGenerationInput = undefined;
         };
       }
-      const startedAt = Date.now();
       let streamedAnswer = '';
       let firstAssistantDeltaAt: number | undefined;
       let outputTokenRate: number | undefined;
       let answerPosition = { row: 15, column: 1 };
+      let lastErrorEvent: { code?: string; message: string } | undefined;
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
+        const displayAnswer = lastAnswer || streamedAnswer;
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen({
           model: currentModel ?? 'No model connected — use /connect',
@@ -1072,17 +1092,17 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           mode: activeMode,
           autoApprove: activeAutoApprove,
           chatQuestion: trimmed,
-          chatAnswer: streamedAnswer,
+          chatAnswer: displayAnswer,
           chatThoughtTime: thoughtTime,
           outputTokenRate,
           input: commandQueue.currentDraft,
           queuedCommands: commandQueue.items,
         }, process.stdout.rows));
         process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));
-        if (streamedAnswer) {
+        if (displayAnswer) {
           const width = process.stdout.columns || 80;
           const maxWidth = Math.max(40, width - 4);
-          answerPosition = renderChatAnswerDelta(streamedAnswer, { row: 15, column: 1 }, maxWidth);
+          answerPosition = renderChatAnswerDelta(displayAnswer, { row: 15, column: 1 }, maxWidth);
         }
       };
 
@@ -1106,6 +1126,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             answerPosition = renderedDelta;
             process.stdout.write(renderedDelta.sequence);
             process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));
+          }
+          if (event.type === 'error') {
+            lastErrorEvent = { code: event.code, message: event.message };
           }
         }, signal: requestSignal, conversationHistory,
         onMutationApproved: (toolName, parameters) => {
@@ -1149,6 +1172,18 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       activeSession.mode = activeMode;
       sessionStore.save(activeSession);
       lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
+      if (!lastAnswer && (result.status === 'failed' || lastErrorEvent)) {
+        const otherConnections = Object.keys(config.connections ?? {}).filter((id) => id !== activeConnection?.id);
+        const altSuggestion = otherConnections.length > 0
+          ? ` (other configured providers: ${otherConnections.join(', ')})`
+          : '';
+        const rawDetail = lastErrorEvent?.message || 'Inference request failed without response.';
+        const cleanDetail = rawDetail
+          .replace(/NVIDIA NIM (request failed|rate limit exceeded|service or model unavailable)\s*\([^)]*\)\s*during\s*streamChat:\s*/i, '')
+          .trim();
+        lastAnswer = `⚠️ **Model Error (${lastErrorEvent?.code || 'ERR_INFERENCE_FAILED'}):**\n${cleanDetail}\n\n👉 **Suggestion:** The model \`${result.selectedModel?.id || currentModel}\` encountered an error. Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
+        streamedAnswer = lastAnswer;
+      }
       if (activeMode === 'Plan') activePlan = lastAnswer;
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
@@ -1156,7 +1191,33 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       if (thinkingTimer) clearInterval(thinkingTimer);
       removeGenerationListener?.();
       redrawChatFrame();
-    } catch (err: any) { if (thinkingTimer) clearInterval(thinkingTimer); removeGenerationListener?.(); process.stderr.write(`\n\x1b[1;31mError:\x1b[0m ${err.message}\n\n`); }
+    } catch (err: any) {
+      if (thinkingTimer) clearInterval(thinkingTimer);
+      removeGenerationListener?.();
+      const otherConnections = Object.keys(config.connections ?? {}).filter((id) => id !== activeConnection?.id);
+      const altSuggestion = otherConnections.length > 0
+        ? ` (other configured providers: ${otherConnections.join(', ')})`
+        : '';
+      lastQuestion = trimmed;
+      lastAnswer = `⚠️ **Error:** ${err.message}\n\n👉 **Suggestion:** Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
+      lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
+      lastOutputTokenRate = undefined;
+      process.stdout.write('\x1b[H\x1b[J');
+      process.stdout.write(renderFullWelcomeScreen({
+        model: currentModel ?? 'No model connected — use /connect',
+        tokens: Math.round(sessionTokens),
+        cost: costLabel(),
+        usageAvailable: activeSession.usage.available,
+        workspace: canonicalWorkspace,
+        mode: activeMode,
+        autoApprove: activeAutoApprove,
+        chatQuestion: lastQuestion,
+        chatAnswer: lastAnswer,
+        chatThoughtTime: lastThoughtTime,
+        queuedCommands: commandQueue.items,
+      }, process.stdout.rows));
+      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+    }
   }
   return 0;
 }

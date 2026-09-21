@@ -13,6 +13,7 @@ import {
   handleGenerationKeypress,
   isBareExitCommand,
   isGenerationCancelKey,
+  isLocalIdentityQuery,
   isLocalModelQuery,
   isLocalProviderQuery,
   isNetworkCommand,
@@ -389,6 +390,32 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(answer).toContain('NVIDIA NIM');
     expect(answer).toContain('/test/workspace');
     expect(answer).toContain('/model');
+  });
+
+  it('detects and resolves identity questions ("who are you?") instantly without external network calls', () => {
+    expect(isLocalIdentityQuery('who are you?')).toBe(true);
+    expect(isLocalIdentityQuery('who are you')).toBe(true);
+    expect(isLocalIdentityQuery('what are you?')).toBe(true);
+    expect(isLocalIdentityQuery('introduce yourself')).toBe(true);
+    expect(isLocalIdentityQuery('tell me about yourself')).toBe(true);
+    expect(isLocalIdentityQuery('who made you')).toBe(true);
+    expect(isLocalIdentityQuery('who wrote this file')).toBe(false);
+
+    const answer = resolveLocalMetaQuery('who are you?', {
+      currentModel: 'agnes-3.0-flash',
+      providerName: 'agnes',
+      activeMode: 'Execute',
+      workspace: '/test/workspace',
+    });
+
+    expect(answer).toBeDefined();
+    expect(answer).toContain('Moderado');
+    expect(answer).toContain('Ponytail Decision Ladder');
+    expect(answer).toContain('agnes-3.0-flash');
+    expect(answer).toContain('agnes');
+    expect(answer).toContain('/test/workspace');
+    expect(answer).toContain('/model');
+    expect(answer).toContain('/connect');
   });
 
   it('TurnCommandQueue manages FIFO commands and editing draft', () => {
