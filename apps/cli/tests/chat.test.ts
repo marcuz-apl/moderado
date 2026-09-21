@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import * as chatCommands from '../src/commands/chat.js';
-import { buildSearchAnswerTask, createAgentTask, createMcpToolRegistry, decideApproval, formatDirectWebSearchAnswer, handleChatSession, isBareExitCommand, isGenerationCancelKey, isNetworkCommand, isNetworkConsentReply, replaceEvidenceTurn, resolveSessionSharePath, resolveWebSearchEndpoint, resolveWebSearchProvider, shouldFastRouteWebSearch } from '../src/commands/chat.js';
+import { buildSearchAnswerTask, createAgentTask, createMcpToolRegistry, decideApproval, formatDirectWebSearchAnswer, handleChatSession, isBareExitCommand, isGenerationCancelKey, isLocalModelQuery, isLocalProviderQuery, isNetworkCommand, isNetworkConsentReply, replaceEvidenceTurn, resolveLocalMetaQuery, resolveSessionSharePath, resolveWebSearchEndpoint, resolveWebSearchProvider, shouldFastRouteWebSearch } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
 import { ApprovalRequest, ChatMessage } from '@moderado/contracts';
@@ -333,5 +333,38 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     );
     expect(prompted).toBe(true);
     expect(decision.status).toBe('denied');
+  });
+
+  it('detects model and provider status questions for instant local resolution', () => {
+    expect(isLocalModelQuery('which model are you running against?')).toBe(true);
+    expect(isLocalModelQuery('what model are you running against?')).toBe(true);
+    expect(isLocalModelQuery('which model are you running?')).toBe(true);
+    expect(isLocalModelQuery('what model are you using?')).toBe(true);
+    expect(isLocalModelQuery('what model is this?')).toBe(true);
+    expect(isLocalModelQuery('which model is active?')).toBe(true);
+    expect(isLocalModelQuery('what is the current model?')).toBe(true);
+    expect(isLocalModelQuery('current model')).toBe(true);
+    expect(isLocalModelQuery('which model?')).toBe(true);
+    expect(isLocalModelQuery('write a test for user model')).toBe(false);
+
+    expect(isLocalProviderQuery('what provider are you using?')).toBe(true);
+    expect(isLocalProviderQuery('which provider are you connected to?')).toBe(true);
+    expect(isLocalProviderQuery('current provider')).toBe(true);
+    expect(isLocalProviderQuery('provider service test')).toBe(false);
+  });
+
+  it('resolves model status instantly without external network calls', () => {
+    const answer = resolveLocalMetaQuery('which model are you running against?', {
+      currentModel: 'nvidia/nemotron-3-ultra-550b-a55b',
+      providerName: 'NVIDIA NIM',
+      activeMode: 'Execute',
+      workspace: '/test/workspace',
+    });
+
+    expect(answer).toBeDefined();
+    expect(answer).toContain('nvidia/nemotron-3-ultra-550b-a55b');
+    expect(answer).toContain('NVIDIA NIM');
+    expect(answer).toContain('/test/workspace');
+    expect(answer).toContain('/model');
   });
 });

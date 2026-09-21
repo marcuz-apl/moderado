@@ -58,6 +58,57 @@ export function isNetworkConsentReply(input: string, previousAnswer: string): bo
   return /^(y|yes)$/i.test(input.trim()) && /\b(weather|internet|online|look up|web|curl)\b/i.test(previousAnswer);
 }
 
+export function isLocalModelQuery(input: string): boolean {
+  const text = input.trim().toLowerCase().replace(/[?!.]+$/, '').trim();
+  if (!text) return false;
+  if (/^(what|which)\s+(model|llm)(\s+(is\s+(this|active|running|currently\s+active|currently\s+running)|are\s+you\s+(running|using|on)(\s+against)?))?$/.test(text)) {
+    return true;
+  }
+  if (/^(what|which)\s+is\s+(the\s+)?(current|active)\s+(model|llm)$/.test(text)) {
+    return true;
+  }
+  if (/^(current|active)\s+(model|llm)$/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+export function isLocalProviderQuery(input: string): boolean {
+  const text = input.trim().toLowerCase().replace(/[?!.]+$/, '').trim();
+  if (!text) return false;
+  if (/^(what|which)\s+(provider|service)(\s+(is\s+(this|active|running|currently\s+active|currently\s+running)|are\s+you\s+(connected\s+to|using|on)))?$/.test(text)) {
+    return true;
+  }
+  if (/^(what|which)\s+is\s+(the\s+)?(current|active)\s+(provider|service)$/.test(text)) {
+    return true;
+  }
+  if (/^(current|active)\s+(provider|service)$/.test(text)) {
+    return true;
+  }
+  return false;
+}
+
+export interface LocalMetaQueryContext {
+  currentModel?: string;
+  providerName?: string;
+  activeMode: 'Plan' | 'Execute';
+  workspace: string;
+}
+
+export function resolveLocalMetaQuery(input: string, context: LocalMetaQueryContext): string | undefined {
+  if (isLocalModelQuery(input)) {
+    const model = context.currentModel ?? 'no model connected';
+    const provider = context.providerName ?? 'unconnected';
+    return `Currently running against model: **${model}**\nProvider: **${provider}**\nMode: **${context.activeMode}**\nWorkspace: \`${context.workspace}\`\n\nTo switch models, type \`/model\`. To switch or connect providers, type \`/connect\`.`;
+  }
+  if (isLocalProviderQuery(input)) {
+    const provider = context.providerName ?? 'no provider connected';
+    const model = context.currentModel ?? 'no model connected';
+    return `Currently connected to provider: **${provider}**\nActive model: **${model}**\nMode: **${context.activeMode}**\nWorkspace: \`${context.workspace}\`\n\nTo switch or connect a different provider, type \`/connect\`.`;
+  }
+  return undefined;
+}
+
 /** Detect questions whose answer depends on changing public information. */
 export function shouldFastRouteWebSearch(input: string): boolean {
   const text = input.trim().toLowerCase();
@@ -576,6 +627,51 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     const expandedTurn = await expandMentions(trimmed, createWorkspaceFileSource(canonicalWorkspace));
     const effectivePrompt = expandedTurn.text;
     networkAccessApproved = isNetworkConsentReply(trimmed, lastAnswer);
+
+    // 1. Instant local meta queries (model/provider status)
+    const localMetaAnswer = resolveLocalMetaQuery(trimmed, {
+      currentModel,
+      providerName: activeConnection?.displayName,
+      activeMode,
+      workspace: canonicalWorkspace,
+    });
+    if (localMetaAnswer) {
+      lastQuestion = trimmed;
+      lastAnswer = localMetaAnswer;
+      lastThoughtTime = 0.001;
+      lastOutputTokenRate = undefined;
+      conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: localMetaAnswer }];
+      activeSession.messages = conversationHistory;
+      sessionStore.save(activeSession);
+      process.stdout.write('\x1b[H\x1b[J');
+      process.stdout.write(renderFullWelcomeScreen({
+        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
+        chatThoughtTime: lastThoughtTime,
+      }, process.stdout.rows));
+      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      continue;
+    }
+
+    // 2. Consecutive repeated question cache: instant replay without redundant network round-trip
+    if (lastQuestion && trimmed.toLowerCase() === lastQuestion.toLowerCase() && lastAnswer && lastAnswer.trim().length > 0) {
+      lastQuestion = trimmed;
+      lastThoughtTime = 0.001;
+      lastOutputTokenRate = undefined;
+      conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: lastAnswer }];
+      activeSession.messages = conversationHistory;
+      sessionStore.save(activeSession);
+      process.stdout.write('\x1b[H\x1b[J');
+      process.stdout.write(renderFullWelcomeScreen({
+        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
+        chatThoughtTime: lastThoughtTime,
+      }, process.stdout.rows));
+      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      continue;
+    }
 
     // Current-information lane: gather live evidence before inference so the model answers in one turn.
     let liveSearch: ToolResult | undefined;

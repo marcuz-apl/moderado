@@ -1,54 +1,46 @@
 # Project Handoff
 
-Updated: 2026-09-21 07:00 UTC
+Updated: 2026-09-21 15:25 UTC
 Branch: master
-Commit: pending (`v0.2.45+260921e`)
-Status: Coding prompt web search hijacking resolved, hardcoded Calgary prompt replaced, and OpenCode Zen removed from free presets. All 304 tests passing, packaging certified, and typecheck clean.
+Commit: pending (`v0.2.46+260921f`)
+Status: Local meta query fast path and repeat-question cache implemented. All 306 tests passing, packaging certified, and typecheck clean.
 
 ## Summary
 
-1. **Coding Prompt Web Search Hijacking Resolved**:
-   - Fixed `shouldFastRouteWebSearch` in `apps/cli/src/commands/chat.ts` to immediately bypass web search whenever a prompt requests coding, building, creating, implementing, or mentions technical coding terms (`write`, `create`, `build`, `make`, `app`, `webapp`, `component`, `widget`, `file`, `function`, `react`, `tailwind`, etc.).
-   - Commands such as `"please write a weather webapp using React.JS and Tailwind CSS"` or `"create a weather widget component"` now directly invoke the coding agent loop without being hijacked by web search.
-2. **Hardcoded City Example Removed from Prompt**:
-   - Replaced `like "Currently in Calgary (September 20, 2026):".` in `buildSearchAnswerTask` with generic `like "Currently in [Location] ([Date]):".` to prevent models from hallucinating "Calgary" into unrelated responses.
-3. **OpenCode Zen Gated-Tier Removed from Free Presets**:
-   - Removed `opencode-zen` from `PROVIDER_PRESETS` in `apps/cli/src/ui/provider_connect.ts`, `apps/cli/src/commands/models.ts`, and `packages/providers/src/model_discovery.ts`.
-   - Verified that OpenCode Zen requires a paid OpenCode Go subscription for premium models and actively blocks third-party clients from its free tier with `FreeTierError` (`"OpenCode's free tier can only be used from within OpenCode"`).
-   - Preserved genuine free providers: **NVIDIA NIM**, **OpenRouter** (`:free` tier), and **Agnes AI**.
+1. **Local Fast-Path for Model & Provider Queries**:
+   - Implemented `isLocalModelQuery`, `isLocalProviderQuery`, and `resolveLocalMetaQuery` in `apps/cli/src/commands/chat.ts`.
+   - Natural language queries inquiring about the running model (e.g. `"which model are you running against?"`, `"what model are you using?"`, `"current model"`) or connected provider (e.g. `"what provider are you using?"`) are now answered immediately from local runtime state in `<1ms` without making any network calls or consuming tokens.
+2. **Consecutive Repeat-Question In-Memory Turn Cache**:
+   - If the user re-enters the exact same question consecutively, Moderado replays the previous turn response instantly (`thoughtTime = <1s`) instead of waiting for a redundant remote LLM inference round-trip.
+3. **Verified Zero Token / Zero Network Latency**:
+   - State queries never trigger remote model prefill, queuing delays, or network streaming.
 
 ## Completed
 
 - `apps/cli/src/commands/chat.ts`:
-  - Added coding exclusion guard in `shouldFastRouteWebSearch`.
-  - Replaced hardcoded Calgary string with neutral location placeholder in `buildSearchAnswerTask`.
-  - Removed `opencode-zen` from `allModelsFree`.
-- `apps/cli/src/ui/provider_connect.ts`:
-  - Removed `opencode-zen` preset and interactive discovery branch.
-- `apps/cli/src/commands/models.ts`:
-  - Removed `OpenCode Zen` section from `handleModelsCommand`.
-- `packages/providers/src/model_discovery.ts`:
-  - Cleaned `SPIKE_PROVIDER_ENDPOINTS`.
+  - Added `isLocalModelQuery` detecting questions about active model/LLM.
+  - Added `isLocalProviderQuery` detecting questions about connected provider.
+  - Added `resolveLocalMetaQuery` returning instant formatted runtime details.
+  - Added fast-path interceptor in `handleChatSession` before network inference.
+  - Added consecutive duplicate question cache replay.
 - `apps/cli/tests/chat.test.ts`:
-  - Added unit tests verifying coding requests are not hijacked by web search.
-  - Asserted neutral location placeholder and absence of Calgary in evidence tasks.
-- `apps/cli/tests/provider_connect.test.ts` & `apps/cli/tests/models.test.ts`:
-  - Updated test assertions for NVIDIA NIM, OpenRouter, and Agnes AI.
+  - Added unit tests for `isLocalModelQuery` and `isLocalProviderQuery`.
+  - Added unit tests for `resolveLocalMetaQuery`.
 
 ## Checks
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build` — PASS (all packages compile cleanly)
-- `npm test` — PASS (48 test files, 304 passed)
+- `npm test` — PASS (48 test files, 306 passed)
 - `npm run verify:package` — PASS (clean tarball packaging and smoke test)
 
 ## Decisions and context
 
-- OpenCode Zen requires proprietary headers (`x-opencode-session`) and blocks non-OpenCode applications. To maintain Moderado's integrity as a 100% Free-First agent, it is excluded from default presets.
-- Genuinely functional free tiers remain: OpenRouter (`:free`), NVIDIA NIM (free trial credits), and Agnes AI.
+- Local runtime meta-queries should never leave the machine. Intercepting them client-side makes Moderado feel instantaneously responsive while conserving user API quota.
 
 ## Blockers
 
 - None.
+
 
 
