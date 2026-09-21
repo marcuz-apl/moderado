@@ -1,6 +1,6 @@
 # Project Handoff
 
-Updated: 2026-09-21 21:07 UTC
+Updated: 2026-09-21 21:15 UTC
 Branch: master
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -11,7 +11,8 @@ Branch: master
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
-Commit: `v0.2.59+260921y`
+<<<<<<< HEAD
+Commit: `v0.2.59+260921z`
 Status: Widened /help popup box and slash command candidate suggestions box to hold long descriptions without spearing out. All 317 tests passing, packaging certified, and typecheck clean.
 =======
 Commit: `v0.2.51+260921p`
@@ -49,6 +50,10 @@ Status: Implemented Claude Code-style `/btw` ("by the way") ephemeral side quest
 Commit: `v0.2.59+260921b`
 Status: Implemented Claude Code-style `/btw` slash command, purged temporary root scratch files, and verified roadmap alignment. All 332 tests passing offline, typecheck clean, binary linked globally.
 >>>>>>> d9bdc9a (v0.2.59+260921c docs: update handoff with root cleanup)
+=======
+Commit: `v0.2.59+260921d`
+Status: Restored normal placeholder in composer card ('Ask anything, I am all ears...'). All 332 tests passing offline, typecheck clean, binary linked globally.
+>>>>>>> 73845d2 (v0.2.59+260921e docs: update handoff with normal placeholder status)
 
 ## Summary
 
