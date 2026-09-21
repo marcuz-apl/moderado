@@ -1,39 +1,37 @@
 # Project Handoff
 
-Updated: 2026-09-21 05:41 UTC
+Updated: 2026-09-21 05:53 UTC
 Branch: master
-Commit: 4339581 (`v0.2.40+2609213`)
-Status: M7.8 committed; typecheck, build, and test suite green.
+Commit: f94a4b6 (`v0.2.41+2609215`)
+Status: M7.11 complete and committed; all 294 tests passing, typecheck and build green.
 
 ## Summary
 
-Milestone M7.8 (Composer context: `/init`, `@` mentions, images) is fully implemented:
-1. `/init` slash command scans the workspace through the workspace jail, scaffolds a customized `AGENTS.md` following Ponytail engineering principles, and writes it through `WriteFileTool` after interactive human approval.
-2. `@` file-mention picker extends composer autocomplete, allowing interactive selection and Tab completion of files, backed by jail-safe `listFiles` helper in `@moderado/tools`.
-3. Image attachments by path (`.png`, `.jpg`, `.jpeg`, `.gif`, `.webp`, `.svg`, etc.) are converted into explicit model context with MIME type and base64 data URI (or capped metadata if exceeding inline limit) without terminal-dependent drag-and-drop.
-4. All previous typecheck and build blockers in `chat.ts` and `file_mentions.ts` are resolved.
+Milestone M7.11 (Hardened Windows/WSL paths) is fully implemented:
+1. Canonicalization of cross-platform Windows and WSL representations (`\\wsl$\<distro>\mnt\<drive>\...`, `\\wsl.localhost\<distro>\mnt\<drive>\...`, `/mnt/<drive>/...`, `C:\...`, and `\\?\` extended paths) into unified workspace jail paths in `packages/tools/src/jail.ts`.
+2. Workspace pre-containment check before touching filesystem/network to prevent Windows SMB NetBIOS timeout hangs (4-5s delay) and NetNTLM hash leak risks on external UNC paths.
+3. Windows drive-letter casing tolerance and strict cross-drive boundary enforcement (rejects `C:\...` when root is on `D:\...`, and vice versa).
+4. Symlink and junction escape defense verifying canonical targets against workspace boundaries while allowing valid internal directory junctions.
+5. Hardened `.git`, `.env`, and credential protection with case-insensitive matching across subdirectories and Windows NTFS Alternate Data Streams (ADS `::$DATA`) denial.
+6. 28 comprehensive tests in `packages/tools/tests/jail.test.ts` verifying all Windows/WSL edge cases.
 
 ## Completed
 
-- `packages/tools/src/tools/list_files.ts`: Implemented and exported `listFiles` helper function with recursion and depth options; covered by unit tests in `packages/tools/tests/tools.test.ts`.
-- `apps/cli/src/ui/file_mentions.ts`: Expanded to support image attachments (base64 context), `isImagePath`, `getImageMimeType`, `filterMentionCandidates`, and `createWorkspaceFileSource`; 14 unit tests in `apps/cli/tests/file_mentions.test.ts`.
-- `apps/cli/src/commands/init.ts`: Implemented `scanWorkspaceProject`, `generateAgentsScaffold`, and `initWorkspace` with interactive human approval and `WriteFileTool` execution; 4 unit tests in `apps/cli/tests/init.test.ts`.
-- `apps/cli/src/ui/welcome.ts`: Wired `/init` slash command, `@` mention autocomplete suggestions popup, Tab completion, and help documentation; 32 unit tests in `apps/cli/tests/welcome.test.ts`.
-- `apps/cli/src/commands/chat.ts`: Wired `initWorkspace` into `onInit`, `listFiles` into `onMentionComplete`, and `expandMentions` into user turn submission before invoking the agent loop.
-- `docs/CLI_CAPABILITY_ROADMAP.md`: Marked M7.8 complete.
+- `packages/tools/src/jail.ts`:
+  - Implemented `normalizeCrossPlatformPath` handling `/mnt/<drive>/...`, `\\wsl$\...`, `\\wsl.localhost\...`, `//wsl$/...`, extended-length prefixes (`\\?\`), and drive-letter canonicalization.
+  - Implemented `isContainedInRoot` with Windows case-insensitive path comparison.
+  - Hardened `resolveInJail` with pre-containment validation and symlink dereference checking.
+  - Hardened `isProtectedPath` with recursive segment matching, case-insensitivity, and NTFS ADS stream stripping.
+- `packages/tools/tests/jail.test.ts`:
+  - Expanded from 6 to 28 tests covering cross-platform normalization, UNC security, cross-drive rejection, junctions/symlinks, and sensitive file denial.
+- `docs/CLI_CAPABILITY_ROADMAP.md`:
+  - Marked M7.11 complete.
 
 ## Working tree
 
-- M7.8 changes:
-  - `packages/tools/src/tools/list_files.ts`
-  - `packages/tools/tests/tools.test.ts`
-  - `apps/cli/src/ui/file_mentions.ts`
-  - `apps/cli/tests/file_mentions.test.ts`
-  - `apps/cli/src/commands/init.ts`
-  - `apps/cli/tests/init.test.ts`
-  - `apps/cli/src/ui/welcome.ts`
-  - `apps/cli/tests/welcome.test.ts`
-  - `apps/cli/src/commands/chat.ts`
+- M7.11 changes:
+  - `packages/tools/src/jail.ts`
+  - `packages/tools/tests/jail.test.ts`
 - Documentation:
   - `docs/CLI_CAPABILITY_ROADMAP.md`
   - `HANDOFF.md`
@@ -42,19 +40,19 @@ Milestone M7.8 (Composer context: `/init`, `@` mentions, images) is fully implem
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build` — PASS (all packages build cleanly)
-- `npx vitest run --pool=threads --maxWorkers=1 --minWorkers=1` — PASS (47 files, 272 tests)
+- `npx vitest run --pool=threads --maxWorkers=1 --minWorkers=1` — PASS (47 files, 294 tests)
 - `git diff --check` — PASS (clean formatting)
 
 ## Decisions and context
 
-- Mentions are expanded on user prompt submission through jail-contained `expandMentions`, passing the expanded context to the model while preserving the concise question text in the TUI history.
-- `/init` requests explicit human approval for `write_file` before writing `AGENTS.md` via `WriteFileTool.execute`.
-- Images are detected by extension and encoded as standard base64 data URIs within model context, avoiding unsupported terminal-specific clipboard or drag-and-drop mechanisms on Windows/WSL.
+- External UNC paths are pre-checked for workspace containment before any `fs.existsSync` or `fs.realpathSync` call to avoid SMB network resolution timeouts on Windows and NetNTLM hash exposure.
+- Directory junctions on Windows are supported without administrator privileges, enabling jail symlink escape testing natively on Windows CI/dev environments.
+- `.git` and `.env` protection uses case-insensitive segment checks and strips `::$DATA` to defend against Windows NTFS alternate stream bypasses.
 
 ## Blockers
 
-- None. The build blocker reported in previous handoffs is resolved.
+- None.
 
 ## Next action
 
-- Proceed with M7.9 (`/session undo | redo | share`) or owner review and commit of M7.8 working-tree changes.
+- Commit and push M7.11 changes, then proceed to M7.9 (`/session undo | redo | share`) or M7.3 release workflow.

@@ -328,7 +328,7 @@ context, and source traceability. M7.3 runs last and certifies the release.
   `search_files` already covers regex search. Ship them as UX aliases and
   grep-flavored output, reusing existing schemas and approval surfaces.
 
-### M7.11 — Hardened Windows/WSL paths [planned]
+### M7.11 — Hardened Windows/WSL paths [complete]
 
 - Canonicalize `\\wsl$\<distro>\...`, `/mnt/c/...`, and `C:\...` forms to the
   same jail root in `packages/tools/src/jail.ts`, with tests.
