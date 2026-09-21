@@ -796,8 +796,15 @@ describe('OpenCode-style Welcome TUI', () => {
       autoApprove: false,
       queuedCommands: ['npm test', 'git diff'],
     });
-    expect(queuedCard).toContain('Queued (2):');
-    expect(queuedCard).toContain('npm test');
-    expect(queuedCard).toContain('(+1 more)');
+    const plainQueuedCard = stripAnsi(queuedCard);
+    expect(plainQueuedCard).toContain('Queued (2):');
+    expect(plainQueuedCard).toContain('1. npm test');
+    expect(plainQueuedCard).toContain('2. git diff');
+    // Ensure queue appears ABOVE the editable question box marker (❯)
+    const queuePos = plainQueuedCard.indexOf('Queued (2):');
+    const inputPos = plainQueuedCard.indexOf(String.fromCodePoint(0x276F));
+    expect(queuePos).toBeGreaterThan(-1);
+    expect(inputPos).toBeGreaterThan(-1);
+    expect(queuePos).toBeLessThan(inputPos);
   });
 });

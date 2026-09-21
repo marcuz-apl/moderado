@@ -85,9 +85,22 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     return surface + preserved + ' '.repeat(Math.max(0, width - visibleLen(content))) + '\x1b[0m';
   };
 
-  const queueContent = options.queuedCommands && options.queuedCommands.length > 0
-    ? ` \x1b[1;38;5;221mQueued (${options.queuedCommands.length}):\x1b[0m \x1b[38;5;252m${options.queuedCommands[0]}${options.queuedCommands.length > 1 ? ` \x1b[38;5;244m(+${options.queuedCommands.length - 1} more)\x1b[0m` : ''}\x1b[0m`
-    : '';
+  const queueLines: string[] = [];
+  if (options.queuedCommands && options.queuedCommands.length > 0) {
+    const total = options.queuedCommands.length;
+    queueLines.push(surfaceLine(` \x1b[1;38;5;221mQueued (${total}):\x1b[0m`));
+    const maxItems = Math.min(total, 3);
+    for (let i = 0; i < maxItems; i++) {
+      const cmd = options.queuedCommands[i];
+      const maxLen = Math.max(20, width - 10);
+      const displayCmd = cmd.length > maxLen ? cmd.slice(0, maxLen - 3) + '...' : cmd;
+      queueLines.push(surfaceLine(`   \x1b[38;5;221m${i + 1}.\x1b[0m \x1b[38;5;252m${displayCmd}\x1b[0m`));
+    }
+    if (total > 3) {
+      queueLines.push(surfaceLine(`   \x1b[38;5;244m(+${total - 3} more)\x1b[0m`));
+    }
+    queueLines.push(surfaceLine());
+  }
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
   const outputRate = options.outputTokenRate === undefined ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
@@ -122,8 +135,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
 
   const cardLines = [
     surfaceLine(),
+    ...queueLines,
     surfaceLine(textBox),
-    surfaceLine(queueContent),
+    surfaceLine(),
     line4,
     line5,
   ].map((line) => indent + line);
