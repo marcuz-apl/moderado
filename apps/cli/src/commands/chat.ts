@@ -40,6 +40,7 @@ export const STANDARD_SLASH_COMMANDS = [
   '/init',
   '/mcp',
   '/session',
+  '/queue',
   '/workflow',
   '/clear',
   '/help',
@@ -190,8 +191,8 @@ export function resolveSessionSharePath(workspaceRoot: string, outputPath: strin
   return resolveInJail(workspaceRoot, outputPath.trim());
 }
 
-export function isGenerationCancelKey(key: { name?: string } | undefined): boolean {
-  return key?.name === 'escape';
+export function isGenerationCancelKey(key: { name?: string } | undefined, str?: string): boolean {
+  return key?.name === 'escape' || str === '\x1b';
 }
 
 export class TurnCommandQueue {
@@ -262,13 +263,13 @@ export function handleGenerationKeypress(
   }
 ): void {
   // 1. Ctrl+C: abort generation and clear queue
-  if (key?.ctrl && key.name === 'c') {
+  if ((key?.ctrl && key.name === 'c') || str === '\x03') {
     actions.abort();
     return;
   }
 
   // 2. Escape: if draft has text, clear draft; if draft is empty, abort generation
-  if (isGenerationCancelKey(key)) {
+  if (isGenerationCancelKey(key, str)) {
     if (queue.currentDraft.length > 0) {
       queue.setDraft('');
       actions.onDraftChange();
@@ -278,8 +279,8 @@ export function handleGenerationKeypress(
     return;
   }
 
-  // 3. Return / Enter: commit draft to command queue
-  if (key?.name === 'return' || key?.name === 'enter') {
+  // 3. Return / Enter: commit draft to command queue (support Windows CR \r / LF \n)
+  if (key?.name === 'return' || key?.name === 'enter' || str === '\r' || str === '\n') {
     const added = queue.commitDraft();
     if (added) {
       actions.onQueueAdd(added);
@@ -287,8 +288,8 @@ export function handleGenerationKeypress(
     return;
   }
 
-  // 4. Backspace: delete character from draft
-  if (key?.name === 'backspace') {
+  // 4. Backspace: delete character from draft (support Windows BS \x08 / DEL \x7f)
+  if (key?.name === 'backspace' || str === '\x08' || str === '\x7f') {
     if (queue.currentDraft.length > 0) {
       queue.backspaceDraft();
       actions.onDraftChange();
@@ -748,6 +749,41 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         activeSession.messages = [];
         sessionStore.save(activeSession);
       },
+      onQueue: async (command, drawFrame) => {
+        const rawArgs = command.slice('/queue'.length).trim();
+        if (!rawArgs || rawArgs === 'list' || rawArgs === 'status') {
+          if (commandQueue.length === 0) {
+            await drawFrame(renderBoxLines('Command Queue', [
+              'The command queue is currently empty.',
+              '',
+              'To queue follow-up commands, use:',
+              '  /queue <command>       Queue a command from the prompt',
+              '  (or type during active generation and press Enter)',
+              '',
+              'Press Esc or Enter to return.',
+            ], 72));
+          } else {
+            const items = commandQueue.items.map((item, idx) => `${idx + 1}. ${item}`);
+            await drawFrame(renderBoxLines('Queued Commands', [
+              ...items,
+              '',
+              'Commands will execute automatically in sequence.',
+              'Use /queue clear to empty the queue.',
+              '',
+              'Press Esc or Enter to return.',
+            ], 72));
+          }
+          return;
+        }
+        if (rawArgs === 'clear') {
+          commandQueue.clear();
+          return;
+        }
+        const task = rawArgs.startsWith('add ') ? rawArgs.slice(4).trim() : rawArgs;
+        if (task) {
+          commandQueue.push(task);
+        }
+      },
       onMcp: async (command, drawFrame) => {
         await handleMcpCommand(command, drawFrame, { reloadMcpTools, signal });
       },
@@ -903,7 +939,45 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       trimmed = turn.workflowAction === 'build' && activePlan ? `Implement this approved plan:\n${activePlan}` : turn.text.trim();
       isFirst = false;
     }
-    if (!trimmed) continue;
+    if (!trimmed) {
+      if (commandQueue.length > 0) {
+        trimmed = commandQueue.shift()!;
+      } else {
+        continue;
+      }
+    }
+    if (trimmed.startsWith('/queue')) {
+      const args = trimmed.slice('/queue'.length).trim();
+      lastQuestion = trimmed;
+      lastThoughtTime = 0.001;
+      lastOutputTokenRate = undefined;
+      if (!args || args === 'list') {
+        lastAnswer = commandQueue.length === 0
+          ? 'Command queue is empty. Use `/queue <command>` to add commands.'
+          : `Queued commands (${commandQueue.length}):\n` + commandQueue.items.map((it, i) => `${i + 1}. ${it}`).join('\n');
+      } else if (args === 'clear') {
+        commandQueue.clear();
+        lastAnswer = 'Command queue cleared.';
+      } else {
+        const task = args.startsWith('add ') ? args.slice(4).trim() : args;
+        if (task) {
+          commandQueue.push(task);
+          lastAnswer = `Added to queue (${commandQueue.length}): "${task}". Commands execute sequentially.`;
+        } else {
+          lastAnswer = 'Usage: `/queue <command>` or `/queue list` or `/queue clear`.';
+        }
+      }
+      process.stdout.write('\x1b[H\x1b[J');
+      process.stdout.write(renderFullWelcomeScreen({
+        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
+        chatThoughtTime: lastThoughtTime,
+        queuedCommands: commandQueue.items,
+      }, process.stdout.rows));
+      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      continue;
+    }
     if (trimmed === '/clear') {
       commandQueue.clear();
       conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
@@ -950,6 +1024,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         '  /init      - Scaffold AGENTS.md from workspace scan\n' +
         '  /mcp       - Manage local MCP servers\n' +
         '  /session   - Create, resume, undo, redo, share, export, or compact sessions\n' +
+        '  /queue     - Add, inspect, or clear queued follow-up commands\n' +
         '  /workflow  - Inspect Git, build plans, or undo agent changes\n' +
         '  /clear     - Reset conversation memory\n' +
         '  /help      - Display commands, shortcuts & version\n' +

@@ -646,4 +646,46 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(resolution.isError).toBe(false);
     expect(resolution.answer).toBe('4');
   });
+
+  it('recognizes /queue as a valid standard slash command', () => {
+    expect(findSlashCommandAdvice('/queue')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/queue list')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/queue add do something')).toEqual({ isSlashCommand: true, isValid: true });
+  });
+
+  it('handleGenerationKeypress handles raw control bytes including Windows CR, BS, DEL, and ESC', () => {
+    const queue = new TurnCommandQueue();
+    let draftChanges = 0;
+    const queuedItems: string[] = [];
+    let aborted = false;
+
+    const actions = {
+      abort: () => { aborted = true; },
+      onDraftChange: () => { draftChanges++; },
+      onQueueAdd: (item: string) => { queuedItems.push(item); },
+    };
+
+    // Type text
+    handleGenerationKeypress('t', undefined, queue, actions);
+    handleGenerationKeypress('e', undefined, queue, actions);
+    handleGenerationKeypress('s', undefined, queue, actions);
+    handleGenerationKeypress('t', undefined, queue, actions);
+    expect(queue.currentDraft).toBe('test');
+
+    // Backspace via \x08 or \x7f
+    handleGenerationKeypress('\x08', undefined, queue, actions);
+    expect(queue.currentDraft).toBe('tes');
+
+    // Enter via raw CR '\r'
+    handleGenerationKeypress('\r', undefined, queue, actions);
+    expect(queue.currentDraft).toBe('');
+    expect(queue.length).toBe(1);
+    expect(queuedItems).toEqual(['tes']);
+
+    // Escape via raw ESC '\x1b'
+    queue.setDraft('discard me');
+    handleGenerationKeypress('\x1b', undefined, queue, actions);
+    expect(queue.currentDraft).toBe('');
+    expect(aborted).toBe(false);
+  });
 });

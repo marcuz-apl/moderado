@@ -71,9 +71,11 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const displayInput =
     options.input && options.input.length > 0
       ? options.input
-      : (options.chatAnswer !== undefined && !options.isTurnSettled
-          ? '\x1b[38;5;242mType follow-up to queue (Enter to add)...\x1b[0m'
-          : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m');
+      : (!options.isTurnSettled && (options.chatQuestion !== undefined || options.chatAnswer !== undefined)
+          ? '\x1b[38;5;221mType follow-up to queue (Enter to add)...\x1b[0m'
+          : (options.queuedCommands && options.queuedCommands.length > 0
+              ? `\x1b[38;5;221mPress Enter to run queued (${options.queuedCommands.length}) or type /queue...\x1b[0m`
+              : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m'));
 
   const promptMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
   const textBox = `${promptMarker} ${displayInput}`;
@@ -149,6 +151,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/init', desc: 'Scaffold AGENTS.md from workspace scan' },
   { name: '/mcp', desc: 'Manage local MCP servers' },
   { name: '/session', desc: 'Create, resume, undo, redo, share, export, or compact sessions' },
+  { name: '/queue', desc: 'Add, inspect, or clear queued follow-up commands' },
   { name: '/workflow', desc: 'Inspect Git, build plans, or undo agent changes' },
   { name: '/clear', desc: 'Reset conversation memory' },
   { name: '/help', desc: 'Display commands, shortcuts & version' },
@@ -381,6 +384,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1m/connect\x1b[0m    Connect NVIDIA NIM or another compatible provider',
     '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
     '\x1b[1m/session\x1b[0m   Create, resume, undo, redo, share, export, or compact sessions',
+    '\x1b[1m/queue\x1b[0m     Add, inspect, or clear queued follow-up commands',
     '\x1b[1m/workflow\x1b[0m  Inspect Git, build plans, or undo agent changes',
     '\x1b[1m/clear\x1b[0m      Reset conversation memory and context history',
     '\x1b[1m/help\x1b[0m       Display this commands, shortcuts & version guide',
@@ -485,6 +489,7 @@ export interface PromptInteractiveTurnOptions {
   onClear?: () => void;
   onMcp?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
+  onQueue?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
   onInit?: (drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onMentionComplete?: (token: string) => Promise<string[]>;
@@ -818,6 +823,38 @@ export async function promptInteractiveTurn(
             await options.onSession(command, (popupLines) => {
               stdout.write('\x1b[H\x1b[J');
               stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+            });
+          }
+          readlineModule.emitKeypressEvents(stdin);
+          stdin.resume();
+          stdin.setRawMode(true);
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
+          positionCursorOnInput();
+          bindComposerInput();
+          return;
+        }
+
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/queue')) {
+          const command = input.trim();
+          setInput('');
+          unbindComposerInput();
+          if (options.onQueue) {
+            await options.onQueue(command, async (popupLines) => {
+              stdout.write('\x1b[H\x1b[J');
+              stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+              await new Promise<void>((dismissResolve) => {
+                const onDismiss = (s: string, k: any) => {
+                  if (
+                    (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
+                    s === 'q' || s === 'Q' || s === '\x1b'
+                  ) {
+                    stdin.removeListener('keypress', onDismiss);
+                    dismissResolve();
+                  }
+                };
+                stdin.on('keypress', onDismiss);
+              });
             });
           }
           readlineModule.emitKeypressEvents(stdin);
