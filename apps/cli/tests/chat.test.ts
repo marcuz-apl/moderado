@@ -24,6 +24,8 @@ import {
   resolveWebSearchProvider,
   shouldFastRouteWebSearch,
   TurnCommandQueue,
+  findSlashCommandAdvice,
+  levenshteinDistance,
 } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
@@ -475,5 +477,67 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     aborted = false;
     handleGenerationKeypress('', { name: 'c', ctrl: true }, queue, actions);
     expect(aborted).toBe(true);
+  });
+
+  it('levenshteinDistance calculates edit distance between strings', () => {
+    expect(levenshteinDistance('exit', 'exit')).toBe(0);
+    expect(levenshteinDistance('exit', 'eixt')).toBe(2);
+    expect(levenshteinDistance('model', 'modle')).toBe(2);
+    expect(levenshteinDistance('clear', 'cler')).toBe(1);
+    expect(levenshteinDistance('', 'abc')).toBe(3);
+  });
+
+  it('findSlashCommandAdvice validates standard slash commands and rejects non-standard ones with advice', () => {
+    // 1. Valid standard commands
+    expect(findSlashCommandAdvice('/exit')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/model')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/connect')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/clear')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/session list')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/workflow git')).toEqual({ isSlashCommand: true, isValid: true });
+
+    // 2. Non-slash normal user messages
+    expect(findSlashCommandAdvice('write a function in python')).toEqual({ isSlashCommand: false, isValid: false });
+    expect(findSlashCommandAdvice('exit')).toEqual({ isSlashCommand: false, isValid: false });
+
+    // 3. User example: /EXIT (case variation)
+    const exitCase = findSlashCommandAdvice('/EXIT');
+    expect(exitCase.isSlashCommand).toBe(true);
+    expect(exitCase.isValid).toBe(false);
+    expect(exitCase.suggestion).toBe('/exit');
+    expect(exitCase.advice).toContain('Unknown command "/EXIT"');
+    expect(exitCase.advice).toContain('Did you mean "/exit"?');
+    expect(exitCase.advice).toContain('Commands are lowercase');
+
+    // 4. User example: /eixt (typo)
+    const exitTypo = findSlashCommandAdvice('/eixt');
+    expect(exitTypo.isSlashCommand).toBe(true);
+    expect(exitTypo.isValid).toBe(false);
+    expect(exitTypo.suggestion).toBe('/exit');
+    expect(exitTypo.advice).toContain('Unknown command "/eixt"');
+    expect(exitTypo.advice).toContain('Did you mean "/exit"?');
+
+    // 5. Common typos for other commands
+    const modelTypo = findSlashCommandAdvice('/mdoel');
+    expect(modelTypo.isValid).toBe(false);
+    expect(modelTypo.suggestion).toBe('/model');
+    expect(modelTypo.advice).toContain('Did you mean "/model"?');
+
+    const clearTypo = findSlashCommandAdvice('/cler');
+    expect(clearTypo.isValid).toBe(false);
+    expect(clearTypo.suggestion).toBe('/clear');
+    expect(clearTypo.advice).toContain('Did you mean "/clear"?');
+
+    const helpShorthand = findSlashCommandAdvice('/?');
+    expect(helpShorthand.isValid).toBe(false);
+    expect(helpShorthand.suggestion).toBe('/help');
+    expect(helpShorthand.advice).toContain('Did you mean "/help"?');
+
+    // 6. Unknown slash command with no close match
+    const unknown = findSlashCommandAdvice('/foobar');
+    expect(unknown.isSlashCommand).toBe(true);
+    expect(unknown.isValid).toBe(false);
+    expect(unknown.suggestion).toBeUndefined();
+    expect(unknown.advice).toBe('Unknown command "/foobar". Type /help to see available commands.');
   });
 });
