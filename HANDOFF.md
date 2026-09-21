@@ -1,42 +1,39 @@
 # Project Handoff
 
-Updated: 2026-09-21 21:32 UTC
+Updated: 2026-09-21 21:40 UTC
 Branch: master
-Commit: `v0.2.60+260921C`
-Status: Implemented in-flight /btw side question overlays during active generation turns without pausing or waiting for the main mission to finish. All 333 tests passing offline, typecheck clean, binary linked globally.
+Commit: `v0.2.61+260921E`
+Status: Suppressed raw thinking process leaks from streaming models and restored the dynamic live "Thought for Xs" counter until visible answer generation starts. All 342 tests across 49 suites passing offline, typecheck clean, binary linked globally.
 
 ## Summary
 
-1. **In-Flight `/btw` Sidecar During Active Missions ([`apps/cli/src/commands/chat.ts`](file:///d:/projects/moderado/apps/cli/src/commands/chat.ts))**:
-   - **Concurrent Side-Questioning**: Users can type `/btw <question>` even while Moderado is actively executing a task or generating code.
-   - **Immediate Pop-up Interception**: Bypasses the FIFO command queue and immediately opens an ephemeral overlay popup (`executeBtwQuery`).
-   - **Zero Context Pollution**: The in-flight query executes without tools, capped at 250 tokens and <35 words, and never enters the active conversation history.
-   - **ESC Dismissal & Stream Cancellation**: Pressing `ESC` cancels the side inference or dismisses the popup and immediately restores the active generation screen without disturbing the main mission.
-2. **Claude Code-style `/btw` Slash Command**:
-   - Registered in `STANDARD_SLASH_COMMANDS`, `SLASH_COMMANDS`, and `/help`.
-   - Bare `/btw` allows reviewing recent session side questions.
-2. **Dedicated Bordered Queued Commands Box ([`apps/cli/src/ui/welcome.ts`](file:///d:/projects/moderado/apps/cli/src/ui/welcome.ts#L67-L94))**:
-   - Implemented `renderQueuedCommandsBox`: renders a standalone bordered box (`╭─ Queued Commands (N) ──────────╮ ... ╰──────────────────────────╯`) using terminal box-drawing characters with amber highlights.
-   - Positioned directly above the editable question composer card.
-3. **Four-Layer Token Minimization & Brevity**:
-   - **Layer 1**: System prompt brevity directives.
-   - **Layer 2**: Ultra-compact local fast-routing.
-   - **Layer 3**: 250-token output cap.
-   - **Layer 4**: Conversational filler cleaner.
+1. **Thinking Process Leak Suppression & Stream Separation ([`packages/core/src/think_filter.ts`](file:///d:/projects/moderado/packages/core/src/think_filter.ts), [`packages/core/src/agent.ts`](file:///d:/projects/moderado/packages/core/src/agent.ts))**:
+   - **Root Cause**: Reasoning models (DeepSeek-R1, QwQ, etc.) streamed thinking process tokens (`<think>...</think>`) inside `contentDelta`. Because these arrived as `assistant_delta`, the CLI immediately aborted the live `thinkingTimer` ("Thought for Xs") and dumped all raw reasoning tokens directly onto the terminal.
+   - **Stream Filter State Machine (`ThinkTagStreamFilter`)**:
+     - Intercepts `<think>`, `<thought>`, and `<reasoning>` tags (including partial cross-chunk tokens).
+     - Emits internal reasoning chunks as `reasoning_delta` instead of `assistant_delta`.
+     - Completely prevents internal thoughts from entering `assistantText` or polluting conversation history.
+     - Strips leading newlines immediately following closing `</think>` tags so answers start cleanly without empty line offsets.
+2. **Dynamic Live Thought Counter Preserved ([`apps/cli/src/commands/chat.ts`](file:///d:/projects/moderado/apps/cli/src/commands/chat.ts))**:
+   - While `reasoning_delta` events arrive during thinking, `firstAssistantDeltaAt` remains unset.
+   - `thinkingTimer` continues ticking every 400ms, cleanly rendering `Thought for Xs` on line 13.
+   - Only when visible, non-whitespace assistant answer tokens arrive is `firstAssistantDeltaAt` registered and `thinkingTimer` stopped.
+   - Output token rate calculation excludes the thinking duration for pinpoint accuracy.
+3. **Conversational Anti-Filler Stripping**:
+   - `cleanConversationalFiller` updated to automatically excise any complete or unclosed `<think>...</think>`, `<thought>...</thought>`, or `<reasoning>...</reasoning>` blocks from answers.
 4. **Verification & Linking**:
-   - All 48 test suites and 332 tests pass offline (`npm test`).
-   - Rebuilt all packages (`npm run build; npm run prepare:package`).
+   - All 49 test suites and 342 tests pass offline (`npm test`).
+   - Clean TypeScript build and package preparation (`npm run build; npm run typecheck; npm run prepare:package`).
    - Globally linked (`npm --prefix apps/cli link`).
 
 ## Checks
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build; npm run prepare:package` — PASS
-- `npm test` — PASS (48 test files, 332 tests passed)
+- `npm test` — PASS (49 test files, 342 tests passed)
 - `npm --prefix apps/cli link` — PASS
-- `node apps/cli/dist/index.js --version` — PASS (`v0.2.58+2609219`)
+- `node apps/cli/dist/index.js --version` — PASS (`v0.2.61+260921E`)
 
 ## Blockers
 
 - None.
-

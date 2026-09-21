@@ -604,5 +604,39 @@ describe('AgentLoop (Core Execution Engine)', () => {
 
     const rawSingleLine = 'Certainly! The sum is 4.';
     expect(cleanConversationalFiller(rawSingleLine)).toBe('The sum is 4.');
+
+    const withThinkTags = '<think>\nAnalyzing problem...\nConsider edge cases.\n</think>\nHere is the clean solution.';
+    expect(cleanConversationalFiller(withThinkTags)).toBe('Here is the clean solution.');
+
+    const withUnclosedThink = '<think>\nStill reasoning when cut off...';
+    expect(cleanConversationalFiller(withUnclosedThink)).toBe('');
+  });
+
+  it('separates <think> tags from streaming contentDelta into reasoning_delta events', async () => {
+    provider.queueResponse([
+      { contentDelta: '<think>I need to' },
+      { contentDelta: ' think about this deeply.</think>\n\n' },
+      { contentDelta: 'The answer is 42.' },
+      { finishReason: 'stop' },
+    ]);
+
+    const result = await loop.run('What is the answer?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('completed');
+    const reasoningEvents = events.filter((e) => e.type === 'reasoning_delta');
+    const combinedReasoning = reasoningEvents.map((e: any) => e.delta).join('');
+    expect(combinedReasoning).toBe('I need to think about this deeply.');
+
+    const assistantEvents = events.filter((e) => e.type === 'assistant_delta');
+    const combinedAssistant = assistantEvents.map((e: any) => e.delta).join('');
+    expect(combinedAssistant).toBe('The answer is 42.');
+    expect(result.finalMessage).toBe('The answer is 42.');
   });
 });
+

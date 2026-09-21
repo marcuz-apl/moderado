@@ -24,6 +24,7 @@ import { Router, RouteSelectionOptions } from './router.js';
 import { PolicyManager } from './policy.js';
 import { HostEventStream } from './host_event_stream.js';
 import { SubagentDelegator } from './subagent.js';
+import { ThinkTagStreamFilter } from './think_filter.js';
 
 export interface AgentRunOptions {
   workspaceRoot: string;
@@ -44,11 +45,6 @@ export interface AgentRunOptions {
   allowSubagentDelegation?: boolean;
   /** Hard cap on generated output tokens to prevent runaway token spend. Defaults to 250. */
   maxOutputTokens?: number;
-}
-
-export interface AgentRunResult {
-  status: 'completed' | 'step_limit_reached' | 'cancelled' | 'failed';
-  totalSteps: number;
 }
 
 export interface AgentRunResult {
@@ -92,6 +88,9 @@ SYSTEM RUNTIME CONTEXT:
 export function cleanConversationalFiller(text: string): string {
   if (!text) return text;
   let cleaned = text.trim();
+  // Strip complete or unclosed thinking/reasoning blocks
+  cleaned = cleaned.replace(/<\s*(?:think|thought|reasoning)(?:\s+[^>]*)?>[\s\S]*?<\/\s*(?:think|thought|reasoning)\s*>\s*/gi, '');
+  cleaned = cleaned.replace(/<\s*(?:think|thought|reasoning)(?:\s+[^>]*)?>[\s\S]*$/gi, '');
   // Strip common multi-line leading filler
   cleaned = cleaned.replace(/^(?:Sure(?: thing)?[!,.]?|Certainly[!,.]?|Of course[!,.]?|Here is[^\n:]*[:.]?|Here's[^\n:]*[:.]?|I would be happy to[^\n:]*[:.]?|I'd be happy to[^\n:]*[:.]?|Great[!,.]?|Okay[!,.]?|Alright[!,.]?)\s*(?:\r?\n)+/i, '');
   // Strip single-line leading filler prefix like "Sure! Here is the answer: " or "Sure, ..."
@@ -277,6 +276,7 @@ export class AgentLoop {
           signal,
         });
 
+        const thinkFilter = new ThinkTagStreamFilter();
         for await (const chunk of stream) {
           if (signal?.aborted) {
             emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
@@ -299,12 +299,23 @@ export class AgentLoop {
           }
 
           if (chunk.contentDelta) {
-            assistantText += chunk.contentDelta;
-            emit({
-              type: 'assistant_delta',
-              delta: chunk.contentDelta,
-              timestamp: Date.now(),
-            });
+            const filtered = thinkFilter.process(chunk.contentDelta);
+            for (const item of filtered) {
+              if (item.type === 'reasoning') {
+                emit({
+                  type: 'reasoning_delta',
+                  delta: item.delta,
+                  timestamp: Date.now(),
+                });
+              } else {
+                assistantText += item.delta;
+                emit({
+                  type: 'assistant_delta',
+                  delta: item.delta,
+                  timestamp: Date.now(),
+                });
+              }
+            }
           }
 
           if (chunk.usage) {
@@ -319,6 +330,23 @@ export class AgentLoop {
               if (delta.argumentsDelta) current.args += delta.argumentsDelta;
               toolCallDeltas.set(delta.index, current);
             }
+          }
+        }
+
+        for (const item of thinkFilter.flush()) {
+          if (item.type === 'reasoning') {
+            emit({
+              type: 'reasoning_delta',
+              delta: item.delta,
+              timestamp: Date.now(),
+            });
+          } else {
+            assistantText += item.delta;
+            emit({
+              type: 'assistant_delta',
+              delta: item.delta,
+              timestamp: Date.now(),
+            });
           }
         }
       } catch (err: any) {

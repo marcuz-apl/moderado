@@ -1450,8 +1450,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'assistant_delta') {
-            firstAssistantDeltaAt ??= Date.now();
-            if (thinkingTimer) clearInterval(thinkingTimer);
+            if (!firstAssistantDeltaAt && event.delta.trim().length > 0) {
+              firstAssistantDeltaAt = Date.now();
+              if (thinkingTimer) clearInterval(thinkingTimer);
+            }
             streamedAnswer += event.delta;
             const renderedDelta = renderChatAnswerDelta(event.delta, answerPosition, process.stdout.columns || 80);
             answerPosition = renderedDelta;

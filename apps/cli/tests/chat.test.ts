@@ -644,6 +644,30 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(resolution.answer).toBe('4');
   });
 
+  it('strips <think> tags from assistant answers in resolveTurnAssistantAnswer', () => {
+    const resultWithThink = {
+      status: 'completed',
+      messages: [
+        { role: 'user', content: 'What is 10 + 10?' } as ChatMessage,
+        { role: 'assistant', content: '<think>\nAdding 10 and 10 gives 20.\n</think>\n20' } as ChatMessage,
+      ],
+      selectedModel: { id: 'deepseek/deepseek-r1:free' },
+    };
+
+    const resolution = resolveTurnAssistantAnswer(
+      resultWithThink,
+      0,
+      undefined,
+      '<think>\nAdding 10 and 10 gives 20.\n</think>\n20',
+      'deepseek/deepseek-r1:free'
+    );
+
+    expect(resolution.isError).toBe(false);
+    expect(resolution.answer).toBe('20');
+    expect(resolution.answer).not.toContain('<think>');
+    expect(resolution.answer).not.toContain('Adding 10 and 10');
+  });
+
   it('recognizes /queue as a valid standard slash command', () => {
     expect(findSlashCommandAdvice('/queue')).toEqual({ isSlashCommand: true, isValid: true });
     expect(findSlashCommandAdvice('/queue list')).toEqual({ isSlashCommand: true, isValid: true });
