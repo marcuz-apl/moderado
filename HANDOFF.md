@@ -1,9 +1,9 @@
 # Project Handoff
 
-Updated: 2026-09-21 22:40 UTC
+Updated: 2026-09-21 23:20 UTC
 Branch: master
-Commit: `v0.3.0+260921I` (release commit for the public CLI `v0.3.0` milestone)
-Status: Moderado CLI `v0.3.0` is cut locally and fully certified: publishable version, lockfile, badges, runbook, and this handoff are aligned to `0.3.0`, and the Alfazen `release(minor):` commit bumped `VERSION` to `v0.3.0+260921I`. All 49 suites and 343 tests pass offline, typecheck is clean, and the standalone package gate smoke-tests `moderado-0.3.0.tgz`. The owner-gated tag push and `PUBLISH` workflow dispatch are the only remaining steps.
+Commit: `7a47384` (`v0.3.0+260921M`)
+Status: Moderado CLI `v0.3.0` is PUBLISHED. npm `moderado@0.3.0` claimed by first manual publish (no `--provenance`: OIDC unavailable outside CI); GitHub Release `v0.3.0` exists with all 7 verified binary assets attached. Verify workflow run 35664869192 green. Publish workflow run 35665118071 failed at `npm publish` with E404 (no credentials — expected pre-bootstrap). Next: configure the npm trusted publisher, then future releases publish via CI.
 
 ## Summary
 
@@ -49,13 +49,10 @@ Status: Moderado CLI `v0.3.0` is cut locally and fully certified: publishable ve
 
 ## Remaining release steps (owner-gated)
 
-Local certification is complete; the actions below are the guarded M7.3 maintainer steps.
-
-1. Push the release commit and tag. The tag push triggers the read-only **Verify release artifacts** workflow (`contents: read`, incapable of publishing):
-   `git push origin master`, then `git tag "$(cut -d+ -f1 VERSION)"` and `git push origin "$(cut -d+ -f1 VERSION)"`.
-2. Download the `moderado-npm-package` and `moderado-binaries` artifacts and smoke-test them.
-3. Dispatch **Publish Moderado release** with `confirm: PUBLISH` and `tag: v0.3.0` to publish `moderado@0.3.0` with npm provenance and create the GitHub Release. Confirm the npm trusted-publisher binding for this repository and workflow first, since this claims the package name permanently.
+1. Configure the npm trusted publisher at `https://www.npmjs.com/package/moderado/access` (Trusted Publisher → GitHub Actions): repository `marcuz-apl/moderado`, workflow filename `publish.yml`, environment `release` (or blank). Package must exist first — it now does.
+2. For v0.3.1+: fix `publish.yml` npm version first — add `npm install -g npm@latest` before `npm publish` (OIDC needs npm ≥ 11.5.1; setup-node on Node 20 ships npm 10).
+3. Then the normal flow works: push tag → green Verify run → dispatch Publish with `confirm: PUBLISH`.
 
 ## Blockers
 
-- None. The release is gated only on the maintainer actions above.
+- None. Publish workflow failure 35665118071 (E404, no credentials) is the expected pre-bootstrap outcome, superseded by the manual first publish.
