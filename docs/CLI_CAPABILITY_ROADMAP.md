@@ -300,7 +300,7 @@ context, and source traceability. M7.3 runs last and certifies the release.
   unknown-cost models; keep provider additions behind the
   provider-independent contracts.
 
-### M7.8 — Composer context: `/init`, `@` mentions, images [planned]
+### M7.8 — Composer context: `/init`, `@` mentions, images [complete]
 
 - Add `/init` to scaffold `AGENTS.md` from a workspace scan through the
   workspace jail with `write_file` approval.

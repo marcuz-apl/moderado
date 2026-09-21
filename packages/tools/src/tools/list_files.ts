@@ -20,6 +20,75 @@ const DEFAULT_IGNORED_DIRS = new Set([
   'coverage',
 ]);
 
+export interface ListFilesOptions {
+  recursive?: boolean;
+  maxDepth?: number;
+  limit?: number;
+}
+
+export async function listFiles(
+  workspaceRoot: string,
+  subpathOrQuery: string = '',
+  options: ListFilesOptions = {}
+): Promise<string[]> {
+  const limit = options.limit ?? 50;
+  const maxDepth = options.maxDepth ?? 5;
+  const recursive = options.recursive ?? true;
+  const query = subpathOrQuery.trim();
+
+  let startDir = workspaceRoot;
+  let filterText = query;
+
+  if (query) {
+    try {
+      const candidateDir = resolveInJail(workspaceRoot, query);
+      if (fs.existsSync(candidateDir) && fs.statSync(candidateDir).isDirectory()) {
+        startDir = candidateDir;
+        filterText = '';
+      }
+    } catch {
+      // Query is a filter substring, not an existing directory.
+    }
+  }
+
+  const results: string[] = [];
+  const normalizedQuery = filterText.toLowerCase().replace(/\\/g, '/');
+
+  function walk(currentDir: string, currentDepth: number) {
+    if (results.length >= limit || currentDepth > maxDepth) return;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (results.length >= limit) return;
+
+      const fullPath = path.join(currentDir, entry.name);
+      const relFromRoot = path.relative(workspaceRoot, fullPath).replace(/\\/g, '/');
+
+      if (isProtectedPath(relFromRoot)) continue;
+
+      if (entry.isDirectory()) {
+        if (DEFAULT_IGNORED_DIRS.has(entry.name)) continue;
+        if (recursive || currentDepth < maxDepth) {
+          walk(fullPath, currentDepth + 1);
+        }
+      } else if (entry.isFile()) {
+        if (!normalizedQuery || relFromRoot.toLowerCase().includes(normalizedQuery)) {
+          results.push(relFromRoot);
+        }
+      }
+    }
+  }
+
+  walk(startDir, 1);
+  return results;
+}
+
 export const ListFilesTool: IToolDefinition<ListFilesParams> = {
   name: 'list_files',
   description: 'List files and directories in the workspace with recursive options.',

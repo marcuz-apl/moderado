@@ -21,6 +21,8 @@ import {
   getMatchingCommands,
   promptInteractiveTurn,
   selectCommandCandidate,
+  renderMentionSuggestionsBox,
+  SLASH_COMMANDS,
 } from '../src/ui/welcome.js';
 import { handleMcpCommand } from '../src/commands/chat.js';
 
@@ -51,7 +53,8 @@ const lastComposerWrite = (writes: string[]): ComposerPosition => {
  * then drive the composer through emitted keypress and mouse-report events.
  */
 const runComposerTurn = async (
-  drive: (stdin: ComposerStdin, context: ComposerContext) => void | Promise<void>
+  drive: (stdin: ComposerStdin, context: ComposerContext) => void | Promise<void>,
+  extraOptions: Record<string, any> = {}
 ): Promise<string> => {
   const stdin = process.stdin;
   const stdout = process.stdout;
@@ -75,6 +78,7 @@ const runComposerTurn = async (
     const turnPromise = promptInteractiveTurn({
       model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\\\test',
       signal: controller.signal,
+      ...extraOptions,
     });
     await new Promise((resolve) => setImmediate(resolve));
     await drive(stdin, { writes, rows: 24 });
@@ -653,5 +657,62 @@ describe('OpenCode-style Welcome TUI', () => {
     // Every cursor hop — including the clamped ones past either end — must
     // land on the single composer row, otherwise the cursor escapes the box.
     expect(new Set(positions.map((position) => position.row)).size).toBe(1);
+  });
+  it('includes /init in SLASH_COMMANDS and help popup', () => {
+    const initCmd = SLASH_COMMANDS.find((c) => c.name === '/init');
+    expect(initCmd).toBeDefined();
+    expect(initCmd?.desc).toContain('Scaffold AGENTS.md');
+
+    const plain = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n'));
+    expect(plain).toContain('/init');
+    expect(plain).toContain('Scaffold AGENTS.md from workspace scan');
+  });
+
+  it('renders mention suggestions box with custom styling', () => {
+    const lines = renderMentionSuggestionsBox(['src/main.ts', 'README.md'], 0);
+    expect(lines.length).toBeGreaterThan(0);
+    const plain = stripAnsi(lines.join('\n'));
+    expect(plain).toContain('@src/main.ts');
+    expect(plain).toContain('@README.md');
+    expect(plain).toContain('Files (@ to mention, Tab to insert)');
+  });
+
+  it('autocompletes @ mention with Tab in composer turn', async () => {
+    const result = await runComposerTurn(
+      async (stdin) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        for (const character of 'check @age') {
+          stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+        }
+        stdin.emit('keypress', '\t', { name: 'tab', shift: false });
+        stdin.emit('keypress', '\r', { name: 'return' });
+      },
+      {
+        onMentionComplete: async () => ['packages/core/src/agent.ts', 'README.md'],
+      }
+    );
+    expect(result).toBe('check @packages/core/src/agent.ts');
+  });
+
+  it('routes /init through onInit callback', async () => {
+    let initCalled = false;
+    await runComposerTurn(
+      async (stdin) => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        for (const character of '/init') {
+          stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+        }
+        stdin.emit('keypress', '\r', { name: 'return' });
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        for (const character of 'done') {
+          stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+        }
+        stdin.emit('keypress', '\r', { name: 'return' });
+      },
+      {
+        onInit: async () => { initCalled = true; },
+      }
+    );
+    expect(initCalled).toBe(true);
   });
 });

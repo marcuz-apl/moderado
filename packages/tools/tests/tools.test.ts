@@ -7,6 +7,7 @@ import {
   WriteFileTool,
   EditFileTool,
   ListFilesTool,
+  listFiles,
   SearchFilesTool,
   RunCommandTool,
   GitDiffTool,
@@ -164,6 +165,25 @@ describe('Workspace Tools Suite', () => {
       expect(result.status).toBe('success');
       expect(result.output).toContain('app.ts');
       expect(result.output).not.toContain('node_modules');
+    });
+
+    it('exports listFiles helper returning matching relative paths', async () => {
+      fs.writeFileSync(path.join(tempDir, 'main.ts'), 'export const a = 1;');
+      fs.mkdirSync(path.join(tempDir, 'src'), { recursive: true });
+      fs.writeFileSync(path.join(tempDir, 'src', 'index.ts'), 'export const b = 2;');
+      fs.writeFileSync(path.join(tempDir, 'README.md'), '# Test');
+
+      const all = await listFiles(tempDir);
+      expect(all).toContain('main.ts');
+      expect(all).toContain('src/index.ts');
+      expect(all).toContain('README.md');
+
+      const filtered = await listFiles(tempDir, 'main');
+      expect(filtered).toEqual(['main.ts']);
+
+      const inDir = await listFiles(tempDir, 'src');
+      expect(inDir).toContain('src/index.ts');
+      expect(inDir).not.toContain('README.md');
     });
   });
 

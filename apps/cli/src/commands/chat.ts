@@ -12,6 +12,9 @@ import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
 import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
+import { initWorkspace } from './init.js';
+import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
+import { listFiles } from '@moderado/tools';
 import { promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
@@ -452,12 +455,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         return undefined;
       },
       onInit: async (drawFrame) => {
-        await initWorkspace(canonicalWorkspace, drawFrame);
+        await initWorkspace(canonicalWorkspace, drawFrame, { approval: terminalApproval, signal });
       },
-      onMentionComplete: async (token) => {
-        const listFiles = (await import('@moderado/tools')).listFiles;
-        const results = await listFiles(canonicalWorkspace, token, { recursive: false, maxDepth: 3, limit: 50 });
-        return results;
+      onMentionComplete: async (token: string) => {
+        return listFiles(canonicalWorkspace, token, { recursive: true, maxDepth: 4, limit: 50 });
       },
       onSession: async (command, drawFrame) => {
         let action = command.slice('/session'.length).trim();
@@ -565,6 +566,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined;
       continue;
     }
+    const expandedTurn = await expandMentions(trimmed, createWorkspaceFileSource(canonicalWorkspace));
+    const effectivePrompt = expandedTurn.text;
     networkAccessApproved = isNetworkConsentReply(trimmed, lastAnswer);
 
     // Current-information lane: gather live evidence before inference so the model answers in one turn.
@@ -594,7 +597,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       } else {
         lastAnswer = formatDirectWebSearchAnswer(searchResult);
         lastThoughtTime = Math.max(0.001, (Date.now() - searchStartedAt) / 1000);
-        conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: lastAnswer }];
+        conversationHistory = [...conversationHistory, { role: 'user', content: effectivePrompt }, { role: 'assistant', content: lastAnswer }];
         activeSession.messages = conversationHistory;
         activeSession.providerId = activeConnection?.id;
         activeSession.providerName = activeConnection?.displayName;
@@ -680,8 +683,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000));
         }
       }, 400);
-      const evidenceTask = liveSearch ? buildSearchAnswerTask(trimmed, liveSearch) : undefined;
-      const runAgent = () => loop.run(evidenceTask ?? createAgentTask(trimmed, activeMode), {
+      const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
+      const runAgent = () => loop.run(evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {

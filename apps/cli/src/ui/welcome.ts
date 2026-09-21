@@ -1,4 +1,5 @@
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
+import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
 
 export interface WelcomeLayoutOptions {
   model: string;
@@ -16,6 +17,9 @@ export interface WelcomeLayoutOptions {
   chatThoughtTime?: number;
   /** Generated completion tokens per second for the preceding response. */
   outputTokenRate?: number;
+  mentionFiles?: string[];
+  mentionSelection?: number;
+  commandSelection?: number;
 }
 
 export const MODERADO_ASCII_LOGO = [
@@ -114,7 +118,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     line5,
   ].map((line) => indent + line);
 
-  if (options.input && options.input.startsWith('/')) {
+  if (options.mentionFiles && options.mentionFiles.length > 0) {
+    cardLines.push(...renderMentionSuggestionsBox(options.mentionFiles, options.mentionSelection ?? 0).map((line) => indent + line));
+  } else if (options.input && options.input.startsWith('/')) {
     const matching = getMatchingCommands(options.input);
     if (matching.length > 0) {
       cardLines.push(...renderSuggestionsBox(matching).map((line) => indent + line));
@@ -132,6 +138,7 @@ export interface SlashCommand {
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/connect', desc: 'Connect a model provider' },
   { name: '/model', desc: 'Switch active AI model' },
+  { name: '/init', desc: 'Scaffold AGENTS.md from workspace scan' },
   { name: '/mcp', desc: 'Manage local MCP servers' },
   { name: '/session', desc: 'Create, resume, undo, redo, share, export, or compact sessions' },
   { name: '/workflow', desc: 'Inspect Git, build plans, or undo agent changes' },
@@ -161,6 +168,24 @@ export function renderSuggestionsBox(commands: SlashCommand[]): string[] {
     const nameStr = `\x1b[1;38;5;75m${cmd.name.padEnd(8)}\x1b[0m`;
     const descStr = `\x1b[38;5;244m${cmd.desc.padEnd(38)}\x1b[0m`;
     lines.push(`\x1b[38;5;240m  │\x1b[0m  ${nameStr} ${descStr}\x1b[38;5;240m│\x1b[0m`);
+  }
+  lines.push('\x1b[38;5;240m  ╰─────────────────────────────────────────────────────╯\x1b[0m');
+  return lines;
+}
+
+export function renderMentionSuggestionsBox(files: string[], selectedIndex = 0): string[] {
+  if (files.length === 0) return [];
+  const lines: string[] = [];
+  lines.push('\x1b[38;5;240m  ╭─ Files (@ to mention, Tab to insert) ──────────────╮\x1b[0m');
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const isSelected = i === selectedIndex;
+    const marker = isSelected ? '\x1b[1;38;5;75m❯ \x1b[0m' : '  ';
+    const nameStr = isSelected ? `\x1b[1;38;5;75m@${file}\x1b[0m` : `\x1b[38;5;250m@${file}\x1b[0m`;
+    const lineContent = `${marker}${nameStr}`;
+    const plainLen = visibleLen(lineContent);
+    const pad = Math.max(0, 52 - plainLen);
+    lines.push(`\x1b[38;5;240m  │\x1b[0m ${lineContent}${' '.repeat(pad)}\x1b[38;5;240m│\x1b[0m`);
   }
   lines.push('\x1b[38;5;240m  ╰─────────────────────────────────────────────────────╯\x1b[0m');
   return lines;
@@ -329,6 +354,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
 
   const content: string[] = [
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
+    '\x1b[1m/init\x1b[0m       Scaffold AGENTS.md from workspace scan',
     '\x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
     '\x1b[1m/connect\x1b[0m     Connect NVIDIA NIM or another compatible provider',
     '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
@@ -432,6 +458,8 @@ export interface PromptInteractiveTurnOptions {
   onMcp?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
+  onInit?: (drawFrame: (popupLines: string[]) => void) => Promise<void>;
+  onMentionComplete?: (token: string) => Promise<string[]>;
 }
 
 function isMcpCommandInput(value: string): boolean {
@@ -469,6 +497,28 @@ export async function promptInteractiveTurn(
   const questionHistory = options.questionHistory ?? [];
   let questionHistoryIndex = questionHistory.length;
   let questionHistoryDraft = '';
+  let cachedFiles: string[] = [];
+  if (options.onMentionComplete) {
+    Promise.resolve(options.onMentionComplete('')).then((files) => {
+      cachedFiles = Array.isArray(files) ? files : [];
+      updateMentions();
+    }).catch(() => { cachedFiles = []; });
+  }
+  let mentionFiles: string[] = [];
+  let mentionSelection = 0;
+
+  const updateMentions = (): void => {
+    const mention = activeMentionToken(input, caret);
+    if (mention && cachedFiles.length > 0) {
+      mentionFiles = filterMentionCandidates(cachedFiles, mention.token, 5);
+      mentionSelection = Math.min(mentionSelection, Math.max(0, mentionFiles.length - 1));
+    } else {
+      mentionFiles = [];
+      mentionSelection = 0;
+    }
+  };
+
+
 
   /** Replace the composer text, leaving the caret at the end of the new value. */
   const setInput = (value: string): void => {
@@ -514,6 +564,7 @@ export async function promptInteractiveTurn(
   stdin.setRawMode(true);
 
   const getExtraLines = () => {
+    if (mentionFiles.length > 0) return mentionFiles.length + 2;
     if (!input.startsWith('/')) return 0;
     const matching = getMatchingCommands(input);
     return matching.length > 0 ? matching.length + 2 : 0;
@@ -767,6 +818,24 @@ export async function promptInteractiveTurn(
           return;
         }
 
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/init') {
+          setInput('');
+          unbindComposerInput();
+          if (options.onInit) {
+            await options.onInit((popupLines) => {
+              stdout.write('\x1b[H\x1b[J');
+              stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+            });
+          }
+          if (options.signal?.aborted) return;
+          readlineModule.emitKeypressEvents(stdin);
+          stdin.resume();
+          stdin.setRawMode(true);
+          redrawFull();
+          bindComposerInput();
+          return;
+        }
+
         if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/workflow')) {
           const command = input.trim(); setInput(''); unbindComposerInput();
           const action = options.onWorkflow ? await options.onWorkflow(command, (popupLines) => { stdout.write('\x1b[H\x1b[J'); stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows)); }) : undefined;
@@ -796,6 +865,7 @@ export async function promptInteractiveTurn(
           if (str && str.length === 1 && str.charCodeAt(0) >= 32) {
             input = input.slice(0, caret) + str + input.slice(caret);
             caret += 1;
+            updateMentions();
             redrawCard();
           }
           return;
@@ -808,8 +878,20 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        // Tab — autocomplete slash command or toggle mode
+        // Tab — autocomplete mention, autocomplete slash command or toggle mode
         if (key.name === 'tab' && !key.shift) {
+          const mention = activeMentionToken(input, caret);
+          if (mention && mentionFiles.length > 0) {
+            const chosen = mentionFiles[Math.min(mentionSelection, mentionFiles.length - 1)];
+            const before = input.slice(0, mention.start);
+            const after = input.slice(caret);
+            const insert = `@${chosen} `;
+            input = before + insert + after;
+            caret = before.length + insert.length;
+            updateMentions();
+            redrawCard();
+            return;
+          }
           if (input.startsWith('/')) {
             const matching = getMatchingCommands(input);
             if (matching.length > 0) {
@@ -820,6 +902,12 @@ export async function promptInteractiveTurn(
             }
           }
           currentMode = currentMode === 'Plan' ? 'Execute' : 'Plan';
+          redrawCard();
+          return;
+        }
+
+        if (mentionFiles.length > 0 && (key.name === 'up' || key.name === 'down')) {
+          mentionSelection = ((mentionSelection + (key.name === 'up' ? -1 : 1)) % mentionFiles.length + mentionFiles.length) % mentionFiles.length;
           redrawCard();
           return;
         }
@@ -865,12 +953,15 @@ export async function promptInteractiveTurn(
         if (key.name === 'left' || key.name === 'right' || key.name === 'delete') {
           if (key.name === 'left') {
             caret = Math.max(0, caret - 1);
-            positionCursorOnInput();
+            updateMentions();
+            redrawCard();
           } else if (key.name === 'right') {
             caret = Math.min(input.length, caret + 1);
-            positionCursorOnInput();
+            updateMentions();
+            redrawCard();
           } else if (caret < input.length) {
             input = input.slice(0, caret) + input.slice(caret + 1);
+            updateMentions();
             redrawCard();
           }
           return;
@@ -882,6 +973,7 @@ export async function promptInteractiveTurn(
             input = input.slice(0, caret - 1) + input.slice(caret);
             caret = Math.max(0, caret - 1);
             commandSelection = 0;
+            updateMentions();
             redrawCard();
           }
           return;
@@ -893,6 +985,7 @@ export async function promptInteractiveTurn(
           caret += 1;
           commandSelection = 0;
           questionHistoryIndex = questionHistory.length;
+          updateMentions();
           redrawCard();
         }
 
