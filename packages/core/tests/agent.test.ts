@@ -530,4 +530,71 @@ describe('AgentLoop (Core Execution Engine)', () => {
 
     expect(lifecycle).toEqual([]);
   });
+
+  it('enforces Layer 1 conciseness directives in the default system prompt', async () => {
+    provider.queueTextResponse('Compact response.');
+
+    await loop.run('What is 2+2?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+    });
+
+    expect(provider.recordedCalls.length).toBe(1);
+    const systemMessage = provider.recordedCalls[0].messages.find((m) => m.role === 'system');
+    expect(systemMessage).toBeDefined();
+    expect(systemMessage?.content).toContain('CONCISENESS & TOKEN EFFICIENCY (DEFAULT MODE)');
+    expect(systemMessage?.content).toContain('Zero conversational filler');
+    expect(systemMessage?.content).toContain('Answer in the fewest tokens possible');
+  });
+
+  it('bounds output tokens via maxTokens (Layer 3) with default or custom cap', async () => {
+    provider.queueTextResponse('Response with default limit.');
+
+    await loop.run('Quick test', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+    });
+
+    expect(provider.recordedCalls[0].maxTokens).toBe(1024);
+
+    provider.queueTextResponse('Response with custom limit.');
+    await loop.run('Custom limit test', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      maxOutputTokens: 256,
+    });
+
+    expect(provider.recordedCalls[1].maxTokens).toBe(256);
+  });
+
+  it('truncates older tool output payloads in conversation history (Layer 4) to protect token budget', async () => {
+    const hugeToolOutput = 'A'.repeat(5000);
+    provider.queueTextResponse('Next answer.');
+
+    await loop.run('Follow up question', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      conversationHistory: [
+        { role: 'user', content: 'First request' },
+        { role: 'assistant', content: 'Let me run a tool' },
+        { role: 'tool', content: hugeToolOutput },
+        { role: 'assistant', content: 'First answer' },
+      ],
+    });
+
+    const callMessages = provider.recordedCalls[0].messages;
+    expect(callMessages[0].role).toBe('system');
+    const toolMsg = callMessages.find((m) => m.role === 'tool');
+    expect(toolMsg).toBeDefined();
+    expect((toolMsg?.content as string).length).toBeLessThan(1600);
+    expect(toolMsg?.content).toContain('earlier tool output truncated for token efficiency');
+  });
 });

@@ -29,6 +29,9 @@ import {
   formatTurnFailureAnswer,
   levenshteinDistance,
   resolveTurnAssistantAnswer,
+  isLocalTokenQuery,
+  isLocalVersionQuery,
+  isLocalWorkspaceQuery,
 } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
@@ -687,5 +690,47 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     handleGenerationKeypress('\x1b', undefined, queue, actions);
     expect(queue.currentDraft).toBe('');
     expect(aborted).toBe(false);
+  });
+
+  it('detects and resolves local token, cost, version, and workspace queries instantly (Layer 2)', () => {
+    expect(isLocalTokenQuery('how many tokens?')).toBe(true);
+    expect(isLocalTokenQuery('token count')).toBe(true);
+    expect(isLocalTokenQuery('session cost')).toBe(true);
+    expect(isLocalTokenQuery('what is the cost')).toBe(true);
+    expect(isLocalTokenQuery('how much did this cost?')).toBe(true);
+    expect(isLocalTokenQuery('write a python script')).toBe(false);
+
+    expect(isLocalVersionQuery('version')).toBe(true);
+    expect(isLocalVersionQuery('what version?')).toBe(true);
+    expect(isLocalVersionQuery('moderado version')).toBe(true);
+    expect(isLocalVersionQuery('upgrade version')).toBe(false);
+
+    expect(isLocalWorkspaceQuery('where are we?')).toBe(true);
+    expect(isLocalWorkspaceQuery('what workspace')).toBe(true);
+    expect(isLocalWorkspaceQuery('current directory')).toBe(true);
+    expect(isLocalWorkspaceQuery('pwd')).toBe(true);
+
+    const context = {
+      activeMode: 'Execute' as const,
+      workspace: 'D:/test/workspace',
+      currentModel: 'mock-model',
+      providerName: 'mock-provider',
+      version: 'v0.2.52+test',
+      sessionTokens: 1250,
+      sessionCost: '$0.0025',
+    };
+
+    const tokenAnswer = resolveLocalMetaQuery('how many tokens?', context);
+    expect(tokenAnswer).toContain('Session Usage');
+    expect(tokenAnswer).toContain('1,250 tokens');
+    expect(tokenAnswer).toContain('$0.0025');
+
+    const versionAnswer = resolveLocalMetaQuery('what version?', context);
+    expect(versionAnswer).toContain('Moderado Version');
+    expect(versionAnswer).toContain('v0.2.52+test');
+
+    const workspaceAnswer = resolveLocalMetaQuery('where are we?', context);
+    expect(workspaceAnswer).toContain('Active Workspace');
+    expect(workspaceAnswer).toContain('D:/test/workspace');
   });
 });

@@ -42,6 +42,13 @@ export interface AgentRunOptions {
   onMutationCompleted?: (toolName: string, parameters: unknown, result: ToolResult) => Promise<void> | void;
   /** Internal boundary: child loops must not create further subagents. */
   allowSubagentDelegation?: boolean;
+  /** Hard cap on generated output tokens to prevent runaway token spend. Defaults to 1024. */
+  maxOutputTokens?: number;
+}
+
+export interface AgentRunResult {
+  status: 'completed' | 'step_limit_reached' | 'cancelled' | 'failed';
+  totalSteps: number;
 }
 
 export interface AgentRunResult {
@@ -53,9 +60,18 @@ export interface AgentRunResult {
   usage?: ChatUsage;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
+export const DEFAULT_SYSTEM_PROMPT = `You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
 You follow the Ponytail Decision Ladder: YAGNI, standard library first, zero unnecessary dependencies, and minimal code.
 Use the provided workspace tools to inspect, read, search, modify, and test files within the workspace.
+
+CONCISENESS & TOKEN EFFICIENCY (DEFAULT MODE):
+- Be extremely direct, concise, and compact. Answer in the fewest tokens possible.
+- Output ONLY what is necessary to answer the question or complete the task.
+- Zero conversational filler: Never output preambles ("Sure!", "I'd be happy to help", "Certainly"), polite pleasantries, apologies, or conversational transitions.
+- Never restate, rephrase, or echo the user's prompt or question before answering.
+- Avoid postambles, summaries, or unsolicited tips ("Let me know if you need anything else!").
+- When asked a question, provide direct, factual one-liners or bullet points rather than lengthy essays.
+- For code modifications or code questions, output only the minimal necessary code or diff without essay-like commentary unless explicitly requested.
 
 CORE OPERATIONAL RULES:
 - If the user prompt is a greeting, question, explanation request, or conversational query, output regular markdown text directly without calling any tools.
@@ -66,7 +82,7 @@ CORE OPERATIONAL RULES:
 - Do NOT invent tool names.
 - For anything that changes over time (weather, news, scores, prices, schedules, releases), call the web_search tool immediately with a clear query. Never fetch this with run_command, and never ask the user to look it up themselves. Answer with the facts and values only, in the fewest readable lines, without listing sources or URLs.`;
 
-function buildSystemPrompt(modelId: string, workspaceRoot: string): string {
+export function buildSystemPrompt(modelId: string, workspaceRoot: string): string {
   return `${DEFAULT_SYSTEM_PROMPT}
 
 SYSTEM RUNTIME CONTEXT:
@@ -179,13 +195,32 @@ export class AgentLoop {
     });
 
     // 2. Initialize Conversation Context
-    const messages: ChatMessage[] =
-      options.conversationHistory && options.conversationHistory.length > 0
-        ? [...options.conversationHistory, { role: 'user', content: task }]
-        : [
-            { role: 'system', content: buildSystemPrompt(currentModel.id, options.workspaceRoot) },
-            { role: 'user', content: task },
-          ];
+    const systemPromptMessage: ChatMessage = {
+      role: 'system',
+      content: buildSystemPrompt(currentModel.id, options.workspaceRoot),
+    };
+
+    let baseHistory = options.conversationHistory ? [...options.conversationHistory] : [];
+    // Ensure system prompt is at the head and updated with current runtime context
+    if (baseHistory.length > 0 && baseHistory[0].role === 'system') {
+      baseHistory[0] = systemPromptMessage;
+    } else {
+      baseHistory = [systemPromptMessage, ...baseHistory];
+    }
+
+    // Layer 4: Truncate oversized tool outputs from older turns in history to prevent token ballooning
+    const messages: ChatMessage[] = [
+      ...baseHistory.map((msg, idx) => {
+        if (msg.role === 'tool' && idx < baseHistory.length - 1 && typeof msg.content === 'string' && msg.content.length > 1500) {
+          return {
+            ...msg,
+            content: msg.content.slice(0, 1500) + '\n... [earlier tool output truncated for token efficiency]',
+          };
+        }
+        return msg;
+      }),
+      { role: 'user', content: task },
+    ];
 
     let step = 0;
     let finalAssistantText: string | null = null;
@@ -227,6 +262,7 @@ export class AgentLoop {
                   ...options.tools.getDeclarations(),
                   ...(options.allowSubagentDelegation === false ? [] : [SUBAGENT_DECLARATION]),
                 ],
+          maxTokens: options.maxOutputTokens ?? 1024,
           signal,
         });
 

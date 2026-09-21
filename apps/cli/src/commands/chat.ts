@@ -355,11 +355,33 @@ export function isLocalIdentityQuery(input: string): boolean {
     /^(who\s+made\s+you|who\s+built\s+you)$/i.test(text);
 }
 
+export function isLocalTokenQuery(input: string): boolean {
+  const text = input.trim().toLowerCase().replace(/[?!.]+$/, '').trim();
+  if (!text) return false;
+  return /^(how\s+many\s+tokens|token\s+count|tokens\s+used|session\s+tokens|what\s+is\s+(the\s+)?(token\s+count|cost|session\s+cost)|how\s+much\s+did\s+this\s+cost|how\s+much\s+cost|cost|session\s+cost|usage)$/i.test(text);
+}
+
+export function isLocalVersionQuery(input: string): boolean {
+  const text = input.trim().toLowerCase().replace(/[?!.]+$/, '').trim();
+  if (!text) return false;
+  return /^(what|which)\s+version(\s+is\s+this)?$/i.test(text) ||
+    /^(version|moderado\s+version)$/i.test(text);
+}
+
+export function isLocalWorkspaceQuery(input: string): boolean {
+  const text = input.trim().toLowerCase().replace(/[?!.]+$/, '').trim();
+  if (!text) return false;
+  return /^(where\s+are\s+we|what\s+workspace|what\s+is\s+the\s+workspace|current\s+workspace|working\s+directory|current\s+directory|pwd)$/i.test(text);
+}
+
 export interface LocalMetaQueryContext {
   currentModel?: string;
   providerName?: string;
   activeMode: 'Plan' | 'Execute';
   workspace: string;
+  version?: string;
+  sessionTokens?: number;
+  sessionCost?: string;
 }
 
 export function resolveLocalMetaQuery(input: string, context: LocalMetaQueryContext): string | undefined {
@@ -382,6 +404,18 @@ export function resolveLocalMetaQuery(input: string, context: LocalMetaQueryCont
     const provider = context.providerName ?? 'no provider connected';
     const model = context.currentModel ?? 'no model connected';
     return `Currently connected to provider: **${provider}**\nActive model: **${model}**\nMode: **${context.activeMode}**\nWorkspace: \`${context.workspace}\`\n\nTo switch or connect a different provider, type \`/connect\`.`;
+  }
+  if (isLocalTokenQuery(input)) {
+    const tokens = context.sessionTokens ?? 0;
+    const cost = context.sessionCost ?? '$0.00';
+    return `📊 **Session Usage:**\n• **Tokens:** ${tokens.toLocaleString()} tokens\n• **Estimated Cost:** ${cost}`;
+  }
+  if (isLocalVersionQuery(input)) {
+    const ver = context.version ?? 'unknown';
+    return `⚡ **Moderado Version:** \`${ver}\` (Alfazen-governed lightweight CLI coding agent)`;
+  }
+  if (isLocalWorkspaceQuery(input)) {
+    return `📁 **Active Workspace:** \`${context.workspace}\``;
   }
   return undefined;
 }
@@ -1052,6 +1086,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       providerName: activeConnection?.displayName,
       activeMode,
       workspace: canonicalWorkspace,
+      version,
+      sessionTokens: Math.round(sessionTokens),
+      sessionCost: costLabel(),
     });
     if (localMetaAnswer) {
       lastQuestion = trimmed;
@@ -1230,6 +1267,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
       const runAgent = () => loop.run(evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
+        maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? 1024,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'assistant_delta') {

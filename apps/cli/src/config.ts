@@ -17,6 +17,8 @@ export interface ModeradoConfig {
   /** Preferred search site: `exa` (default), `parallel`, or a `custom` endpoint. */
   webSearchProvider?: 'exa' | 'parallel' | 'custom';
   mcpServers?: Record<string, McpServerConfig>;
+  /** Upper bound on model output tokens per response turn. */
+  maxOutputTokens?: number;
 }
 
 export type ProviderConnectionKind = 'nvidia-nim' | 'openai-compatible';
@@ -64,6 +66,7 @@ export function loadConfig(customHome?: string): ModeradoConfig {
         typescriptLanguageServer: typeof parsed.typescriptLanguageServer === 'string' ? parsed.typescriptLanguageServer : undefined,
         webSearchEndpoint: typeof parsed.webSearchEndpoint === 'string' ? parsed.webSearchEndpoint : undefined,
         webSearchProvider: parsed.webSearchProvider === 'exa' || parsed.webSearchProvider === 'parallel' || parsed.webSearchProvider === 'custom' ? parsed.webSearchProvider : undefined,
+        maxOutputTokens: typeof parsed.maxOutputTokens === 'number' && parsed.maxOutputTokens > 0 ? parsed.maxOutputTokens : undefined,
       };
     }
     return {};

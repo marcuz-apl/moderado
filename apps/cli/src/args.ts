@@ -19,6 +19,7 @@ export interface CliParsedArgs {
   refresh: boolean;
   connectivity: boolean;
   migrateCredentials: boolean;
+  maxTokens?: number;
   help: boolean;
   version: boolean;
 }
@@ -30,6 +31,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     provider: { type: 'string' as const },
     profile: { type: 'string' as const, short: 'p', default: 'hosted-nvidia' },
     'max-steps': { type: 'string' as const, default: '25' },
+    'max-tokens': { type: 'string' as const },
     timeout: { type: 'string' as const, default: '600' },
     'read-only': { type: 'boolean' as const, default: false },
     'auto-approve': { type: 'boolean' as const, short: 'y', default: false },
@@ -70,6 +72,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   }
 
   const maxSteps = parseInt(parsed.values['max-steps'] as string, 10);
+  const maxTokens = parsed.values['max-tokens'] ? parseInt(parsed.values['max-tokens'] as string, 10) : undefined;
   const timeout = parseInt(parsed.values.timeout as string, 10);
 
   return {
@@ -80,6 +83,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     provider: parsed.values.provider as string | undefined,
     profile: parsed.values.profile as string,
     maxSteps: isNaN(maxSteps) ? 25 : maxSteps,
+    maxTokens: maxTokens && !isNaN(maxTokens) ? maxTokens : undefined,
     timeout: isNaN(timeout) ? 600 : timeout,
     readOnly: Boolean(parsed.values['read-only']),
     autoApprove: Boolean(parsed.values['auto-approve']),
@@ -113,6 +117,7 @@ OPTIONS:
   -m, --model <id>       Pin a specific model (disables AUTO fallback)
   -p, --profile <name>   Target configured profile (default: hosted-nvidia)
   --max-steps <int>      Upper bound on tool interaction cycles (default: 25)
+  --max-tokens <int>     Hard limit on generated output tokens per response (default: 1024)
   --timeout <seconds>    Global session execution timeout (default: 600s)
   --read-only            Enforce read-only mode (blocks writes & commands)
   -y, --auto-approve     Automatically approve all tool operations
