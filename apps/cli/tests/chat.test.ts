@@ -92,7 +92,8 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   });
 
   it('requires a workspace-contained output path for session sharing', () => {
-    expect(resolveSessionSharePath(tempDir, 'exports/session.md')).toBe(path.join(tempDir, 'exports', 'session.md'));
+    const canonicalRoot = fs.realpathSync(tempDir);
+    expect(resolveSessionSharePath(tempDir, 'exports/session.md')).toBe(path.join(canonicalRoot, 'exports', 'session.md'));
     expect(() => resolveSessionSharePath(tempDir, '')).toThrow('requires an output path');
     expect(() => resolveSessionSharePath(tempDir, '../session.md')).toThrow(/escapes workspace jail/);
   });

@@ -26,6 +26,20 @@ export interface ListFilesOptions {
   limit?: number;
 }
 
+/**
+ * Canonicalize a walk root so workspace-relative paths stay relative when the
+ * supplied root is itself a symlinked path (for example macOS /var -> /private/var
+ * or a Windows junctioned temp directory). Falls back to the supplied root when it
+ * cannot be resolved, which keeps a missing root behaving as an empty listing.
+ */
+function canonicalRootOrSelf(workspaceRoot: string): string {
+  try {
+    return fs.realpathSync(workspaceRoot);
+  } catch {
+    return workspaceRoot;
+  }
+}
+
 export async function listFiles(
   workspaceRoot: string,
   subpathOrQuery: string = '',
@@ -36,7 +50,8 @@ export async function listFiles(
   const recursive = options.recursive ?? true;
   const query = subpathOrQuery.trim();
 
-  let startDir = workspaceRoot;
+  const root = canonicalRootOrSelf(workspaceRoot);
+  let startDir = root;
   let filterText = query;
 
   if (query) {
@@ -68,7 +83,7 @@ export async function listFiles(
       if (results.length >= limit) return;
 
       const fullPath = path.join(currentDir, entry.name);
-      const relFromRoot = path.relative(workspaceRoot, fullPath).replace(/\\/g, '/');
+      const relFromRoot = path.relative(root, fullPath).replace(/\\/g, '/');
 
       if (isProtectedPath(relFromRoot)) continue;
 
@@ -97,6 +112,7 @@ export const ListFilesTool: IToolDefinition<ListFilesParams> = {
 
   async execute(params: ListFilesParams, context: ToolExecutionContext): Promise<ToolResult> {
     const canonicalDir = resolveInJail(context.workspaceRoot, params.subpath);
+    const workspaceRoot = canonicalRootOrSelf(context.workspaceRoot);
 
     if (!fs.existsSync(canonicalDir)) {
       return {
@@ -127,7 +143,7 @@ export const ListFilesTool: IToolDefinition<ListFilesParams> = {
       try {
         entries = fs.readdirSync(currentDir, { withFileTypes: true });
       } catch (err: any) {
-        results.push(`[Permission denied: ${path.relative(context.workspaceRoot, currentDir)}]`);
+        results.push(`[Permission denied: ${path.relative(workspaceRoot, currentDir)}]`);
         return;
       }
 
@@ -138,7 +154,7 @@ export const ListFilesTool: IToolDefinition<ListFilesParams> = {
         }
 
         const fullPath = path.join(currentDir, entry.name);
-        const relFromRoot = path.relative(context.workspaceRoot, fullPath);
+        const relFromRoot = path.relative(workspaceRoot, fullPath);
 
         if (isProtectedPath(relFromRoot)) {
           continue;
