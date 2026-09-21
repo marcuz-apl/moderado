@@ -14,6 +14,7 @@ export interface TerminalApprovalOptions {
 export class TerminalApprovalHandler implements IApprovalHandler {
   private readonly stdin: NodeJS.ReadableStream;
   private readonly stdout: NodeJS.WritableStream;
+  private alwaysApprove = false;
 
   constructor(options: TerminalApprovalOptions = {}) {
     this.stdin = options.stdin ?? process.stdin;
@@ -26,6 +27,10 @@ export class TerminalApprovalHandler implements IApprovalHandler {
   ): Promise<ApprovalDecision> {
     if (signal?.aborted) {
       return { requestId: request.requestId, status: 'aborted', reason: 'Aborted' };
+    }
+
+    if (this.alwaysApprove) {
+      return { requestId: request.requestId, status: 'approved' };
     }
 
     const lines: string[] = [];
@@ -56,7 +61,7 @@ export class TerminalApprovalHandler implements IApprovalHandler {
     }
 
     lines.push('---');
-    lines.push(`\x1b[38;5;114m[Y] Approve\x1b[0m   \x1b[38;5;222m[N] Deny\x1b[0m   \x1b[38;5;203m[Q] Quit session\x1b[0m`);
+    lines.push(`\x1b[38;5;114m[Y] Approve\x1b[0m   \x1b[38;5;114m[A] Always approve\x1b[0m   \x1b[38;5;222m[N] Deny\x1b[0m   \x1b[38;5;203m[Q] Quit session\x1b[0m`);
 
     this.stdout.write(
       '\n' +
@@ -69,10 +74,15 @@ export class TerminalApprovalHandler implements IApprovalHandler {
         '\n'
     );
 
-    const answer = await this.prompt('\x1b[1mApprove this action? [y/N/q]: \x1b[0m', signal);
+    const answer = await this.prompt('\x1b[1mApprove this action? [y/A/n/q]: \x1b[0m', signal);
     const normalized = answer.trim().toLowerCase();
 
     if (normalized === 'y' || normalized === 'yes') {
+      return { requestId: request.requestId, status: 'approved' };
+    }
+
+    if (normalized === 'a' || normalized === 'all' || normalized === 'always') {
+      this.alwaysApprove = true;
       return { requestId: request.requestId, status: 'approved' };
     }
 

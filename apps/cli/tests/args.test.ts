@@ -19,6 +19,7 @@ describe('CLI Argument Parser', () => {
       '--max-steps',
       '10',
       '--read-only',
+      '--auto-approve',
       '--non-interactive',
       '--allow-paid',
     ]);
@@ -29,8 +30,13 @@ describe('CLI Argument Parser', () => {
     expect(args.model).toBe('meta/llama-3.3-70b-instruct');
     expect(args.maxSteps).toBe(10);
     expect(args.readOnly).toBe(true);
+    expect(args.autoApprove).toBe(true);
     expect(args.nonInteractive).toBe(true);
     expect(args.allowPaid).toBe(true);
+  });
+
+  it('parses -y short flag for auto-approve', () => {
+    expect(parseCliArgs(['-y']).autoApprove).toBe(true);
   });
 
   it('infers run command when task is passed directly without run keyword', () => {

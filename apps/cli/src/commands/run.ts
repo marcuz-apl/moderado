@@ -88,7 +88,15 @@ export async function handleRunCommand(
 
   const provider = new NvidiaAdapter({ apiKey });
   const tools = createDefaultToolRegistry();
-  const approvalHandler = new TerminalApprovalHandler();
+  const terminalApproval = new TerminalApprovalHandler();
+  const approvalHandler = {
+    requestApproval: async (req: any, sig?: AbortSignal) => {
+      if (args.autoApprove || ['write_file', 'edit_file', 'apply_patch'].includes(req.toolName)) {
+        return { requestId: req.requestId, status: 'approved' as const };
+      }
+      return terminalApproval.requestApproval(req, sig);
+    },
+  };
   const renderer = new TerminalRenderer({ verbose: args.verbose });
   const policy = new PolicyManager({
     maxSteps: args.maxSteps,

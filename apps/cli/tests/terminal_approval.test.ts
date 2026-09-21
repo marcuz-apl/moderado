@@ -25,6 +25,23 @@ describe('TerminalApprovalHandler', () => {
     expect(decision.status).toBe('approved');
   });
 
+  it('always approves subsequent actions when user inputs a', async () => {
+    const stdin = Readable.from(['a\n']);
+    const stdout = new Writable({ write(_chunk, _encoding, callback) { callback(); } });
+
+    const handler = new TerminalApprovalHandler({ stdin, stdout });
+    const decision1 = await handler.requestApproval(sampleRequest);
+    expect(decision1.status).toBe('approved');
+
+    // Subsequent call auto-approves without reading stdin again
+    const secondRequest: ApprovalRequest = {
+      ...sampleRequest,
+      requestId: 'req_test_2',
+    };
+    const decision2 = await handler.requestApproval(secondRequest);
+    expect(decision2.status).toBe('approved');
+  });
+
   it('denies action when user inputs n or enters empty', async () => {
     const stdin = Readable.from(['n\n']);
     const stdout = new Writable({ write(_chunk, _encoding, callback) { callback(); } });

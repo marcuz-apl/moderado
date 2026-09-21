@@ -9,6 +9,7 @@ export interface CliParsedArgs {
   maxSteps: number;
   timeout: number;
   readOnly: boolean;
+  autoApprove: boolean;
   nonInteractive: boolean;
   allowPaid: boolean;
   allowUnknown: boolean;
@@ -29,6 +30,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     'max-steps': { type: 'string' as const, default: '25' },
     timeout: { type: 'string' as const, default: '600' },
     'read-only': { type: 'boolean' as const, default: false },
+    'auto-approve': { type: 'boolean' as const, short: 'y', default: false },
     'non-interactive': { type: 'boolean' as const, default: false },
     'allow-paid': { type: 'boolean' as const, default: false },
     'allow-unknown': { type: 'boolean' as const, default: false },
@@ -77,6 +79,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     maxSteps: isNaN(maxSteps) ? 25 : maxSteps,
     timeout: isNaN(timeout) ? 600 : timeout,
     readOnly: Boolean(parsed.values['read-only']),
+    autoApprove: Boolean(parsed.values['auto-approve']),
     nonInteractive: Boolean(parsed.values['non-interactive']),
     allowPaid: Boolean(parsed.values['allow-paid']),
     allowUnknown: Boolean(parsed.values['allow-unknown']),
@@ -109,6 +112,7 @@ OPTIONS:
   --max-steps <int>      Upper bound on tool interaction cycles (default: 25)
   --timeout <seconds>    Global session execution timeout (default: 600s)
   --read-only            Enforce read-only mode (blocks writes & commands)
+  -y, --auto-approve     Automatically approve all tool operations
   --non-interactive      Fail closed on operations requiring approval
   --allow-paid           Permit paid models during AUTO routing
   --allow-unknown        Permit unverified/unknown access models in AUTO

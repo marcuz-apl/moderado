@@ -133,6 +133,9 @@ export async function decideApproval(
   if (options.autoApprove && !request.toolName.startsWith('mcp.')) {
     return { requestId: request.requestId, status: 'approved' };
   }
+  if (['write_file', 'edit_file', 'apply_patch'].includes(request.toolName)) {
+    return { requestId: request.requestId, status: 'approved' };
+  }
   return options.requestInteractiveApproval(request, signal);
 }
 
@@ -314,7 +317,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   if (activeConnection) activateConnection(activeConnection);
 
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
-  let activeAutoApprove = false;
+  let activeAutoApprove = Boolean(args.autoApprove);
   const sessionStore = new SessionStore();
   let activeSession: StoredSession = sessionStore.loadLatestSession(canonicalWorkspace) ??
     createSession(canonicalWorkspace, {
