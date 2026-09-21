@@ -21,14 +21,6 @@ describe('Free Models Catalog (models command)', () => {
           ],
         }), { status: 200 });
       }
-      if (url.includes('opencode.ai')) {
-        return new Response(JSON.stringify({
-          data: [
-            { id: 'claude-sonnet-4-5' },
-            { id: 'gpt-5.1-codex' },
-          ],
-        }), { status: 200 });
-      }
       return new Response('Not Found', { status: 404 });
     });
 
@@ -57,8 +49,7 @@ describe('Free Models Catalog (models command)', () => {
     expect(parsed['OpenRouter'][0].id).toBe('deepseek/deepseek-r1:free');
     expect(parsed['OpenRouter'][0].accessTier).toBe('free');
 
-    expect(parsed['OpenCode Zen']).toHaveLength(2);
-    expect(parsed['OpenCode Zen'].map((m: any) => m.id)).toContain('claude-sonnet-4-5');
+    expect(parsed['OpenCode Zen']).toBeUndefined();
 
     expect(parsed['Agnes AI']).toHaveLength(2);
     expect(parsed['Agnes AI'].map((m: any) => m.id)).toContain('agnes/code');

@@ -1,4 +1,4 @@
-import { NvidiaAdapter, fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
+import { NvidiaAdapter, fetchOpenRouterFreeModels } from '@moderado/providers';
 import { Router } from '@moderado/core';
 import { CliParsedArgs } from '../args.js';
 
@@ -55,21 +55,6 @@ export async function handleModelsCommand(
     }
   }
 
-  // 3. OpenCode Zen Free Models
-  if (!requestedProvider || requestedProvider === 'opencode-zen' || requestedProvider === 'opencode') {
-    try {
-      const opencodeModels = await fetchProviderModels('https://opencode.ai/zen/v1', undefined, { fetchImpl: options.fetchImpl });
-      results['OpenCode Zen'] = opencodeModels.map((entry) => ({
-        id: entry.id,
-        provider: 'OpenCode Zen',
-        accessTier: 'free',
-        toolSupport: 'supported',
-        notes: 'free tier',
-      }));
-    } catch {
-      results['OpenCode Zen'] = [];
-    }
-  }
 
   // 4. Agnes AI
   if (!requestedProvider || requestedProvider === 'agnes-ai' || requestedProvider === 'agnes') {

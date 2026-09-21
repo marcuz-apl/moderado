@@ -4,10 +4,7 @@ import {
   ProviderError,
 } from '@moderado/contracts';
 
-/** OpenCode Zen is spike-only: kept as a constant until its API is verified. */
-export const SPIKE_PROVIDER_ENDPOINTS = {
-  'opencode-zen': 'https://opencode.ai/zen/v1',
-} as const;
+export const SPIKE_PROVIDER_ENDPOINTS = {} as const;
 
 /**
  * Fetch the OpenAI-compatible `/models` listing from any provider endpoint.

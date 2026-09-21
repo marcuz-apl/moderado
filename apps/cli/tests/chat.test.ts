@@ -206,8 +206,15 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
 
   it('fast-routes current-information questions but leaves ordinary questions to the model', () => {
     expect(shouldFastRouteWebSearch("What's the weather today?")).toBe(true);
-    expect(shouldFastRouteWebSearch('What is the temperature in Berlin right now?')).toBe(true); expect(shouldFastRouteWebSearch('Any news about the release?')).toBe(true);
-    expect(shouldFastRouteWebSearch('Explain how this function works.')).toBe(false); expect(shouldFastRouteWebSearch('Where can I find the docs?')).toBe(false); expect(shouldFastRouteWebSearch('Refactor the current router.')).toBe(false);
+    expect(shouldFastRouteWebSearch('What is the temperature in Berlin right now?')).toBe(true);
+    expect(shouldFastRouteWebSearch('Any news about the release?')).toBe(true);
+    expect(shouldFastRouteWebSearch('Explain how this function works.')).toBe(false);
+    expect(shouldFastRouteWebSearch('Where can I find the docs?')).toBe(false);
+    expect(shouldFastRouteWebSearch('Refactor the current router.')).toBe(false);
+    // Coding requests should NEVER be routed to live web search, even if they mention weather or news
+    expect(shouldFastRouteWebSearch('please write a weather webapp using React.JS and Tailwind CSS')).toBe(false);
+    expect(shouldFastRouteWebSearch('create a weather widget component in react')).toBe(false);
+    expect(shouldFastRouteWebSearch('build a stock portfolio tracker app')).toBe(false);
   });
 
   it('prefers an explicit web-search endpoint environment setting', () => {
@@ -244,6 +251,8 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(evidence).toContain('Overcast, 57F.');
     expect(evidence).toContain('untrusted reference data');
     expect(evidence).toContain('Answer with the facts only');
+    expect(evidence).toContain('Currently in [Location] ([Date]):');
+    expect(evidence).not.toContain('Calgary');
     expect(evidence).toContain('Never print URLs');
     expect(evidence).toContain('3 to 6 short bullets');
     expect(evidence).toContain('Answer only the question below');
@@ -253,17 +262,15 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(failed).toContain('timed out after 20000ms');
   });
 
-
-
   it('keeps the asked question in the transcript instead of the injected search evidence', () => {
-    const evidence = buildSearchAnswerTask('What is the weather in Calgary today?', { toolName: 'web_search', status: 'success', output: 'Overcast, 7C.' });
+    const evidence = buildSearchAnswerTask('What is the weather in Tokyo today?', { toolName: 'web_search', status: 'success', output: 'Overcast, 7C.' });
     const produced: ChatMessage[] = [
       { role: 'user', content: evidence },
-      { role: 'assistant', content: 'Currently in Calgary: 7C.' },
+      { role: 'assistant', content: 'Currently in Tokyo: 7C.' },
     ];
-    expect(replaceEvidenceTurn(produced, evidence, 'What is the weather in Calgary today?')).toEqual([
-      { role: 'user', content: 'What is the weather in Calgary today?' },
-      { role: 'assistant', content: 'Currently in Calgary: 7C.' },
+    expect(replaceEvidenceTurn(produced, evidence, 'What is the weather in Tokyo today?')).toEqual([
+      { role: 'user', content: 'What is the weather in Tokyo today?' },
+      { role: 'assistant', content: 'Currently in Tokyo: 7C.' },
     ]);
     expect(replaceEvidenceTurn([{ role: 'assistant', content: 'hello' }], evidence, 'who are you?')).toEqual([{ role: 'assistant', content: 'hello' }]);
   });
