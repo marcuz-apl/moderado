@@ -1,23 +1,22 @@
 # Project Handoff
 
-Updated: 2026-09-21 06:25 UTC
+Updated: 2026-09-21 06:30 UTC
 Branch: master
-Commit: d8ebbbc (`v0.2.43+2609217`)
-Status: Multi-token command parsing, Windows cmd/batch resolution, and default timeout handling fixed; all 302 tests passing, typecheck and build green.
+Commit: 57090c9 (`v0.2.44+2609219`)
+Status: Terminal commands and diagnostics auto-approved without prompting; all 302 tests passing, typecheck and build green.
 
 ## Summary
 
-1. **Multi-Token Command Parsing (`splitCommandString` & `parseCommandLine`)**:
-   - Fixed `run_command` so that multi-token command strings like `"ls -la"` or `"git commit -m 'message'"` are properly tokenized into executable and arguments instead of searching for an executable named literally `"ls -la.exe"` (`spawn ENOENT`).
-   - Handles quoted arguments (both single and double quotes), escaped characters, and unquoted Windows paths with spaces (`C:\Program Files\...`).
-2. **Timeout Fallback Bug Resolved**:
-   - Fixed a fatal bug where omitted/undefined `params.timeoutSeconds` resulted in `NaN * 1000 = NaN`, causing Node's `setTimeout(NaN)` to fire after 1 millisecond and kill the child process prematurely with `Command timed out after undefined seconds`.
-   - Now safely defaults to 60 seconds (`const timeoutSecs = ... ?? 60`).
-3. **Windows Batch & Built-in Resolution**:
-   - Commands that are `.cmd` / `.bat` batch files or common Node command shims (`npm`, `npx`, `pnpm`, `yarn`, `tsc`, `corepack`) as well as `cmd.exe` built-ins (`dir`, `del`, `copy`, `type`) are automatically executed via `cmd.exe /d /s /c` with `shell: false`.
-4. **Auto-Approved Workspace File Writes & `[A] Always approve`**:
-   - All workspace file mutations (`write_file`, `edit_file`, `apply_patch`) are auto-approved by default in the workspace jail.
-   - Interactive prompt `[A] Always approve` and `-y` / `--auto-approve` CLI flags fully functional.
+1. **Auto-Approved Terminal Commands (`run_command` & `run_diagnostics`)**:
+   - Terminal commands (`run_command`) and diagnostic scripts (`run_diagnostics`) are now automatically approved without prompting for interactive permission in both interactive `chat` and `run` modes.
+   - Combined with workspace file writes (`write_file`, `edit_file`, `apply_patch`), the agent can scaffold projects, install packages, run tests, and execute scripts completely hands-free.
+2. **Multi-Token Command Parsing (`splitCommandString` & `parseCommandLine`)**:
+   - `run_command` tokenizes multi-token command strings like `"ls -la"` or `"git commit -m 'message'"` into executable and arguments instead of searching for an executable named literally `"ls -la.exe"` (`spawn ENOENT`).
+   - Handles quotes, escaped characters, and unquoted Windows paths with spaces.
+3. **Timeout Fallback Bug Resolved**:
+   - Fixed timeout fallback so omitted `timeoutSeconds` defaults safely to 60 seconds instead of producing `NaN` and killing processes after 1ms.
+4. **Windows Batch & Built-in Resolution**:
+   - Common Windows batch tools (`npm`, `npx`, `pnpm`, etc.) and built-ins (`dir`, `del`, etc.) execute via `cmd.exe /d /s /c` safely.
 
 ## Completed
 
