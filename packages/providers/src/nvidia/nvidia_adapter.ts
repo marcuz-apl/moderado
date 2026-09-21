@@ -213,8 +213,17 @@ export class NvidiaAdapter implements IProviderAdapter {
           retryAfterSeconds = parsed;
         }
       }
+      let detail = errorText;
+      try {
+        const parsed = JSON.parse(errorText);
+        if (parsed?.error?.message) {
+          detail = parsed.error.message;
+        }
+      } catch {
+        // raw errorText
+      }
       throw new RateLimitError(
-        `${this.name} rate limit exceeded (429) during ${action}: ${errorText}`,
+        `${this.name} rate limit exceeded (429) during ${action}: ${detail}`,
         retryAfterSeconds
       );
     }

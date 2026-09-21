@@ -26,7 +26,9 @@ import {
   shouldFastRouteWebSearch,
   TurnCommandQueue,
   findSlashCommandAdvice,
+  formatTurnFailureAnswer,
   levenshteinDistance,
+  resolveTurnAssistantAnswer,
 } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
@@ -566,5 +568,82 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(unknown.isValid).toBe(false);
     expect(unknown.suggestion).toBeUndefined();
     expect(unknown.advice).toBe('Unknown command "/foobar". Type /help to see available commands.');
+  });
+
+  it('formats turn failure answer with model and suggestion without leaking internals', () => {
+    const errorText = formatTurnFailureAnswer(
+      'failed',
+      { code: 'ERR_RATE_LIMIT', message: 'NVIDIA NIM rate limit exceeded (429) during streamChat: Rate limit reached' },
+      'meta/llama-3.3-70b-instruct',
+      ['openrouter', 'agnes-ai']
+    );
+
+    expect(errorText).toContain('⚠️ **Model Error (ERR_RATE_LIMIT):**');
+    expect(errorText).toContain('Rate limit reached');
+    expect(errorText).toContain('meta/llama-3.3-70b-instruct');
+    expect(errorText).toContain('other configured providers: openrouter, agnes-ai');
+  });
+
+  it('resolves current turn assistant answer without leaking earlier turn answers on failure', () => {
+    // Simulate Turn 1: user asked "Who are you?", assistant answered "I am Moderado."
+    const turn1History: ChatMessage[] = [
+      { role: 'user', content: 'Who are you?' },
+      { role: 'assistant', content: 'I am Moderado, your minimal autonomous coding agent.' },
+    ];
+
+    // Simulate Turn 2: user asks a new question, but provider fails with rate limit
+    // result.messages contains the conversation history plus the new prompt
+    const turn2Result = {
+      status: 'failed',
+      messages: [
+        ...turn1History,
+        { role: 'user', content: 'What is the weather today?' } as ChatMessage,
+      ],
+      selectedModel: { id: 'openrouter/auto' },
+    };
+
+    const resolution = resolveTurnAssistantAnswer(
+      turn2Result,
+      turn1History.length,
+      { code: 'ERR_RATE_LIMIT', message: 'Rate limit exceeded on provider' },
+      '',
+      'openrouter/auto',
+      ['nvidia-nim']
+    );
+
+    expect(resolution.isError).toBe(true);
+    // Crucially: MUST NOT leak Turn 1's assistant message ("I am Moderado") into Turn 2's answer!
+    expect(resolution.answer).not.toContain('I am Moderado');
+    expect(resolution.answer).toContain('⚠️ **Model Error (ERR_RATE_LIMIT):**');
+    expect(resolution.answer).toContain('Rate limit exceeded on provider');
+    expect(resolution.answer).toContain('openrouter/auto');
+  });
+
+  it('resolves current turn assistant answer on success without leaking earlier turn answers', () => {
+    const turn1History: ChatMessage[] = [
+      { role: 'user', content: 'Who are you?' },
+      { role: 'assistant', content: 'I am Moderado.' },
+    ];
+
+    const turn2Result = {
+      status: 'completed',
+      messages: [
+        ...turn1History,
+        { role: 'user', content: 'What is 2+2?' } as ChatMessage,
+        { role: 'assistant', content: '4' } as ChatMessage,
+      ],
+      selectedModel: { id: 'meta/llama-3.3-70b-instruct' },
+    };
+
+    const resolution = resolveTurnAssistantAnswer(
+      turn2Result,
+      turn1History.length,
+      undefined,
+      '',
+      'meta/llama-3.3-70b-instruct'
+    );
+
+    expect(resolution.isError).toBe(false);
+    expect(resolution.answer).toBe('4');
   });
 });

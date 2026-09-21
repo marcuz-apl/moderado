@@ -273,4 +273,59 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(caughtError).toBeInstanceOf(RateLimitError);
     expect(caughtError.retryAfterSeconds).toBe(14);
   });
+
+  it('parses JSON error message on 429 response cleanly', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(429, {
+        'Content-Type': 'application/json',
+      });
+      res.end(JSON.stringify({ error: { message: 'Rate limit reached for openrouter model' } }));
+    };
+
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl });
+
+    let caughtError: any;
+    try {
+      for await (const _ of adapter.streamChat({
+        modelId: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        // noop
+      }
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(RateLimitError);
+    expect(caughtError.message).toContain('Rate limit reached for openrouter model');
+  });
+
+  it('throws RateLimitError when SSE stream yields an error chunk', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      res.write(`data: ${JSON.stringify({ error: { message: 'Rate limit exceeded on provider', code: 429 } })}\n\n`);
+      res.end();
+    };
+
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl });
+
+    let caughtError: any;
+    try {
+      for await (const _ of adapter.streamChat({
+        modelId: 'openrouter/auto',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        // noop
+      }
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(RateLimitError);
+    expect(caughtError.message).toContain('Rate limit exceeded on provider');
+  });
 });

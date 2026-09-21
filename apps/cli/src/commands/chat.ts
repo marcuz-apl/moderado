@@ -142,6 +142,44 @@ export function findSlashCommandAdvice(rawInput: string): SlashCommandAdvice {
   };
 }
 
+export function formatTurnFailureAnswer(
+  status: string,
+  errorEvent: { code?: string; message: string } | undefined,
+  modelId: string,
+  otherConnections: string[] = []
+): string {
+  const altSuggestion = otherConnections.length > 0
+    ? ` (other configured providers: ${otherConnections.join(', ')})`
+    : '';
+  const rawDetail = errorEvent?.message || (status === 'failed' ? 'Inference request failed without response.' : '');
+  const cleanDetail = rawDetail
+    .replace(/^(?:NVIDIA NIM|OpenAI|OpenRouter|[a-zA-Z0-9_-]+)\s*(?:request failed|rate limit exceeded|service or model unavailable)?\s*(?:\([^)]*\))?\s*(?:during\s*streamChat)?:\s*/i, '')
+    .trim();
+  return `⚠️ **Model Error (${errorEvent?.code || 'ERR_INFERENCE_FAILED'}):**\n${cleanDetail || 'Model returned no response.'}\n\n👉 **Suggestion:** The model \`${modelId}\` encountered an error. Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
+}
+
+export function resolveTurnAssistantAnswer(
+  result: { status: string; messages: ChatMessage[]; selectedModel?: { id: string } },
+  previousHistoryLength: number,
+  lastErrorEvent?: { code?: string; message: string },
+  streamedAnswer = '',
+  currentModel = 'unknown',
+  otherConnections: string[] = []
+): { answer: string; isError: boolean } {
+  if (result.status === 'failed' || lastErrorEvent) {
+    return {
+      answer: formatTurnFailureAnswer(result.status, lastErrorEvent, result.selectedModel?.id || currentModel, otherConnections),
+      isError: true,
+    };
+  }
+  const turnMessages = result.messages.slice(previousHistoryLength);
+  const turnAssistant = [...turnMessages].reverse().find((m) => m.role === 'assistant' && m.content?.trim())?.content;
+  return {
+    answer: turnAssistant || streamedAnswer,
+    isError: false,
+  };
+}
+
 export function isBareExitCommand(input: string): boolean {
   return input.trim().toLowerCase() === 'exit';
 }
@@ -602,12 +640,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   process.on('exit', restoreTerminal);
 
   let provider: NvidiaAdapter | undefined;
-  const activateConnection = (connection: ProviderConnection): void => {
+  const activateConnection = (connection: ProviderConnection, explicitModel?: string): void => {
     activeConnection = connection;
-    currentModel = args.model ?? connection.defaultModel ?? (connection.kind === 'nvidia-nim' ? 'auto' : undefined);
+    currentModel = explicitModel ?? connection.defaultModel ?? (connection.kind === 'nvidia-nim' ? 'auto' : undefined);
     provider = new NvidiaAdapter({ apiKey: connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
   };
-  if (activeConnection) activateConnection(activeConnection);
+  if (activeConnection) activateConnection(activeConnection, args.model);
 
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
   let activeAutoApprove = Boolean(args.autoApprove);
@@ -1075,13 +1113,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         };
       }
       let streamedAnswer = '';
+      lastAnswer = '';
       let firstAssistantDeltaAt: number | undefined;
       let outputTokenRate: number | undefined;
       let answerPosition = { row: 15, column: 1 };
       let lastErrorEvent: { code?: string; message: string } | undefined;
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
-        const displayAnswer = lastAnswer || streamedAnswer;
+        const displayAnswer = streamedAnswer || lastAnswer;
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen({
           model: currentModel ?? 'No model connected — use /connect',
@@ -1153,7 +1192,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         saveConnection(secured); config = loadConfig(); activateConnection(secured);
         result = await runAgent();
       }
-      conversationHistory = evidenceTask ? replaceEvidenceTurn(result.messages, evidenceTask, trimmed) : result.messages;
       if (result.usage) {
         let pricing: Record<string, string> | undefined;
         try {
@@ -1165,24 +1203,26 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         sessionTokens = result.usage.totalTokens;
         if (firstAssistantDeltaAt) outputTokenRate = calculateOutputTokenRate(result.usage.completionTokens, Date.now() - firstAssistantDeltaAt);
       }
-      activeSession.messages = conversationHistory;
-      activeSession.providerId = activeConnection?.id;
-      activeSession.providerName = activeConnection?.displayName;
-      activeSession.modelId = result.selectedModel.id;
-      activeSession.mode = activeMode;
-      sessionStore.save(activeSession);
-      lastAnswer = [...result.messages].reverse().find((message) => message.role === 'assistant' && message.content?.trim())?.content ?? '';
-      if (!lastAnswer && (result.status === 'failed' || lastErrorEvent)) {
-        const otherConnections = Object.keys(config.connections ?? {}).filter((id) => id !== activeConnection?.id);
-        const altSuggestion = otherConnections.length > 0
-          ? ` (other configured providers: ${otherConnections.join(', ')})`
-          : '';
-        const rawDetail = lastErrorEvent?.message || 'Inference request failed without response.';
-        const cleanDetail = rawDetail
-          .replace(/NVIDIA NIM (request failed|rate limit exceeded|service or model unavailable)\s*\([^)]*\)\s*during\s*streamChat:\s*/i, '')
-          .trim();
-        lastAnswer = `⚠️ **Model Error (${lastErrorEvent?.code || 'ERR_INFERENCE_FAILED'}):**\n${cleanDetail}\n\n👉 **Suggestion:** The model \`${result.selectedModel?.id || currentModel}\` encountered an error. Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
+      const otherConnections = Object.keys(config.connections ?? {}).filter((id) => id !== activeConnection?.id);
+      const resolution = resolveTurnAssistantAnswer(
+        result,
+        conversationHistory.length,
+        lastErrorEvent,
+        streamedAnswer,
+        currentModel,
+        otherConnections
+      );
+      lastAnswer = resolution.answer;
+      if (resolution.isError) {
         streamedAnswer = lastAnswer;
+      } else {
+        conversationHistory = evidenceTask ? replaceEvidenceTurn(result.messages, evidenceTask, trimmed) : result.messages;
+        activeSession.messages = conversationHistory;
+        activeSession.providerId = activeConnection?.id;
+        activeSession.providerName = activeConnection?.displayName;
+        activeSession.modelId = result.selectedModel.id;
+        activeSession.mode = activeMode;
+        sessionStore.save(activeSession);
       }
       if (activeMode === 'Plan') activePlan = lastAnswer;
       lastQuestion = trimmed;
@@ -1199,7 +1239,11 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         ? ` (other configured providers: ${otherConnections.join(', ')})`
         : '';
       lastQuestion = trimmed;
-      lastAnswer = `⚠️ **Error:** ${err.message}\n\n👉 **Suggestion:** Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
+      const rawErr = err?.message || 'Inference error';
+      const cleanErr = rawErr
+        .replace(/^(?:NVIDIA NIM|OpenAI|OpenRouter|[a-zA-Z0-9_-]+)\s*(?:request failed|rate limit exceeded|service or model unavailable)?\s*(?:\([^)]*\))?\s*(?:during\s*streamChat)?:\s*/i, '')
+        .trim();
+      lastAnswer = `⚠️ **Error:** ${cleanErr || rawErr}\n\n👉 **Suggestion:** Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       lastOutputTokenRate = undefined;
       process.stdout.write('\x1b[H\x1b[J');

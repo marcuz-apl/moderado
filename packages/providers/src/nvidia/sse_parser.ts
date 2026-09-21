@@ -1,4 +1,4 @@
-import { ChatCompletionChunk, ToolCallChunk } from '@moderado/contracts';
+import { ChatCompletionChunk, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
 
 export async function* parseSseStream(
   byteStream: AsyncIterable<Uint8Array>
@@ -25,11 +25,31 @@ export async function* parseSseStream(
           return;
         }
 
+        let parsed: any;
         try {
-          const parsed = JSON.parse(dataStr);
-          const choice = parsed.choices?.[0];
-          const delta = choice?.delta;
-          const finishReason = choice?.finish_reason ?? null;
+          parsed = JSON.parse(dataStr);
+        } catch {
+          // Ignore non-JSON data lines
+          continue;
+        }
+
+        if (parsed && typeof parsed === 'object' && parsed.error) {
+          const err = parsed.error;
+          const errCode = err.code ?? err.status;
+          const errMsg = err.message || (typeof err === 'string' ? err : JSON.stringify(err));
+          if (errCode === 429 || /rate\s*limit/i.test(errMsg)) {
+            throw new RateLimitError(`Provider rate limit exceeded: ${errMsg}`);
+          }
+          throw new ProviderError(
+            `Provider stream error (${errCode ?? 'unknown'}): ${errMsg}`,
+            'ERR_STREAM_ERROR',
+            typeof errCode === 'number' ? errCode : undefined
+          );
+        }
+
+        const choice = parsed.choices?.[0];
+        const delta = choice?.delta;
+        const finishReason = choice?.finish_reason ?? null;
 
           const toolCallChunks: ToolCallChunk[] = [];
           if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
@@ -74,9 +94,6 @@ export async function* parseSseStream(
           ) {
             yield completionChunk;
           }
-        } catch {
-          // Ignore non-JSON data lines
-        }
       }
     }
   }
