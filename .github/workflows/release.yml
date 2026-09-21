@@ -59,7 +59,10 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: moderado-binary-${{ matrix.target }}
-          path: artifacts/*/${{ matrix.target }}
+          # Upload the target directory contents so each downloaded artifact has
+          # manifest.json and its checksum file at the source root, which is what
+          # `merge-binaries --source` expects.
+          path: artifacts/*/${{ matrix.target }}/*
 
   binary-metadata:
     needs: binary-package
