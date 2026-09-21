@@ -98,11 +98,7 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const displayInput =
     options.input && options.input.length > 0
       ? options.input
-      : (!options.isTurnSettled && (options.chatQuestion !== undefined || options.chatAnswer !== undefined)
-          ? '\x1b[38;5;221mType follow-up to queue (Enter to add)...\x1b[0m'
-          : (options.queuedCommands && options.queuedCommands.length > 0
-              ? `\x1b[38;5;221mPress Enter to run queued (${options.queuedCommands.length}) or type /queue...\x1b[0m`
-              : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m'));
+      : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m';
 
   const promptMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
   const textBox = `${promptMarker} ${displayInput}`;

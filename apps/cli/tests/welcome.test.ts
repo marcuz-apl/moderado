@@ -784,7 +784,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(idleCard).toContain('Ask anything, I am all ears...');
     expect(idleCard).not.toContain('Queued');
 
-    // 2. Active generation state with placeholder
+    // 2. Active generation state maintains normal placeholder
     const generatingCard = renderWelcomeCard({
       model: 'meta/llama-3.3-70b-instruct',
       tokens: 1200,
@@ -795,7 +795,7 @@ describe('OpenCode-style Welcome TUI', () => {
       chatAnswer: 'Thinking and implementing...',
       isTurnSettled: false,
     });
-    expect(generatingCard).toContain('Type follow-up to queue (Enter to add)...');
+    expect(generatingCard).toContain('Ask anything, I am all ears...');
 
     // 3. Queued commands banner
     const queuedCard = renderWelcomeCard({
