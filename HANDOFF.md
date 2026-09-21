@@ -1,53 +1,52 @@
 # Project Handoff
 
-Updated: 2026-09-21 22:30 UTC
+Updated: 2026-09-21 22:40 UTC
 Branch: master
-Commit: `v0.2.61+260921H` (release preparation over verified candidate `v0.2.61+260921G`)
-Status: Release preparation complete for Moderado CLI `v0.2.61`. Fixed a blocking version drift where the publishable npm package still declared `0.2.20`, so the `v0.2.61` tag would have attached a `moderado-0.2.20.tgz` artifact and `moderado --version` on npm installs reported `v0.2.20`. All 343 tests across 49 suites pass offline, typecheck is clean, and the standalone package gate builds and smoke-tests `moderado-0.2.61.tgz`. Only the owner-gated tag push and `PUBLISH` workflow dispatch remain.
+Commit: `v0.3.0+260921I` (release commit for the public CLI `v0.3.0` milestone)
+Status: Moderado CLI `v0.3.0` is cut locally and fully certified: publishable version, lockfile, badges, runbook, and this handoff are aligned to `0.3.0`, and the Alfazen `release(minor):` commit bumped `VERSION` to `v0.3.0+260921I`. All 49 suites and 343 tests pass offline, typecheck is clean, and the standalone package gate smoke-tests `moderado-0.3.0.tgz`. The owner-gated tag push and `PUBLISH` workflow dispatch are the only remaining steps.
 
 ## Summary
 
-1. **Publishable version aligned with the connected version ([`apps/cli/package.json`](file:///d:/projects/moderado/apps/cli/package.json), [`package-lock.json`](file:///d:/projects/moderado/package-lock.json))**:
-   - `.github/workflows/release.yml` requires the pushed tag to equal `cut -d+ -f1 VERSION` (`v0.2.61`), while the publishable manifest still declared `0.2.20`; `npm run verify:package` therefore produced `moderado-0.2.20.tgz`.
-   - `getVersion()` in [`apps/cli/src/index.ts`](file:///d:/projects/moderado/apps/cli/src/index.ts) falls back to `package.json` when the repository `VERSION` file is absent, so npm-installed users would have seen `v0.2.20`.
-   - Set the CLI package version to `0.2.61` and synced the `apps/cli` workspace entry in `package-lock.json`. No source or contract change.
+1. **CLI `v0.3.0` released (Alfazen minor increment)**:
+   - `release(minor):` is the Alfazen trigger for a minor bump, so `v0.2.61` became `v0.3.0`, the version the roadmap declares as the CLI public-distribution gate.
+   - The real `.githooks/pre-commit` hook performed the bump to `v0.3.0+260921I`, staged `VERSION`, and `commit-msg` stamped the subject (see item 5 for the hook caveat and the workaround used).
 
-2. **Release documentation corrected ([`docs/RELEASING.md`](file:///d:/projects/moderado/docs/RELEASING.md))**:
-   - Added a pre-flight Step 0 that syncs `apps/cli/package.json` with the SemVer portion of `VERSION`, with the explicit rule that the tag and the tarball must share `major.minor.patch`.
-   - Replaced the stale `v0.3.0` examples with the derived tag (`cut -d+ -f1 VERSION`, currently `v0.2.61`) and refreshed the test-count line to 49 suites / 343 tests.
+2. **Release metadata aligned to `0.3.0` ([`apps/cli/package.json`](file:///d:/projects/moderado/apps/cli/package.json), [`package-lock.json`](file:///d:/projects/moderado/package-lock.json), [`README.md`](file:///d:/projects/moderado/README.md), [`apps/cli/README.md`](file:///d:/projects/moderado/apps/cli/README.md))**:
+   - The publishable package version and the `apps/cli` lockfile workspace entry are `0.3.0`, so `verify:package` emits `moderado-0.3.0.tgz` and the GitHub Release cannot attach a mislabelled artifact; npm installs report `v0.3.0` through the `package.json` fallback in [`apps/cli/src/index.ts`](file:///d:/projects/moderado/apps/cli/src/index.ts).
+   - Both README badges read `v0.3.0+260921I`.
 
-3. **Version badges refreshed ([`README.md`](file:///d:/projects/moderado/README.md), [`apps/cli/README.md`](file:///d:/projects/moderado/apps/cli/README.md))**:
-   - Both badges now read `v0.2.61+260921H`, matching the `VERSION` file at the release commit (the publishable tag itself is `v0.2.61`).
+3. **Release runbook updated ([`docs/RELEASING.md`](file:///d:/projects/moderado/docs/RELEASING.md))**:
+   - Pre-flight Step 0 requires the npm version to match the SemVer portion of `VERSION`; all examples now reference `v0.3.0` and `moderado-0.3.0.tgz`.
+   - Step 2 derives the tag from `cut -d+ -f1 VERSION` instead of hard-coding a version.
 
 4. **Verification & package preparation**:
-   - `npm run typecheck` — clean; `npm run build` — clean.
-   - `npm test` — 49 suites, 343 tests passing offline.
-   - `npm run verify:package` — vendored bundle, importer rewrite, tarball policy, isolated install, and `moderado --help` smoke test all pass as `moderado-0.2.61.tgz`.
-   - Confirmed the packed tarball contains only `dist`, `README.md`, and `LICENSE`, and reports `"version": "0.2.61"`.
-   - Deleted the stale superseded `apps/cli/moderado-0.2.20.tgz` so a local `npm publish apps/cli/*.tgz` glob cannot ship two versions.
+   - `npm run typecheck` — clean; `npm test` — 49 suites, 343 tests passing offline.
+   - `npm run verify:package` — vendored bundle, importer rewrite, tarball policy, isolated global install, and `moderado --help` smoke test all pass as `moderado-0.3.0.tgz`.
+   - Removed the superseded local `moderado-0.2.61.tgz` so a `npm publish apps/cli/*.tgz` glob cannot ship two versions.
 
-5. **Alfazen hook finding (unfixed, owner decision)**:
-   - `.githooks/pre-commit` reads `.git/COMMIT_EDITMSG`. With `git commit -m` that file still holds the *previous* commit's subject, so the new commit is classified against the old message. The release-prep commit was therefore misclassified as a patch bump (`v0.2.61` → `v0.2.62`) because the preceding subject was a `feat(...)` commit.
-   - The stamp was corrected to `v0.2.61+260921H` (the value a `build`-type commit produces) and the prep commit was amended with hooks bypassed, matching the M6.2 precedent for keeping the connected version unchanged.
-   - Not repaired here because `versionlib.sh` is shared Alfazen versioning infrastructure; a fix belongs in the skill/hook itself (for example classifying `git log -1 --pretty=%s` or `--amend`-aware messages) and needs owner approval.
+5. **Alfazen hook finding and the workaround used (owner decision still open)**:
+   - `.githooks/pre-commit` classifies `.git/COMMIT_EDITMSG`, which `git commit -m`/`-F` only refreshes *after* pre-commit has run. Every commit is therefore classified against the **previous** commit's subject; that previously mis-bumped the prep commit (`v0.2.61` → `v0.2.62`).
+   - Reproduced deterministically against the real hooks: a `docs:` commit followed by a `release(minor):` commit committed with `-m` produced no minor bump.
+   - Workaround used for this release: pre-seed `.git/COMMIT_EDITMSG` with the release subject before committing. The hook then computed `v0.3.0+260921I`, staged `VERSION`, and `commit-msg` restamped the subject exactly as designed.
+   - Consequence to watch: any commit made immediately after a `release(minor):` subject will be mis-bumped to `v0.4.0` unless the hook is fixed. Recommended fix (needs owner approval, shared Alfazen infrastructure): classify the message Git is actually committing, e.g. move the bump into `prepare-commit-msg`.
 
 ## Checks
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build` — PASS
 - `npm test` — PASS (49 test files, 343 tests passed)
-- `npm run verify:package` — PASS (`Verified moderado-0.2.61.tgz`)
+- `npm run verify:package` — PASS (`Verified moderado-0.3.0.tgz`)
 - `git diff --check` — PASS (CRLF advisories only)
 
-## Guarded release steps awaiting owner approval
+## Remaining release steps (owner-gated)
 
-Publication is an explicit maintainer action (M7.3); nothing below was executed.
+Local certification is complete; the actions below are the guarded M7.3 maintainer steps.
 
-1. Push the verified tag, which triggers the read-only artifact verification workflow:
-   `git tag "$(cut -d+ -f1 VERSION)"` then `git push origin "$(cut -d+ -f1 VERSION)"`.
+1. Push the release commit and tag. The tag push triggers the read-only **Verify release artifacts** workflow (`contents: read`, incapable of publishing):
+   `git push origin master`, then `git tag "$(cut -d+ -f1 VERSION)"` and `git push origin "$(cut -d+ -f1 VERSION)"`.
 2. Download the `moderado-npm-package` and `moderado-binaries` artifacts and smoke-test them.
-3. Dispatch **Publish Moderado release** (`workflow_dispatch`) with `confirm: PUBLISH` and `tag: v0.2.61` to publish with npm provenance and create the GitHub Release.
+3. Dispatch **Publish Moderado release** with `confirm: PUBLISH` and `tag: v0.3.0` to publish `moderado@0.3.0` with npm provenance and create the GitHub Release. Confirm the npm trusted-publisher binding for this repository and workflow first, since this claims the package name permanently.
 
 ## Blockers
 
-- None. The release is gated only on explicit owner approval for the steps above.
+- None. The release is gated only on the maintainer actions above.

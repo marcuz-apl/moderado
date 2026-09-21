@@ -12,7 +12,7 @@ version, then run the local verification suite:
 ```bash
 # 0. Sync apps/cli/package.json (and package-lock.json) with the SemVer portion
 #    of VERSION, so the release tag and the published artifact agree.
-#    Example: VERSION "v0.2.61+260921G" -> "version": "0.2.61"
+#    Example: VERSION "v0.3.0+260921I" -> "version": "0.3.0"
 cat VERSION
 
 # 1. Ensure clean build across all workspace packages
@@ -28,7 +28,7 @@ npm run typecheck
 npm run verify:package
 ```
 
-The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.2.61`), and
+The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.3.0`), and
 `npm run verify:package` produces `apps/cli/moderado-<package.json version>.tgz`.
 Both must carry the same `major.minor.patch`, otherwise the GitHub Release would
 attach an artifact whose version disagrees with its tag.
@@ -45,7 +45,7 @@ attach an artifact whose version disagrees with its tag.
 ## 2. Push Release Tag (Artifact Verification Gate)
 
 When ready for release, tag the verified commit with the SemVer portion of `VERSION`
-(`cut -d+ -f1 VERSION`; for this release `v0.2.61`):
+(`cut -d+ -f1 VERSION`; for this release `v0.3.0`):
 
 ```bash
 git tag "$(cut -d+ -f1 VERSION)"
@@ -67,7 +67,7 @@ Pushing a `v*` tag automatically triggers the read-only verification workflow:
 
 Maintainers should download and smoke-test the generated tarball locally:
 ```bash
-npm install -g ./moderado-0.2.61.tgz
+npm install -g ./moderado-0.3.0.tgz
 moderado --help
 ```
 
@@ -81,7 +81,7 @@ Public publication requires explicit maintainer confirmation through the manual 
 - **Trigger**: Manual `workflow_dispatch` only (never runs on push).
 - **Required Inputs**:
   - `confirm`: Must enter string `PUBLISH` (exact match required).
-  - `tag`: The verified release tag to publish (e.g. `v0.2.61`).
+  - `tag`: The verified release tag to publish (e.g. `v0.3.0`).
 - **Permissions**:
   - `id-token: write` for npm OIDC Provenance.
   - `contents: write` for GitHub Release creation.
