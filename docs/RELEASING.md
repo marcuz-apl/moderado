@@ -1,24 +1,89 @@
 # Releasing Moderado
 
-M6.1 creates and verifies a standalone npm tarball. It does not publish that
-tarball to npm.
+Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
-## Create a review artifact
+---
 
-Push a tag whose name matches the SemVer portion of the root `VERSION` file,
-for example `v0.2.20` for `v0.2.20+260919u`, or start **Verify release
-package** manually in GitHub Actions. The workflow runs the offline tests,
-builds Moderado, installs the packed tarball into an empty temporary prefix,
-and uploads `moderado-npm-package` as an artifact.
+## 1. Local Pre-Flight Certification
 
-Download that artifact and inspect its contents before using it. A maintainer
-may verify it locally with:
+Before initiating any release, run the local verification suite:
 
 ```bash
-npm install -g ./moderado-<version>.tgz
+# 1. Ensure clean build across all workspace packages
+npm run build
+
+# 2. Run the complete offline test suite (47 suites, 300+ tests)
+npm test
+
+# 3. Verify TypeScript type correctness
+npm run typecheck
+
+# 4. Run standalone npm package packaging and sandbox smoke test
+npm run verify:package
+```
+
+`npm run verify:package` automatically:
+- Bundles internal workspace dependencies (`@moderado/core`, `@moderado/contracts`, `@moderado/providers`, `@moderado/tools`) into `apps/cli/dist/vendor`.
+- Rewrites internal module specifiers to relative paths.
+- Packs the production `.tgz` tarball.
+- Verifies that forbidden source code, user config, logs, or raw `node_modules` are excluded.
+- Installs the tarball into an isolated temporary prefix and runs `moderado --help` to confirm smoke test passes.
+
+---
+
+## 2. Push Release Tag (Artifact Verification Gate)
+
+When ready for release, tag the verified commit matching the SemVer version in `VERSION` (e.g., `v0.3.0`):
+
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+Pushing a `v*` tag automatically triggers the read-only verification workflow:
+- **Workflow**: [`.github/workflows/release.yml`](../.github/workflows/release.yml) (**Verify release artifacts**)
+- **Permissions**: `contents: read` (read-only; strictly incapable of publishing).
+- **Actions performed**:
+  - Verifies tag matches `VERSION`.
+  - Runs full test suite offline.
+  - Builds the production npm package artifact (`moderado-npm-package`).
+  - Compiles standalone native binary bundles across 3 platforms:
+    - `windows-latest` (`node22-win-x64`)
+    - `macos-latest` (`node22-macos-arm64`)
+    - `ubuntu-latest` (`node22-linux-x64`)
+  - Generates distribution metadata manifests and uploads review artifacts.
+
+Maintainers should download and smoke-test the generated tarball locally:
+```bash
+npm install -g ./moderado-0.3.0.tgz
 moderado --help
 ```
 
-The workflow has read-only repository permissions and never publishes to npm.
-Public npm publication will be a separately reviewed change using npm trusted
-publishing with GitHub Actions OIDC; no npm access token is stored here.
+---
+
+## 3. Guarded Public Publication Gate
+
+Public publication requires explicit maintainer confirmation through the manual workflow:
+
+- **Workflow**: [`.github/workflows/publish.yml`](../.github/workflows/publish.yml) (**Publish Moderado release**)
+- **Trigger**: Manual `workflow_dispatch` only (never runs on push).
+- **Required Inputs**:
+  - `confirm`: Must enter string `PUBLISH` (exact match required).
+  - `tag`: The verified release tag to publish (e.g. `v0.3.0`).
+- **Permissions**:
+  - `id-token: write` for npm OIDC Provenance.
+  - `contents: write` for GitHub Release creation.
+- **Execution flow**:
+  1. Checks out the exact release tag commit.
+  2. Runs `npm test` and `npm run verify:package` in the clean runner environment.
+  3. Publishes to the public npm registry with cryptographic provenance:
+     ```bash
+     npm publish apps/cli/*.tgz --provenance --access public
+     ```
+  4. Creates the official GitHub Release with auto-generated release notes:
+     ```bash
+     gh release create "${TAG}" --verify-tag "${TAG}" --title "Moderado ${TAG}" --generate-notes
+     ```
+
+No long-lived credentials or API tokens are stored in the repository. Authentication is handled entirely via GitHub OIDC trusted publishing.
+

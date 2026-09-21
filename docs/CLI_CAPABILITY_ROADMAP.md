@@ -235,11 +235,11 @@ context, and source traceability. M7.3 runs last and certifies the release.
 - Keep result size and context injection bounded.
 - Surface search availability and endpoint configuration in the release gate before claiming user-facing web search support.
 
-### M7.3 — Guarded public-release workflow [planned]
+### M7.3 — Guarded public-release workflow ✅
 
-- Add deliberate maintainer workflows for npm and GitHub Release publication.
-- Require verified artifacts and explicit release approval before any publish action.
-- Keep credentials out of development commits.
+- Added deliberate maintainer workflows for npm and GitHub Release publication.
+- Required verified artifacts, offline tests, and explicit release approval (`confirm: PUBLISH`) before any publish action.
+- Kept credentials out of development commits via npm OIDC trusted publishing.
 
 ### M7.4 — Provider expansion foundation ✅
 
@@ -286,7 +286,7 @@ context, and source traceability. M7.3 runs last and certifies the release.
 - `docs/TOOLS.md`, `docs/ROUTING.md`, and `docs/SECURITY.md` describe the search
   sites, configuration keys, and the untrusted-context trust boundary.
 
-### M7.7 — `/connect` free-model hub [planned]
+### M7.7 — `/connect` free-model hub ✅
 
 - Keep `/connect` as the single entry point for model provisioning: first-class
   free sources plus one generic OpenAI-compatible path for paid models (OpenAI
@@ -309,7 +309,7 @@ context, and source traceability. M7.3 runs last and certifies the release.
 - Attach images by path as model context through existing read tooling; no
   terminal-dependent drag-and-drop promise for Windows/WSL.
 
-### M7.9 — `/session undo | redo | share` [planned]
+### M7.9 — `/session undo | redo | share` ✅
 
 - Add `undo`, `redo`, and `share` as `/session` subcommands, not new
   top-level slash commands.
