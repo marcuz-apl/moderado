@@ -179,6 +179,7 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/connect', desc: 'Connect a model provider' },
   { name: '/model', desc: 'Switch active AI model' },
   { name: '/init', desc: 'Scaffold AGENTS.md from workspace scan' },
+  { name: '/btw', desc: 'Ask an ephemeral side question (no session pollution)' },
   { name: '/mcp', desc: 'Manage local MCP servers' },
   { name: '/session', desc: 'Create, resume, undo, redo, share, export, or compact sessions' },
   { name: '/queue', desc: 'Add, inspect, or clear queued follow-up commands' },
@@ -255,7 +256,7 @@ export function renderModeradoHeader(): string {
 }
 
 /** Word-wrap plain text to `maxWidth` visible columns. */
-function wrapText(text: string, maxWidth: number): string[] {
+export function wrapText(text: string, maxWidth: number): string[] {
   const out: string[] = [];
   for (const rawLine of text.split('\n')) {
     if (rawLine.length <= maxWidth) {
@@ -412,6 +413,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1m/init\x1b[0m       Scaffold AGENTS.md from workspace scan',
     '\x1b[1m/model\x1b[0m      Switch active AI model (Free, Paid, or Custom)',
     '\x1b[1m/connect\x1b[0m    Connect NVIDIA NIM or another compatible provider',
+    '\x1b[1m/btw\x1b[0m        Ask an ephemeral side question (no session pollution)',
     '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
     '\x1b[1m/session\x1b[0m   Create, resume, undo, redo, share, export, or compact sessions',
     '\x1b[1m/queue\x1b[0m     Add, inspect, or clear queued follow-up commands',
@@ -520,6 +522,7 @@ export interface PromptInteractiveTurnOptions {
   onMcp?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onQueue?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
+  onBtw?: (command: string, drawFrame: (popupLines: string[]) => void | Promise<void>) => Promise<void>;
   onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
   onInit?: (drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onMentionComplete?: (token: string) => Promise<string[]>;
@@ -871,6 +874,38 @@ export async function promptInteractiveTurn(
           unbindComposerInput();
           if (options.onQueue) {
             await options.onQueue(command, async (popupLines) => {
+              stdout.write('\x1b[H\x1b[J');
+              stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+              await new Promise<void>((dismissResolve) => {
+                const onDismiss = (s: string, k: any) => {
+                  if (
+                    (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
+                    s === 'q' || s === 'Q' || s === '\x1b'
+                  ) {
+                    stdin.removeListener('keypress', onDismiss);
+                    dismissResolve();
+                  }
+                };
+                stdin.on('keypress', onDismiss);
+              });
+            });
+          }
+          readlineModule.emitKeypressEvents(stdin);
+          stdin.resume();
+          stdin.setRawMode(true);
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
+          positionCursorOnInput();
+          bindComposerInput();
+          return;
+        }
+
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/btw')) {
+          const command = input.trim();
+          setInput('');
+          unbindComposerInput();
+          if (options.onBtw) {
+            await options.onBtw(command, async (popupLines) => {
               stdout.write('\x1b[H\x1b[J');
               stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
               await new Promise<void>((dismissResolve) => {

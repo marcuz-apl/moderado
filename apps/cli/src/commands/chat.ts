@@ -15,7 +15,7 @@ import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKey
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, terminalCleanExitDone } from '../ui/welcome.js';
+import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
@@ -38,6 +38,7 @@ export const STANDARD_SLASH_COMMANDS = [
   '/connect',
   '/model',
   '/init',
+  '/btw',
   '/mcp',
   '/session',
   '/queue',
@@ -719,6 +720,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let activePlan: string | undefined;
   const costLabel = (): string => formatSessionCost(activeSession.usage);
   const commandQueue = new TurnCommandQueue();
+  const btwHistory: Array<{ question: string; answer: string; timestamp: number }> = [];
 
   while (!signal?.aborted) {
     let trimmed = '';
@@ -811,6 +813,99 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         const task = rawArgs.startsWith('add ') ? rawArgs.slice(4).trim() : rawArgs;
         if (task) {
           commandQueue.push(task);
+        }
+      },
+      onBtw: async (command, drawFrame) => {
+        const question = command.replace(/^\/btw\s*/i, '').trim();
+        if (!question) {
+          if (btwHistory.length === 0) {
+            await drawFrame(renderBoxLines('By The Way (/btw)', [
+              'Ask quick ephemeral side questions without polluting the session context.',
+              '',
+              'Usage:',
+              '  /btw <question>        Ask a side question in an ephemeral popup',
+              '  /btw                   Review recent side questions from this session',
+              '',
+              'Examples:',
+              '  /btw how do I format a date in JS?',
+              '  /btw what does git switch -c do?',
+              '',
+              'Press Esc or Enter to return.',
+            ], 76));
+          } else {
+            const lines: string[] = [];
+            for (let i = btwHistory.length - 1; i >= Math.max(0, btwHistory.length - 5); i--) {
+              const item = btwHistory[i];
+              lines.push(`\x1b[1;38;5;221mQ:\x1b[0m ${item.question}`);
+              lines.push(`\x1b[38;5;253mA:\x1b[0m ${item.answer}`);
+              if (i > Math.max(0, btwHistory.length - 5)) lines.push('---');
+            }
+            lines.push('');
+            lines.push('Press Esc or Enter to return.');
+            await drawFrame(renderBoxLines('By The Way (/btw) — Recent Side Questions', lines, 76));
+          }
+          return;
+        }
+
+        if (!provider || !currentModel) {
+          await drawFrame(renderBoxLines('By The Way (/btw)', [
+            'No model or provider connected.',
+            'Connect a provider with /connect or select a model with /model first.',
+            '',
+            'Press Esc or Enter to return.',
+          ], 72));
+          return;
+        }
+
+        await drawFrame(renderBoxLines('By The Way (/btw)', [
+          `Q: ${question}`,
+          '',
+          'Thinking (/btw)...',
+        ], 76));
+
+        try {
+          const btwMessages: ChatMessage[] = [
+            {
+              role: 'system',
+              content: 'You are Moderado answering a quick side question (by-the-way). Extreme brevity is mandatory. Answer in 1 to 3 short sentences or under 35 words. No conversational filler, pleasantries, or preambles. Output only the direct answer or code.',
+            },
+            {
+              role: 'user',
+              content: question,
+            },
+          ];
+
+          let answer = '';
+          const stream = provider.streamChat({
+            modelId: currentModel,
+            messages: btwMessages,
+            maxTokens: 250,
+            signal,
+          });
+
+          for await (const chunk of stream) {
+            if (chunk.contentDelta) {
+              answer += chunk.contentDelta;
+            }
+          }
+
+          const cleanedAnswer = cleanConversationalFiller(answer) || 'No response generated.';
+          btwHistory.push({ question, answer: cleanedAnswer, timestamp: Date.now() });
+
+          const wrappedAnswer = wrapText(cleanedAnswer, 70);
+          await drawFrame(renderBoxLines('By The Way (/btw)', [
+            `\x1b[1;38;5;221mQ:\x1b[0m ${question}`,
+            '---',
+            ...wrappedAnswer.map((l) => `\x1b[38;5;253m${l}\x1b[0m`),
+            '',
+            '\x1b[38;5;244m(Not saved to session history • Esc or Enter to close)\x1b[0m',
+          ], 76));
+        } catch (err: any) {
+          await drawFrame(renderBoxLines('By The Way (/btw) — Error', [
+            `Failed to answer side question: ${err?.message || String(err)}`,
+            '',
+            'Press Esc or Enter to return.',
+          ], 76));
         }
       },
       onMcp: async (command, drawFrame) => {

@@ -650,6 +650,11 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(findSlashCommandAdvice('/queue add do something')).toEqual({ isSlashCommand: true, isValid: true });
   });
 
+  it('recognizes /btw as a valid standard slash command', () => {
+    expect(findSlashCommandAdvice('/btw')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/btw how do I format a date in JS?')).toEqual({ isSlashCommand: true, isValid: true });
+  });
+
   it('handleGenerationKeypress handles raw control bytes including Windows CR, BS, DEL, and ESC', () => {
     const queue = new TurnCommandQueue();
     let draftChanges = 0;

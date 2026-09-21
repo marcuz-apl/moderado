@@ -713,6 +713,16 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('Scaffold AGENTS.md from workspace scan');
   });
 
+  it('includes /btw in SLASH_COMMANDS and help popup', () => {
+    const btwCmd = SLASH_COMMANDS.find((c) => c.name === '/btw');
+    expect(btwCmd).toBeDefined();
+    expect(btwCmd?.desc).toContain('side question');
+
+    const plain = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n'));
+    expect(plain).toContain('/btw');
+    expect(plain).toContain('Ask an ephemeral side question (no session pollution)');
+  });
+
   it('renders mention suggestions box with custom styling', () => {
     const lines = renderMentionSuggestionsBox(['src/main.ts', 'README.md'], 0);
     expect(lines.length).toBeGreaterThan(0);
