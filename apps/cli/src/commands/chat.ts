@@ -48,6 +48,118 @@ export function isGenerationCancelKey(key: { name?: string } | undefined): boole
   return key?.name === 'escape';
 }
 
+export class TurnCommandQueue {
+  private queue: string[] = [];
+  private draft = '';
+
+  get items(): readonly string[] {
+    return this.queue;
+  }
+
+  get currentDraft(): string {
+    return this.draft;
+  }
+
+  get length(): number {
+    return this.queue.length;
+  }
+
+  push(command: string): void {
+    const trimmed = command.trim();
+    if (trimmed) {
+      this.queue.push(trimmed);
+    }
+  }
+
+  shift(): string | undefined {
+    return this.queue.shift();
+  }
+
+  clear(): void {
+    this.queue = [];
+    this.draft = '';
+  }
+
+  setDraft(text: string): void {
+    this.draft = text;
+  }
+
+  appendDraft(text: string): void {
+    this.draft += text;
+  }
+
+  backspaceDraft(): void {
+    if (this.draft.length > 0) {
+      this.draft = this.draft.slice(0, -1);
+    }
+  }
+
+  commitDraft(): string | undefined {
+    const trimmed = this.draft.trim();
+    this.draft = '';
+    if (trimmed) {
+      this.queue.push(trimmed);
+      return trimmed;
+    }
+    return undefined;
+  }
+}
+
+export function handleGenerationKeypress(
+  str: string,
+  key: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined,
+  queue: TurnCommandQueue,
+  actions: {
+    abort: () => void;
+    onDraftChange: () => void;
+    onQueueAdd: (item: string) => void;
+  }
+): void {
+  // 1. Ctrl+C: abort generation and clear queue
+  if (key?.ctrl && key.name === 'c') {
+    actions.abort();
+    return;
+  }
+
+  // 2. Escape: if draft has text, clear draft; if draft is empty, abort generation
+  if (isGenerationCancelKey(key)) {
+    if (queue.currentDraft.length > 0) {
+      queue.setDraft('');
+      actions.onDraftChange();
+    } else {
+      actions.abort();
+    }
+    return;
+  }
+
+  // 3. Return / Enter: commit draft to command queue
+  if (key?.name === 'return' || key?.name === 'enter') {
+    const added = queue.commitDraft();
+    if (added) {
+      actions.onQueueAdd(added);
+    }
+    return;
+  }
+
+  // 4. Backspace: delete character from draft
+  if (key?.name === 'backspace') {
+    if (queue.currentDraft.length > 0) {
+      queue.backspaceDraft();
+      actions.onDraftChange();
+    }
+    return;
+  }
+
+  // 5. Printable characters / pasted text
+  if (!key?.ctrl && !key?.meta && str) {
+    const printable = str.replace(/[\x00-\x1f\x7f]/g, '');
+    if (printable.length > 0) {
+      queue.appendDraft(printable);
+      actions.onDraftChange();
+    }
+  }
+}
+
 export function isNetworkCommand(request: Pick<ApprovalRequest, 'toolName' | 'exactPayload'>): boolean {
   const command = (request.exactPayload as { command?: unknown }).command;
   const text = Array.isArray(command) ? command.join(' ').toLowerCase() : '';
@@ -412,12 +524,20 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let lastOutputTokenRate: number | undefined;
   let activePlan: string | undefined;
   const costLabel = (): string => formatSessionCost(activeSession.usage);
+  const commandQueue = new TurnCommandQueue();
 
   while (!signal?.aborted) {
-    const turn = await promptInteractiveTurn({
-      model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
-      usageAvailable: activeSession.usage.available, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate,
-      questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
+    let trimmed = '';
+
+    if (commandQueue.length > 0) {
+      trimmed = commandQueue.shift()!;
+      isFirst = false;
+    } else {
+      const turn = await promptInteractiveTurn({
+        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
+        usageAvailable: activeSession.usage.available, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate,
+        queuedCommands: commandQueue.items,
+        questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
           await showModelConnectionRequired(drawFrame, signal);
@@ -459,6 +579,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         return currentModel ?? 'No model connected — use /connect';
       },
       onClear: () => {
+        commandQueue.clear();
         conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
         activeSession.messages = [];
         sessionStore.save(activeSession);
@@ -614,9 +735,18 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
       },
     });
-    activeMode = turn.mode; activeAutoApprove = turn.autoApprove;
-    const trimmed = turn.workflowAction === 'build' && activePlan ? `Implement this approved plan:\n${activePlan}` : turn.text.trim(); isFirst = false;
+      activeMode = turn.mode; activeAutoApprove = turn.autoApprove;
+      trimmed = turn.workflowAction === 'build' && activePlan ? `Implement this approved plan:\n${activePlan}` : turn.text.trim();
+      isFirst = false;
+    }
     if (!trimmed) continue;
+    if (trimmed === '/clear') {
+      commandQueue.clear();
+      conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
+      activeSession.messages = [];
+      sessionStore.save(activeSession);
+      continue;
+    }
     if (isBareExitCommand(trimmed)) {
       lastQuestion = trimmed;
       lastAnswer = 'To leave Moderado, type /exit.';
@@ -649,6 +779,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
+        queuedCommands: commandQueue.items,
       }, process.stdout.rows));
       process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
       continue;
@@ -668,6 +799,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
+        queuedCommands: commandQueue.items,
       }, process.stdout.rows));
       process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
       continue;
@@ -733,8 +865,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     try {
       const requestAbort = new AbortController();
       const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
-      const onGenerationKeypress = (_text: string, key: { name?: string } | undefined): void => {
-        if (isGenerationCancelKey(key)) requestAbort.abort();
+      const onGenerationKeypress = (str: string, key: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined): void => {
+        handleGenerationKeypress(str, key, commandQueue, {
+          abort: () => {
+            commandQueue.clear();
+            requestAbort.abort();
+          },
+          onDraftChange: () => {
+            redrawChatFrame();
+          },
+          onQueueAdd: () => {
+            redrawChatFrame();
+          },
+        });
       };
       if (process.stdin.isTTY) {
         const readlineModule = await import('node:readline');
@@ -775,8 +918,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           chatAnswer: streamedAnswer,
           chatThoughtTime: thoughtTime,
           outputTokenRate,
+          input: commandQueue.currentDraft,
+          queuedCommands: commandQueue.items,
         }, process.stdout.rows));
-        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));
+        if (streamedAnswer) {
+          const width = process.stdout.columns || 80;
+          const maxWidth = Math.max(40, width - 4);
+          answerPosition = renderChatAnswerDelta(streamedAnswer, { row: 15, column: 1 }, maxWidth);
+        }
       };
 
       // Move to the chat layout before the provider can emit its first event.
@@ -798,7 +948,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             const renderedDelta = renderChatAnswerDelta(event.delta, answerPosition, process.stdout.columns || 80);
             answerPosition = renderedDelta;
             process.stdout.write(renderedDelta.sequence);
-            process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+            process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));
           }
         }, signal: requestSignal, conversationHistory,
         onMutationApproved: (toolName, parameters) => {

@@ -3,7 +3,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import * as chatCommands from '../src/commands/chat.js';
-import { buildSearchAnswerTask, createAgentTask, createMcpToolRegistry, decideApproval, formatDirectWebSearchAnswer, handleChatSession, isBareExitCommand, isGenerationCancelKey, isLocalModelQuery, isLocalProviderQuery, isNetworkCommand, isNetworkConsentReply, replaceEvidenceTurn, resolveLocalMetaQuery, resolveSessionSharePath, resolveWebSearchEndpoint, resolveWebSearchProvider, shouldFastRouteWebSearch } from '../src/commands/chat.js';
+import {
+  buildSearchAnswerTask,
+  createAgentTask,
+  createMcpToolRegistry,
+  decideApproval,
+  formatDirectWebSearchAnswer,
+  handleChatSession,
+  handleGenerationKeypress,
+  isBareExitCommand,
+  isGenerationCancelKey,
+  isLocalModelQuery,
+  isLocalProviderQuery,
+  isNetworkCommand,
+  isNetworkConsentReply,
+  replaceEvidenceTurn,
+  resolveLocalMetaQuery,
+  resolveSessionSharePath,
+  resolveWebSearchEndpoint,
+  resolveWebSearchProvider,
+  shouldFastRouteWebSearch,
+  TurnCommandQueue,
+} from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
 import { ApprovalRequest, ChatMessage } from '@moderado/contracts';
@@ -366,5 +387,93 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(answer).toContain('NVIDIA NIM');
     expect(answer).toContain('/test/workspace');
     expect(answer).toContain('/model');
+  });
+
+  it('TurnCommandQueue manages FIFO commands and editing draft', () => {
+    const queue = new TurnCommandQueue();
+    expect(queue.length).toBe(0);
+    expect(queue.currentDraft).toBe('');
+
+    queue.appendDraft('run test');
+    expect(queue.currentDraft).toBe('run test');
+
+    queue.backspaceDraft();
+    expect(queue.currentDraft).toBe('run tes');
+
+    queue.appendDraft('t');
+    const committed = queue.commitDraft();
+    expect(committed).toBe('run test');
+    expect(queue.length).toBe(1);
+    expect(queue.items).toEqual(['run test']);
+    expect(queue.currentDraft).toBe('');
+
+    queue.push('git diff');
+    queue.push('commit changes');
+    expect(queue.length).toBe(3);
+    expect(queue.items).toEqual(['run test', 'git diff', 'commit changes']);
+
+    expect(queue.shift()).toBe('run test');
+    expect(queue.shift()).toBe('git diff');
+    expect(queue.length).toBe(1);
+
+    queue.clear();
+    expect(queue.length).toBe(0);
+    expect(queue.items).toEqual([]);
+    expect(queue.currentDraft).toBe('');
+  });
+
+  it('handleGenerationKeypress handles typing, queueing, and cancel keys during active mission', () => {
+    const queue = new TurnCommandQueue();
+    let aborted = false;
+    let draftChanges = 0;
+    const queuedItems: string[] = [];
+
+    const actions = {
+      abort: () => { aborted = true; },
+      onDraftChange: () => { draftChanges++; },
+      onQueueAdd: (item: string) => { queuedItems.push(item); },
+    };
+
+    // 1. Typing printable characters updates draft
+    handleGenerationKeypress('a', undefined, queue, actions);
+    handleGenerationKeypress('l', undefined, queue, actions);
+    handleGenerationKeypress('s', undefined, queue, actions);
+    handleGenerationKeypress('o', undefined, queue, actions);
+    expect(queue.currentDraft).toBe('also');
+    expect(draftChanges).toBe(4);
+
+    // 2. Backspace deletes character
+    handleGenerationKeypress('', { name: 'backspace' }, queue, actions);
+    expect(queue.currentDraft).toBe('als');
+    expect(draftChanges).toBe(5);
+
+    // 3. Escape with non-empty draft clears draft without aborting
+    handleGenerationKeypress('', { name: 'escape' }, queue, actions);
+    expect(queue.currentDraft).toBe('');
+    expect(aborted).toBe(false);
+
+    // 4. Escape with empty draft aborts generation
+    handleGenerationKeypress('', { name: 'escape' }, queue, actions);
+    expect(aborted).toBe(true);
+
+    // 5. Enter commits draft to queue
+    queue.setDraft('check edge cases');
+    handleGenerationKeypress('', { name: 'return' }, queue, actions);
+    expect(queue.currentDraft).toBe('');
+    expect(queue.length).toBe(1);
+    expect(queue.items).toEqual(['check edge cases']);
+    expect(queuedItems).toEqual(['check edge cases']);
+
+    // 6. Enter second command in succession
+    queue.setDraft('run build');
+    handleGenerationKeypress('', { name: 'enter' }, queue, actions);
+    expect(queue.length).toBe(2);
+    expect(queue.items).toEqual(['check edge cases', 'run build']);
+    expect(queuedItems).toEqual(['check edge cases', 'run build']);
+
+    // 7. Ctrl+C aborts
+    aborted = false;
+    handleGenerationKeypress('', { name: 'c', ctrl: true }, queue, actions);
+    expect(aborted).toBe(true);
   });
 });

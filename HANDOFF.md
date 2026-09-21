@@ -1,47 +1,51 @@
 # Project Handoff
 
-Updated: 2026-09-21 19:07 UTC
+Updated: 2026-09-21 19:20 UTC
 Branch: master
-Commit: pending (`v0.2.46+260921g`)
-Status: Dev server readiness backgrounding, Windows process tree cleanup, and execution watchdog implemented. All 309 tests passing, packaging certified, and typecheck clean.
+Commit: pending (`v0.2.47+260921i`)
+Status: Command queueing during active missions implemented. Live keyboard input, draft editing, multi-command queueing, FIFO execution, and status banner verified. All 312 tests passing, packaging certified, and typecheck clean.
 
 ## Summary
 
-1. **Dev Server Readiness Backgrounding**:
-   - Added `detectServerReadiness`, `isLongRunningDevCommand`, and `stripAnsi` in `packages/tools/src/tools/run_command.ts`.
-   - When external dev servers (Vite, Next.js, Astro, Python http.server, etc.) emit server readiness banners or local host URLs (e.g. `http://localhost:5173/`), Moderado stabilizes for 800ms to verify startup integrity, unrefs the child process, and immediately returns `status: 'success'` with the server URL.
-   - Prevents dev servers from hanging the CLI for thousands of seconds (such as the 8320s hang reported by the user).
-2. **Windows Process Tree Clean Termination**:
-   - `killProcess()` on Windows (`process.platform === 'win32'`) now executes `taskkill /pid ${child.pid} /T /F` so child process trees (e.g. `cmd.exe -> node.exe -> vite.js`) are forcefully terminated together, eliminating orphaned background processes that keep stdio pipes open.
-3. **Pipes and Watchdog Hard Settlement Guarantee**:
-   - Added a 500ms safety timer on `child.on('exit')` to settle the command if stdio `'close'` lags due to leaked handles.
-   - Added a hard fallback watchdog timer `(timeoutSecs + 2) * 1000` to guarantee `run_command` can never hang indefinitely under any edge case.
+1. **Command Queueing During Active Missions**:
+   - Implemented `TurnCommandQueue` and `handleGenerationKeypress` in `apps/cli/src/commands/chat.ts`.
+   - Users can now freely type follow-up commands, instructions, or queries while Moderado is actively executing a mission.
+   - Typing updates the bottom composer in real time. Hitting `Enter` commits the command to the FIFO queue and clears the input box, allowing the user to queue a second, third, or arbitrary bunch of commands.
+   - Hitting `Backspace` edits the draft; hitting `Escape` with text in the draft clears the draft; hitting `Escape` with an empty draft or `Ctrl+C` cancels generation and clears the queue.
+2. **Automatic FIFO Dequeue & Immediate Execution**:
+   - At the completion of each agent mission/turn, Moderado checks `commandQueue.length > 0`. If commands are queued, Moderado dequeues the next command immediately without waiting for terminal idle input, running each queued mission sequentially.
+3. **Queue Status Banner & UI Integration**:
+   - `renderWelcomeCard` in `apps/cli/src/ui/welcome.ts` displays active queue status (`Queued (N): <command> (+M more)`) directly in the composer card without altering terminal layout geometry.
+   - Placeholder updates dynamically to `Type follow-up to queue (Enter to add)...` during generation.
 4. **Comprehensive Unit Testing**:
-   - Added tests in `packages/tools/tests/tools.test.ts` for ANSI stripping, dev server command detection, multi-framework URL extraction, and live backgrounding resolution.
+   - Added unit tests in `apps/cli/tests/chat.test.ts` for `TurnCommandQueue` (enqueue, draft editing, FIFO dequeue, clear) and `handleGenerationKeypress` (typing, backspace, enter queueing, escape, ctrl+c).
+   - Added unit tests in `apps/cli/tests/welcome.test.ts` verifying queued commands rendering and dynamic composer placeholder.
 
 ## Completed
 
-- `packages/tools/src/tools/run_command.ts`:
-  - Added `stripAnsi`, `detectServerReadiness`, and `isLongRunningDevCommand`.
-  - Added dev server readiness detection and automatic backgrounding.
-  - Added `taskkill /pid ${child.pid} /T /F` on Windows.
-  - Added `exitSafetyTimer` and `forceSettleTimer` watchdog.
-- `packages/tools/tests/tools.test.ts`:
-  - Added unit test for `stripAnsi` and `isLongRunningDevCommand`.
-  - Added unit test for `detectServerReadiness`.
-  - Added unit test verifying dev server banner detection, backgrounding, and immediate URL return.
-- `VERSION`: Bumped to `v0.2.46+260921g`.
+- `apps/cli/src/commands/chat.ts`:
+  - Added `TurnCommandQueue` class.
+  - Added `handleGenerationKeypress` helper.
+  - Added live queue handling and FIFO loop processing in `handleChatSession`.
+- `apps/cli/src/ui/welcome.ts`:
+  - Added `queuedCommands` and `isTurnSettled` to `WelcomeLayoutOptions` and `PromptInteractiveTurnOptions`.
+  - Added queue status line and dynamic placeholder to `renderWelcomeCard`.
+- `apps/cli/tests/chat.test.ts`:
+  - Added tests for `TurnCommandQueue` and `handleGenerationKeypress`.
+- `apps/cli/tests/welcome.test.ts`:
+  - Added test for `renderWelcomeCard` queue display.
+- `VERSION`: Bumped to `v0.2.47+260921i`.
 
 ## Checks
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build` — PASS (all packages compile cleanly)
-- `npm test` — PASS (48 test files, 309 passed)
+- `npm test` — PASS (48 test files, 312 passed)
 - `npm run verify:package` — PASS (clean tarball packaging and smoke test)
 
 ## Decisions and context
 
-- Dev servers are intended to run continuously. Moderado should not wait indefinitely for a dev server to exit or kill it upon timeout; detecting its readiness banner and transitioning it to a background process provides an optimal developer experience.
+- Advanced coding agents allow users to steer and queue tasks without blocking on the current mission. Command queueing provides a fluid, non-blocking developer experience.
 
 ## Blockers
 

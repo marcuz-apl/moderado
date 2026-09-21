@@ -20,6 +20,8 @@ export interface WelcomeLayoutOptions {
   mentionFiles?: string[];
   mentionSelection?: number;
   commandSelection?: number;
+  queuedCommands?: readonly string[];
+  isTurnSettled?: boolean;
 }
 
 export const MODERADO_ASCII_LOGO = [
@@ -69,7 +71,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const displayInput =
     options.input && options.input.length > 0
       ? options.input
-      : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m';
+      : (options.chatAnswer !== undefined && !options.isTurnSettled
+          ? '\x1b[38;5;242mType follow-up to queue (Enter to add)...\x1b[0m'
+          : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m');
 
   const promptMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
   const textBox = `${promptMarker} ${displayInput}`;
@@ -78,6 +82,10 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     const preserved = content.replace(/\x1b\[0m/g, '\x1b[0;48;5;236m');
     return surface + preserved + ' '.repeat(Math.max(0, width - visibleLen(content))) + '\x1b[0m';
   };
+
+  const queueContent = options.queuedCommands && options.queuedCommands.length > 0
+    ? ` \x1b[1;38;5;221mQueued (${options.queuedCommands.length}):\x1b[0m \x1b[38;5;252m${options.queuedCommands[0]}${options.queuedCommands.length > 1 ? ` \x1b[38;5;244m(+${options.queuedCommands.length - 1} more)\x1b[0m` : ''}\x1b[0m`
+    : '';
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
   const outputRate = options.outputTokenRate === undefined ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
@@ -113,7 +121,7 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const cardLines = [
     surfaceLine(),
     surfaceLine(textBox),
-    surfaceLine(),
+    surfaceLine(queueContent),
     line4,
     line5,
   ].map((line) => indent + line);
@@ -460,6 +468,7 @@ export interface PromptInteractiveTurnOptions {
   onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
   onInit?: (drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onMentionComplete?: (token: string) => Promise<string[]>;
+  queuedCommands?: readonly string[];
 }
 
 function isMcpCommandInput(value: string): boolean {
@@ -539,6 +548,8 @@ export async function promptInteractiveTurn(
     chatAnswer: options.chatAnswer,
     chatThoughtTime: options.chatThoughtTime,
     outputTokenRate: options.outputTokenRate,
+    queuedCommands: options.queuedCommands,
+    isTurnSettled: true,
   });
 
   // ── Non-TTY fallback ──────────────────────────────────────────────────────

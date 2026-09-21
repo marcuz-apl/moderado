@@ -715,4 +715,45 @@ describe('OpenCode-style Welcome TUI', () => {
     );
     expect(initCalled).toBe(true);
   });
+
+  it('renderWelcomeCard displays queued commands banner and generation placeholder', () => {
+    // 1. Idle state without queue
+    const idleCard = renderWelcomeCard({
+      model: 'meta/llama-3.3-70b-instruct',
+      tokens: 1200,
+      cost: '$0.002',
+      workspace: '/test/workspace',
+      mode: 'Execute',
+      autoApprove: false,
+    });
+    expect(idleCard).toContain('Ask anything, I am all ears...');
+    expect(idleCard).not.toContain('Queued');
+
+    // 2. Active generation state with placeholder
+    const generatingCard = renderWelcomeCard({
+      model: 'meta/llama-3.3-70b-instruct',
+      tokens: 1200,
+      cost: '$0.002',
+      workspace: '/test/workspace',
+      mode: 'Execute',
+      autoApprove: false,
+      chatAnswer: 'Thinking and implementing...',
+      isTurnSettled: false,
+    });
+    expect(generatingCard).toContain('Type follow-up to queue (Enter to add)...');
+
+    // 3. Queued commands banner
+    const queuedCard = renderWelcomeCard({
+      model: 'meta/llama-3.3-70b-instruct',
+      tokens: 1200,
+      cost: '$0.002',
+      workspace: '/test/workspace',
+      mode: 'Execute',
+      autoApprove: false,
+      queuedCommands: ['npm test', 'git diff'],
+    });
+    expect(queuedCard).toContain('Queued (2):');
+    expect(queuedCard).toContain('npm test');
+    expect(queuedCard).toContain('(+1 more)');
+  });
 });
