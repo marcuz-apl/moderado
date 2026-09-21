@@ -5,6 +5,7 @@ export interface CliParsedArgs {
   task?: string;
   workspace: string;
   model?: string;
+  provider?: string;
   profile: string;
   maxSteps: number;
   timeout: number;
@@ -26,6 +27,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   const optionsConfig = {
     workspace: { type: 'string' as const, short: 'w', default: '.' },
     model: { type: 'string' as const, short: 'm' },
+    provider: { type: 'string' as const },
     profile: { type: 'string' as const, short: 'p', default: 'hosted-nvidia' },
     'max-steps': { type: 'string' as const, default: '25' },
     timeout: { type: 'string' as const, default: '600' },
@@ -75,6 +77,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     task: task?.trim() || undefined,
     workspace: parsed.values.workspace as string,
     model: parsed.values.model as string | undefined,
+    provider: parsed.values.provider as string | undefined,
     profile: parsed.values.profile as string,
     maxSteps: isNaN(maxSteps) ? 25 : maxSteps,
     timeout: isNaN(timeout) ? 600 : timeout,

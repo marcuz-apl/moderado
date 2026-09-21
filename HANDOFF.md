@@ -1,49 +1,59 @@
 # Project Handoff
 
-Updated: 2026-09-21 06:35 UTC
+Updated: 2026-09-21 06:45 UTC
 Branch: master
-Commit: 393b1b0 (`v0.2.45+260921b`)
-Status: Milestone M7.3 (Guarded public-release workflow) certified and documented; all 302 tests passing, package verification and build green.
+Commit: pending (`v0.2.45+260921d`)
+Status: Free-Only Model Catalog implemented across NVIDIA NIM, OpenRouter, OpenCode Zen, and Agnes AI. All 304 tests passing, packaging certified, and typecheck clean.
 
 ## Summary
 
-1. **Milestone M7.3 (Guarded Public Release Workflow) Certified**:
-   - Closed M7.3 as complete: `.github/workflows/publish.yml` (guarded `workflow_dispatch` requiring `confirm: PUBLISH` and release tag), `.github/workflows/release.yml` (multi-platform native binary compilation and package verification), and `docs/RELEASING.md` maintainer operational guide.
-   - Verified `npm run verify:package` passes locally (tarball packaging, sandbox installation, and smoke test).
-   - Milestone M7 (M7.1 through M7.11) is now 100% complete and certified for public release.
-2. **Auto-Approved Terminal Commands (`run_command` & `run_diagnostics`)**:
-   - Terminal commands and diagnostics are automatically approved by default in interactive `chat` and `run` modes.
-3. **Multi-Token Command Parsing & Windows Resolution**:
-   - `run_command` tokenizes multi-token command strings like `"ls -la"` or `"git commit -m 'message'"` into executable and arguments instead of searching for an executable named literally `"ls -la.exe"` (`spawn ENOENT`).
-   - Common Windows batch tools (`npm`, `npx`, `pnpm`, etc.) and built-ins (`dir`, `del`, etc.) execute via `cmd.exe /d /s /c` safely.
-4. **Timeout Fallback Bug Resolved**:
-   - Safe 60-second fallback prevents `NaN` timeout from prematurely terminating commands after 1ms.
+1. **Free-First Model Catalog Differentiation**:
+   - Moderado now exclusively lists and selects verified free models across 4 free providers: **NVIDIA NIM**, **OpenRouter**, **OpenCode Zen**, and **Agnes AI**.
+   - Completely eliminated "Browse Paid Models" and all paid endpoints from the interactive model selector UI and CLI commands.
+2. **OpenCode Zen Integration**:
+   - Added `opencode-zen` preset (`OpenCode Zen`, `https://opencode.ai/zen/v1`, tag: `Free Models`).
+   - Integrated OpenCode Zen model auto-discovery into provider connection workflows and chat sessions (`allModelsFree: true`).
+3. **Curated Free Models CLI Hub (`moderado models`)**:
+   - Upgraded `moderado models` command to discover and present the free model catalog across all 4 free providers with clear tier indicators (`[Free NIM]`, `[Free OpenRouter]`, `[Free OpenCode]`, `[Free Agnes]`).
+   - Added `--provider <name>` filter flag allowing focused inspection per provider.
+4. **Interactive Model Picker Guardrails**:
+   - Removed paid model browsing choices from `buildCompatibleModelMenuItems`.
+   - Filtered `selectCompatibleModelOverlay` so only verified free endpoints are selectable.
+   - Provider model discovery uses dependency-injected `fetchImpl` for deterministic, offline testing.
 
 ## Completed
 
-- `packages/tools/src/tools/run_command.ts`:
-  - Added `splitCommandString(str)` for robust shell-like tokenization preserving quotes.
-  - Added `parseCommandLine(command, args)` supporting multi-token strings and path resolution.
-  - Wrapped Windows batch, Node shims, and shell built-ins with `COMSPEC` (`cmd.exe /d /s /c`) when on `win32`.
-  - Fixed timeout handling with safe default (`timeoutSecs = params.timeoutSeconds ?? 60`).
-- `packages/tools/tests/tools.test.ts`:
-  - Added unit tests for `splitCommandString` with quotes and spaces.
-  - Added unit tests for `parseCommandLine`.
-  - Added test verifying execution of multi-token commands with empty `args`.
-  - Added test verifying execution without explicit `timeoutSeconds` runs to completion.
+- `packages/providers/src/model_discovery.ts`:
+  - Added optional `{ signal, fetchImpl }` parameter to `fetchProviderModels` for offline-safe model listing.
+- `apps/cli/src/args.ts`:
+  - Added `provider?: string` parsing to `CliParsedArgs`.
+- `apps/cli/src/commands/models.ts`:
+  - Upgraded `handleModelsCommand` to discover free models across NVIDIA NIM, OpenRouter, OpenCode Zen, and Agnes AI.
+  - Added formatted console output with provider tags and model identifiers.
+- `apps/cli/src/commands/chat.ts`:
+  - Configured `opencode-zen` with `allModelsFree: true` for automatic free-tier compatibility.
+- `apps/cli/src/ui/provider_connect.ts`:
+  - Added `opencode-zen` to `PROVIDER_PRESETS` and auto-discovery dispatch.
+- `apps/cli/src/ui/model_selector.ts`:
+  - Strictly limited interactive model selection to free models (`isFreeCompatibleModel`), removing all paid model items.
+- `apps/cli/tests/models.test.ts`:
+  - Added unit test suite validating free model output and provider filtering.
+- `apps/cli/tests/model_selection.test.ts` & `apps/cli/tests/provider_connect.test.ts`:
+  - Updated and expanded test suites for 100% free model picker and OpenCode Zen preset.
 
 ## Checks
 
 - `npm run typecheck` — PASS (0 errors)
-- `npm run build` — PASS (all packages build cleanly)
-- `npx vitest run --pool=threads --maxWorkers=1 --minWorkers=1` — PASS (47 files, 302 tests)
-- `git diff --check` — PASS (clean formatting)
+- `npm run build` — PASS (all packages compile cleanly)
+- `npm test` — PASS (48 test files, 304 passed)
+- `npm run verify:package` — PASS (clean tarball packaging and smoke test)
 
 ## Decisions and context
 
-- Kept `shell: false` to eliminate arbitrary shell injection vulnerabilities; tokenization and Windows cmd wrapping provide safe execution without exposing raw subshell expansions.
-- Sanitized environment variables (`NVIDIA_API_KEY`, tokens) continue to be purged before spawning child processes.
+- Moderado differentiates itself from Cline, Cursor, Claude Code, and Aider by being 100% Free-First: zero surprise charges, zero paid model browsing, zero required credit cards for default usage.
+- All network interactions in tests utilize injected `fetchImpl` mocks to guarantee 100% offline test compliance.
 
 ## Blockers
 
 - None.
+

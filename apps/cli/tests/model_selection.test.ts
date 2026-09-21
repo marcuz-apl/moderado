@@ -36,7 +36,7 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     ]));
   });
 
-  it('labels OpenRouter models from live pricing metadata', () => {
+  it('filters OpenRouter models to offer only free models', () => {
     const items = buildCompatibleModelMenuItems('OpenRouter', [
       { id: 'openrouter/free', pricing: { prompt: '0', completion: '0', request: '0' } },
       { id: 'openai/gpt-4', pricing: { prompt: '0.00003', completion: '0.00006', request: '0' } },
@@ -44,8 +44,8 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
 
     expect(items).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Browse Free Models', tag: '1 Free' }),
-      expect.objectContaining({ label: 'Browse Paid Models', tag: '1 Paid' }),
     ]));
+    expect(items.find((item) => item.label.includes('Paid'))).toBeUndefined();
   });
 
   it('marks every Agnes model choice as free', () => {

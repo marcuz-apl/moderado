@@ -88,22 +88,18 @@ export function buildCompatibleModelMenuItems(
       label: 'Browse available models',
       value: 'browse',
       tag: `${models.length} Free`,
-      description: `Filter the live ${providerName} model catalog.`,
+      description: `Filter the live ${providerName} free model catalog.`,
     });
   } else {
     const freeCount = models.filter(isFreeCompatibleModel).length;
-    const paidCount = models.length - freeCount;
     if (freeCount > 0) {
-      items.push({ label: 'Browse Free Models', value: 'free', tag: `${freeCount} Free`, description: 'No-cost OpenRouter endpoints.' });
-    }
-    if (paidCount > 0) {
-      items.push({ label: 'Browse Paid Models', value: 'paid', tag: `${paidCount} Paid`, description: 'Priced OpenRouter endpoints.' });
+      items.push({ label: 'Browse Free Models', value: 'free', tag: `${freeCount} Free`, description: `No-cost ${providerName} endpoints.` });
     }
   }
   items.push({
     label: 'Enter a model ID',
     value: 'custom',
-    tag: allModelsFree ? 'Free' : undefined,
+    tag: 'Free',
     description: `Use any ${providerName} model ID, including one not returned by discovery.`,
   });
   if (currentModel) {
@@ -133,12 +129,12 @@ function compatibleModelPopupItem(model: CompatibleModelEntry, allModelsFree: bo
   return {
     label: model.id,
     value: model.id,
-    tag: isFree ? 'Free' : 'Paid',
+    tag: 'Free',
     description: isFree
       ? `${providerName} free model`
       : price
-        ? `${providerName} paid model · input $${Number(price) * 1_000_000}/M tokens`
-        : `${providerName} paid model`,
+        ? `${providerName} model · input $${Number(price) * 1_000_000}/M tokens`
+        : `${providerName} free model`,
   };
 }
 
@@ -158,19 +154,15 @@ export async function selectCompatibleModelOverlay(
   }
 
   const picked = await selectListPopup(
-    `${providerName} Models`,
+    `${providerName} Free Models`,
     buildCompatibleModelMenuItems(providerName, models, currentModel, allModelsFree),
     { drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close' }
   );
   if (picked === null || picked === 'keep' || picked === 'cancel') return currentModel;
-  if (picked === 'browse' || picked === 'free' || picked === 'paid') {
-    const visibleModels = picked === 'free'
-      ? models.filter(isFreeCompatibleModel)
-      : picked === 'paid'
-        ? models.filter((model) => !isFreeCompatibleModel(model))
-        : models;
+  if (picked === 'browse' || picked === 'free') {
+    const visibleModels = allModelsFree ? models : models.filter(isFreeCompatibleModel);
     return (await selectListPopup(
-      `${providerName} Models`,
+      `${providerName} Free Models`,
       visibleModels.map((model) => compatibleModelPopupItem(model, allModelsFree ?? false, providerName)),
       { drawFrame, signal, filterable: true, pageSize: 10, hint: 'type to filter · ↑↓ navigate · Enter select · Esc close' }
     )) ?? currentModel;

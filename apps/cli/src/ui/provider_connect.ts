@@ -1,7 +1,7 @@
 import { ProviderConnection } from '../config.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
-import { fetchOpenRouterFreeModels } from '@moderado/providers';
+import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
 import type { ModelInventoryEntry } from '@moderado/contracts';
 
 export interface ConnectionInput {
@@ -21,7 +21,7 @@ export interface PopupConnectionOptions {
 
 export interface ProviderPreset {
   label: string;
-  value: 'nvidia-nim' | 'openrouter' | 'agnes-ai' | 'openai-compatible';
+  value: 'nvidia-nim' | 'openrouter' | 'opencode-zen' | 'agnes-ai' | 'openai-compatible';
   description: string;
   tag?: string;
   displayName?: string;
@@ -30,8 +30,9 @@ export interface ProviderPreset {
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
-  { label: 'OpenRouter', value: 'openrouter', tag: 'OpenAI-compatible', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key and choose a model ID.' },
-  { label: 'Agnes AI', value: 'agnes-ai', tag: 'OpenAI-compatible', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key and choose a model ID.' },
+  { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
+  { label: 'OpenCode Zen', value: 'opencode-zen', tag: 'Free Models', displayName: 'OpenCode Zen', baseUrl: 'https://opencode.ai/zen/v1', description: 'Free coding models powered by OpenCode Zen.' },
+  { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
   { label: 'Other OpenAI-compatible provider', value: 'openai-compatible', description: 'Connect any compatible endpoint with its base URL, key, and model ID.' },
 ];
 
@@ -169,6 +170,24 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
       const picked = options.drawFrame
         ? await selectListPopup('Choose a free model', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
         : (await askSelect('Choose a free model', choices, 0, { signal: options.signal })).value;
+      if (!picked) return undefined;
+      defaultModel = picked === '__manual__' ? undefined : picked;
+    }
+  } else if (selectedValue === 'opencode-zen') {
+    let freeModels: ModelInventoryEntry[] = [];
+    try { freeModels = await fetchProviderModels('https://opencode.ai/zen/v1', undefined, options.signal); } catch { /* fall through to manual */ }
+    if (freeModels.length > 0) {
+      const choices = [
+        ...freeModels.slice(0, 50).map((entry) => ({
+          label: entry.id,
+          value: entry.id,
+          description: 'OpenCode Zen free coding model',
+        })),
+        { label: 'Enter a model ID manually', value: '__manual__', description: 'Any OpenCode Zen model ID' },
+      ];
+      const picked = options.drawFrame
+        ? await selectListPopup('Choose an OpenCode Zen free model', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
+        : (await askSelect('Choose an OpenCode Zen free model', choices, 0, { signal: options.signal })).value;
       if (!picked) return undefined;
       defaultModel = picked === '__manual__' ? undefined : picked;
     }

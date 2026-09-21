@@ -11,12 +11,14 @@ const openRouter = {
 };
 
 describe('provider connection setup', () => {
-  it('offers NVIDIA NIM, OpenRouter, and Agnes AI presets', () => {
+  it('offers NVIDIA NIM, OpenRouter, OpenCode Zen, and Agnes AI presets', () => {
     expect(PROVIDER_PRESETS.map((preset) => preset.value)).toEqual([
-      'nvidia-nim', 'openrouter', 'agnes-ai', 'openai-compatible',
+      'nvidia-nim', 'openrouter', 'opencode-zen', 'agnes-ai', 'openai-compatible',
     ]);
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')?.baseUrl)
       .toBe('https://openrouter.ai/api/v1');
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'opencode-zen')?.baseUrl)
+      .toBe('https://opencode.ai/zen/v1');
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'agnes-ai')?.baseUrl)
       .toBe('https://apihub.agnes-ai.com/v1');
   });

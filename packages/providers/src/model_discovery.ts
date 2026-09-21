@@ -17,12 +17,14 @@ export const SPIKE_PROVIDER_ENDPOINTS = {
 export async function fetchProviderModels(
   baseUrl: string,
   apiKey: string | undefined,
-  signal?: AbortSignal
+  optionsOrSignal?: AbortSignal | { signal?: AbortSignal; fetchImpl?: typeof fetch }
 ): Promise<ModelInventoryEntry[]> {
+  const signal = optionsOrSignal instanceof AbortSignal ? optionsOrSignal : optionsOrSignal?.signal;
+  const doFetch = (!(optionsOrSignal instanceof AbortSignal) && optionsOrSignal?.fetchImpl) ? optionsOrSignal.fetchImpl : fetch;
   const url = `${baseUrl.replace(/\/+$/, '')}/models`;
   let response: Response;
   try {
-    response = await fetch(url, {
+    response = await doFetch(url, {
       method: 'GET',
       headers: {
         Accept: 'application/json',

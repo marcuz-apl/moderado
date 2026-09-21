@@ -375,7 +375,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             providerId: activeConnection.id,
             providerName: activeConnection.displayName,
             currentModel,
-            allModelsFree: activeConnection.id === 'agnes-ai',
+            allModelsFree: activeConnection.id === 'agnes-ai' || activeConnection.id === 'opencode-zen',
             signal,
             drawFrame,
           });
