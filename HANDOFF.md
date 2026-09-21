@@ -1,22 +1,23 @@
 # Project Handoff
 
-Updated: 2026-09-21 06:30 UTC
+Updated: 2026-09-21 06:35 UTC
 Branch: master
-Commit: 57090c9 (`v0.2.44+2609219`)
-Status: Terminal commands and diagnostics auto-approved without prompting; all 302 tests passing, typecheck and build green.
+Commit: 393b1b0 (`v0.2.45+260921b`)
+Status: Milestone M7.3 (Guarded public-release workflow) certified and documented; all 302 tests passing, package verification and build green.
 
 ## Summary
 
-1. **Auto-Approved Terminal Commands (`run_command` & `run_diagnostics`)**:
-   - Terminal commands (`run_command`) and diagnostic scripts (`run_diagnostics`) are now automatically approved without prompting for interactive permission in both interactive `chat` and `run` modes.
-   - Combined with workspace file writes (`write_file`, `edit_file`, `apply_patch`), the agent can scaffold projects, install packages, run tests, and execute scripts completely hands-free.
-2. **Multi-Token Command Parsing (`splitCommandString` & `parseCommandLine`)**:
+1. **Milestone M7.3 (Guarded Public Release Workflow) Certified**:
+   - Closed M7.3 as complete: `.github/workflows/publish.yml` (guarded `workflow_dispatch` requiring `confirm: PUBLISH` and release tag), `.github/workflows/release.yml` (multi-platform native binary compilation and package verification), and `docs/RELEASING.md` maintainer operational guide.
+   - Verified `npm run verify:package` passes locally (tarball packaging, sandbox installation, and smoke test).
+   - Milestone M7 (M7.1 through M7.11) is now 100% complete and certified for public release.
+2. **Auto-Approved Terminal Commands (`run_command` & `run_diagnostics`)**:
+   - Terminal commands and diagnostics are automatically approved by default in interactive `chat` and `run` modes.
+3. **Multi-Token Command Parsing & Windows Resolution**:
    - `run_command` tokenizes multi-token command strings like `"ls -la"` or `"git commit -m 'message'"` into executable and arguments instead of searching for an executable named literally `"ls -la.exe"` (`spawn ENOENT`).
-   - Handles quotes, escaped characters, and unquoted Windows paths with spaces.
-3. **Timeout Fallback Bug Resolved**:
-   - Fixed timeout fallback so omitted `timeoutSeconds` defaults safely to 60 seconds instead of producing `NaN` and killing processes after 1ms.
-4. **Windows Batch & Built-in Resolution**:
    - Common Windows batch tools (`npm`, `npx`, `pnpm`, etc.) and built-ins (`dir`, `del`, etc.) execute via `cmd.exe /d /s /c` safely.
+4. **Timeout Fallback Bug Resolved**:
+   - Safe 60-second fallback prevents `NaN` timeout from prematurely terminating commands after 1ms.
 
 ## Completed
 
