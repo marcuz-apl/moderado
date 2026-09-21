@@ -64,6 +64,33 @@ function centerBlock(lines: string[], width?: number): string[] {
   });
 }
 
+export function renderQueuedCommandsBox(commands: readonly string[], width: number): string[] {
+  if (!commands || commands.length === 0) return [];
+  const title = `Queued Commands (${commands.length})`;
+  const remainingDashes = Math.max(0, width - title.length - 5);
+  const lines: string[] = [];
+
+  lines.push('\x1b[38;5;240m╭─ \x1b[1;38;5;221m' + title + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
+  const maxItems = Math.min(commands.length, 4);
+  for (let i = 0; i < maxItems; i++) {
+    const cmd = commands[i];
+    const itemPrefix = `${i + 1}. `;
+    const availCmdWidth = Math.max(20, width - 4 - itemPrefix.length);
+    const shortCmd = cmd.length > availCmdWidth ? cmd.slice(0, availCmdWidth - 3) + '...' : cmd;
+    const content = `\x1b[38;5;221m${itemPrefix}\x1b[0m\x1b[38;5;252m${shortCmd}\x1b[0m`;
+    const plainLen = itemPrefix.length + shortCmd.length;
+    const padding = Math.max(0, width - 4 - plainLen);
+    lines.push(`\x1b[38;5;240m│\x1b[0m  ${content}${' '.repeat(padding)}\x1b[38;5;240m│\x1b[0m`);
+  }
+  if (commands.length > 4) {
+    const moreText = `(+${commands.length - 4} more - type /queue to inspect)`;
+    const padding = Math.max(0, width - 4 - moreText.length);
+    lines.push(`\x1b[38;5;240m│\x1b[0m  \x1b[38;5;244m${moreText}\x1b[0m${' '.repeat(padding)}\x1b[38;5;240m│\x1b[0m`);
+  }
+  lines.push('\x1b[38;5;240m╰' + '─'.repeat(Math.max(0, width - 2)) + '╯\x1b[0m');
+  return lines;
+}
+
 export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const width = getWelcomeCardWidth(options.width);
   const indent = ' '.repeat(getWelcomeIndent(width, options.width));
@@ -84,23 +111,6 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     const preserved = content.replace(/\x1b\[0m/g, '\x1b[0;48;5;236m');
     return surface + preserved + ' '.repeat(Math.max(0, width - visibleLen(content))) + '\x1b[0m';
   };
-
-  const queueLines: string[] = [];
-  if (options.queuedCommands && options.queuedCommands.length > 0) {
-    const total = options.queuedCommands.length;
-    queueLines.push(surfaceLine(` \x1b[1;38;5;221mQueued (${total}):\x1b[0m`));
-    const maxItems = Math.min(total, 3);
-    for (let i = 0; i < maxItems; i++) {
-      const cmd = options.queuedCommands[i];
-      const maxLen = Math.max(20, width - 10);
-      const displayCmd = cmd.length > maxLen ? cmd.slice(0, maxLen - 3) + '...' : cmd;
-      queueLines.push(surfaceLine(`   \x1b[38;5;221m${i + 1}.\x1b[0m \x1b[38;5;252m${displayCmd}\x1b[0m`));
-    }
-    if (total > 3) {
-      queueLines.push(surfaceLine(`   \x1b[38;5;244m(+${total - 3} more)\x1b[0m`));
-    }
-    queueLines.push(surfaceLine());
-  }
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
   const outputRate = options.outputTokenRate === undefined ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
@@ -133,14 +143,20 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const spaces5Count = Math.max(1, width - shortWs.length - right5Raw.length);
   const line5 = left5 + ' '.repeat(spaces5Count) + right5;
 
-  const cardLines = [
-    surfaceLine(),
-    ...queueLines,
-    surfaceLine(textBox),
-    surfaceLine(),
-    line4,
-    line5,
-  ].map((line) => indent + line);
+  const cardLines: string[] = [];
+  const queuedBox = renderQueuedCommandsBox(options.queuedCommands ?? [], width);
+  if (queuedBox.length > 0) {
+    cardLines.push(...queuedBox.map((line) => indent + line));
+    cardLines.push('');
+  }
+
+  cardLines.push(
+    indent + surfaceLine(),
+    indent + surfaceLine(textBox),
+    indent + surfaceLine(),
+    indent + line4,
+    indent + line5,
+  );
 
   if (options.mentionFiles && options.mentionFiles.length > 0) {
     cardLines.push(...renderMentionSuggestionsBox(options.mentionFiles, options.mentionSelection ?? 0).map((line) => indent + line));

@@ -13,6 +13,7 @@ import {
   renderWelcomePopupLayer,
   renderFullWelcomeScreen,
   renderWelcomeCard,
+  renderQueuedCommandsBox,
   renderHelpPopupBox,
   renderExitMessage,
   MODERADO_ASCII_LOGO,
@@ -797,14 +798,23 @@ describe('OpenCode-style Welcome TUI', () => {
       queuedCommands: ['npm test', 'git diff'],
     });
     const plainQueuedCard = stripAnsi(queuedCard);
-    expect(plainQueuedCard).toContain('Queued (2):');
+    expect(plainQueuedCard).toContain('Queued Commands (2)');
     expect(plainQueuedCard).toContain('1. npm test');
     expect(plainQueuedCard).toContain('2. git diff');
-    // Ensure queue appears ABOVE the editable question box marker (❯)
-    const queuePos = plainQueuedCard.indexOf('Queued (2):');
+    expect(plainQueuedCard).toContain('╭─');
+    expect(plainQueuedCard).toContain('╰');
+    // Ensure queue appears in a separate box ABOVE the editable question box marker (❯)
+    const queuePos = plainQueuedCard.indexOf('Queued Commands (2)');
     const inputPos = plainQueuedCard.indexOf(String.fromCodePoint(0x276F));
     expect(queuePos).toBeGreaterThan(-1);
     expect(inputPos).toBeGreaterThan(-1);
     expect(queuePos).toBeLessThan(inputPos);
+
+    // 4. Test renderQueuedCommandsBox directly
+    const box = renderQueuedCommandsBox(['git status', 'npm run build', 'npm test', 'node index.js', 'echo extra'], 80);
+    expect(box.length).toBeGreaterThan(0);
+    expect(stripAnsi(box[0])).toContain('Queued Commands (5)');
+    expect(stripAnsi(box[box.length - 1])).toContain('╰');
+    expect(stripAnsi(box.join('\n'))).toContain('(+1 more - type /queue to inspect)');
   });
 });
