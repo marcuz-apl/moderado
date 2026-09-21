@@ -10,6 +10,8 @@ import {
   listFiles,
   SearchFilesTool,
   RunCommandTool,
+  splitCommandString,
+  parseCommandLine,
   GitDiffTool,
   createDefaultToolRegistry,
 } from '../src/index.js';
@@ -244,6 +246,50 @@ describe('Workspace Tools Suite', () => {
 
       expect(result.status).toBe('error');
       expect(result.output).toContain('Command timed out after 1 seconds');
+    });
+
+    it('splits command strings with arguments and quotes via splitCommandString', () => {
+      expect(splitCommandString('ls -la')).toEqual(['ls', '-la']);
+      expect(splitCommandString('git commit -m "hello world"')).toEqual(['git', 'commit', '-m', 'hello world']);
+      expect(splitCommandString("echo 'foo bar'")).toEqual(['echo', 'foo bar']);
+    });
+
+    it('parses command line when command contains arguments', () => {
+      expect(parseCommandLine('ls -la')).toEqual({
+        executable: 'ls',
+        args: ['-la'],
+      });
+      expect(parseCommandLine('node -e "console.log(1)"', ['--inspect'])).toEqual({
+        executable: 'node',
+        args: ['-e', 'console.log(1)', '--inspect'],
+      });
+    });
+
+    it('executes command string containing arguments when args array is empty', async () => {
+      const result = await RunCommandTool.execute(
+        {
+          command: `${process.execPath} -e "console.log(12345)"`,
+          args: [],
+          timeoutSeconds: 5,
+        },
+        { workspaceRoot: tempDir }
+      );
+
+      expect(result.status).toBe('success');
+      expect(result.output.trim()).toBe('12345');
+    });
+
+    it('executes command without explicit timeoutSeconds without timing out prematurely', async () => {
+      const result = await RunCommandTool.execute(
+        {
+          command: `${process.execPath} -e "console.log('default timeout works')"`,
+          args: [],
+        },
+        { workspaceRoot: tempDir }
+      );
+
+      expect(result.status).toBe('success');
+      expect(result.output.trim()).toBe('default timeout works');
     });
   });
 

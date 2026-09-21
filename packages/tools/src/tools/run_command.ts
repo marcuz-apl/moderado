@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { spawn } from 'node:child_process';
 import {
   IToolDefinition,
@@ -30,6 +31,112 @@ export function getSanitizedEnv(): NodeJS.ProcessEnv {
   return cleanEnv;
 }
 
+export function splitCommandString(str: string): string[] {
+  const tokens: string[] = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i];
+
+    if (char === '\\') {
+      if (process.platform === 'win32') {
+        // On Windows, backslash is a directory separator unless immediately escaping a quote
+        const nextChar = str[i + 1];
+        if (nextChar === '"' || nextChar === "'") {
+          current += nextChar;
+          i++;
+          continue;
+        }
+        current += char;
+        continue;
+      } else {
+        // On POSIX, backslash escapes the next character
+        if (i + 1 < str.length) {
+          current += str[++i];
+          continue;
+        }
+        current += char;
+        continue;
+      }
+    }
+
+    if (char === "'" && !inDoubleQuote) {
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    if (char === '"' && !inSingleQuote) {
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+
+    if (/\s/.test(char) && !inSingleQuote && !inDoubleQuote) {
+      if (current.length > 0) {
+        tokens.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += char;
+  }
+
+  if (current.length > 0) {
+    tokens.push(current);
+  }
+
+  return tokens;
+}
+
+export function parseCommandLine(command: string, args: string[] = []): { executable: string; args: string[] } {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return { executable: '', args: [] };
+  }
+
+  if (args.length > 0) {
+    if (fs.existsSync(trimmed)) {
+      return { executable: trimmed, args };
+    }
+    if (trimmed.includes(' ')) {
+      const parts = splitCommandString(trimmed);
+      return {
+        executable: parts[0] || trimmed,
+        args: [...parts.slice(1), ...args],
+      };
+    }
+    return { executable: trimmed, args };
+  }
+
+  if (fs.existsSync(trimmed)) {
+    return { executable: trimmed, args: [] };
+  }
+
+  // Check if command starts with an existing executable path (e.g. unquoted C:\Program Files\nodejs\node.exe)
+  const lower = trimmed.toLowerCase();
+  for (const ext of ['.exe', '.cmd', '.bat']) {
+    const idx = lower.indexOf(ext);
+    if (idx !== -1 && (idx + ext.length === trimmed.length || /\s/.test(trimmed[idx + ext.length]))) {
+      const candidate = trimmed.slice(0, idx + ext.length);
+      if (fs.existsSync(candidate)) {
+        const rest = trimmed.slice(idx + ext.length).trim();
+        return {
+          executable: candidate,
+          args: rest ? splitCommandString(rest) : [],
+        };
+      }
+    }
+  }
+
+  const parts = splitCommandString(trimmed);
+  return {
+    executable: parts[0] || trimmed,
+    args: parts.slice(1),
+  };
+}
+
 export const RunCommandTool: IToolDefinition<RunCommandParams> = {
   name: 'run_command',
   description: 'shell alias: execute an external command and argument array with shell: false; shell syntax is not interpreted.',
@@ -38,15 +145,21 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
 
   async execute(params: RunCommandParams, context: ToolExecutionContext): Promise<ToolResult> {
     const cwd = resolveInJail(context.workspaceRoot, '.');
+    const { executable, args } = parseCommandLine(params.command, params.args);
 
-    // Windows batch guard: prevent silent shell execution of batch files
-    const cmdLower = params.command.toLowerCase();
-    if (cmdLower.endsWith('.bat') || cmdLower.endsWith('.cmd')) {
-      return {
-        toolName: 'run_command',
-        status: 'error',
-        output: `Error: Cannot execute Windows batch file '${params.command}' directly with shell: false. Invoke via 'cmd.exe' with explicit args ['/c', '${params.command}'].`,
-      };
+    let spawnExec = executable;
+    let spawnArgs = args;
+
+    if (process.platform === 'win32') {
+      const lower = executable.toLowerCase();
+      const isBatch = lower.endsWith('.cmd') || lower.endsWith('.bat');
+      const isCmdBuiltin = ['dir', 'del', 'copy', 'move', 'type', 'mkdir', 'rmdir', 'cls', 'ver', 'vol'].includes(lower);
+      const isCommonNodeCmd = ['npm', 'npx', 'pnpm', 'yarn', 'tsc', 'corepack'].includes(lower);
+
+      if (isBatch || isCmdBuiltin || isCommonNodeCmd) {
+        spawnExec = process.env.COMSPEC || 'cmd.exe';
+        spawnArgs = ['/d', '/s', '/c', executable, ...args];
+      }
     }
 
     return new Promise((resolve) => {
@@ -60,7 +173,7 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
 
       let child: ReturnType<typeof spawn>;
       try {
-        child = spawn(params.command, params.args, {
+        child = spawn(spawnExec, spawnArgs, {
           cwd,
           env: sanitizedEnv,
           shell: false,
@@ -95,12 +208,14 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
         }
       });
 
+      const timeoutSecs = typeof params.timeoutSeconds === 'number' && !isNaN(params.timeoutSeconds) ? params.timeoutSeconds : 60;
+
       // Timeout timer
       const timeoutTimer = setTimeout(() => {
         if (settled) return;
         timedOut = true;
         killProcess();
-      }, params.timeoutSeconds * 1000);
+      }, timeoutSecs * 1000);
 
       // Abort signal listener
       const onAbort = () => {
@@ -166,7 +281,7 @@ export const RunCommandTool: IToolDefinition<RunCommandParams> = {
           return resolve({
             toolName: 'run_command',
             status: 'error',
-            output: `Command timed out after ${params.timeoutSeconds} seconds.\n${output}`,
+            output: `Command timed out after ${timeoutSecs} seconds.\n${output}`,
             metadata: { timedOut: true },
           });
         }
