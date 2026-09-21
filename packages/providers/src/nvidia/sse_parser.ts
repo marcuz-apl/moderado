@@ -64,12 +64,12 @@ export async function* parseSseStream(
           }
 
           const completionChunk: ChatCompletionChunk = {};
-          if (delta?.content) {
-            completionChunk.contentDelta = delta.content;
-          }
           const reasoning = delta?.reasoning_content ?? delta?.thought;
           if (reasoning) {
             completionChunk.reasoningDelta = reasoning;
+          }
+          if (delta?.content && !reasoning) {
+            completionChunk.contentDelta = delta.content;
           }
           if (toolCallChunks.length > 0) {
             completionChunk.toolCallChunks = toolCallChunks;

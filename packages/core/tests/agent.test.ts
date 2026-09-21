@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { AgentLoop, cleanConversationalFiller } from '../src/agent.js';
+import { AgentLoop, cleanConversationalFiller, DEFAULT_MAX_OUTPUT_TOKENS } from '../src/agent.js';
 import { PolicyManager } from '../src/policy.js';
 import { Router } from '../src/router.js';
 import { FakeProviderAdapter } from '@moderado/providers';
@@ -559,7 +559,7 @@ describe('AgentLoop (Core Execution Engine)', () => {
       approvalHandler: autoApproveHandler,
     });
 
-    expect(provider.recordedCalls[0].maxTokens).toBe(250);
+    expect(provider.recordedCalls[0].maxTokens).toBe(DEFAULT_MAX_OUTPUT_TOKENS);
 
     provider.queueTextResponse('Response with custom limit.');
     await loop.run('Custom limit test', {
@@ -610,6 +610,9 @@ describe('AgentLoop (Core Execution Engine)', () => {
 
     const withUnclosedThink = '<think>\nStill reasoning when cut off...';
     expect(cleanConversationalFiller(withUnclosedThink)).toBe('');
+
+    const withUntaggedThinking = "Here's a thinking process:\n\n1. Analyze request...\n\nThe answer is 42.";
+    expect(cleanConversationalFiller(withUntaggedThinking)).toBe('The answer is 42.');
   });
 
   it('separates <think> tags from streaming contentDelta into reasoning_delta events', async () => {

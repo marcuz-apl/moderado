@@ -26,6 +26,8 @@ import { HostEventStream } from './host_event_stream.js';
 import { SubagentDelegator } from './subagent.js';
 import { ThinkTagStreamFilter } from './think_filter.js';
 
+export const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
+
 export interface AgentRunOptions {
   workspaceRoot: string;
   provider: IProviderAdapter;
@@ -43,7 +45,7 @@ export interface AgentRunOptions {
   onMutationCompleted?: (toolName: string, parameters: unknown, result: ToolResult) => Promise<void> | void;
   /** Internal boundary: child loops must not create further subagents. */
   allowSubagentDelegation?: boolean;
-  /** Hard cap on generated output tokens to prevent runaway token spend. Defaults to 250. */
+  /** Hard cap on generated output tokens to prevent runaway token spend. Defaults to DEFAULT_MAX_OUTPUT_TOKENS (4096). */
   maxOutputTokens?: number;
 }
 
@@ -91,6 +93,12 @@ export function cleanConversationalFiller(text: string): string {
   // Strip complete or unclosed thinking/reasoning blocks
   cleaned = cleaned.replace(/<\s*(?:think|thought|reasoning)(?:\s+[^>]*)?>[\s\S]*?<\/\s*(?:think|thought|reasoning)\s*>\s*/gi, '');
   cleaned = cleaned.replace(/<\s*(?:think|thought|reasoning)(?:\s+[^>]*)?>[\s\S]*$/gi, '');
+  // Strip untagged thinking process blocks (either extract subsequent answer or clear if unclosed)
+  if (/^(?:Here's\s+(?:a\s+|my\s+)?thinking\s+process|Thinking\s+process)/i.test(cleaned)) {
+    const parts = cleaned.split(/\r?\n\r?\n/);
+    const answerIndex = parts.findIndex((p, idx) => idx > 0 && !/^\s*(?:\d+\.|\*|-)/.test(p));
+    cleaned = answerIndex !== -1 ? parts.slice(answerIndex).join('\n\n').trim() : '';
+  }
   // Strip common multi-line leading filler
   cleaned = cleaned.replace(/^(?:Sure(?: thing)?[!,.]?|Certainly[!,.]?|Of course[!,.]?|Here is[^\n:]*[:.]?|Here's[^\n:]*[:.]?|I would be happy to[^\n:]*[:.]?|I'd be happy to[^\n:]*[:.]?|Great[!,.]?|Okay[!,.]?|Alright[!,.]?)\s*(?:\r?\n)+/i, '');
   // Strip single-line leading filler prefix like "Sure! Here is the answer: " or "Sure, ..."
@@ -272,7 +280,7 @@ export class AgentLoop {
                   ...options.tools.getDeclarations(),
                   ...(options.allowSubagentDelegation === false ? [] : [SUBAGENT_DECLARATION]),
                 ],
-          maxTokens: options.maxOutputTokens ?? 250,
+          maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
           signal,
         });
 

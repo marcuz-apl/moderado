@@ -328,4 +328,37 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(caughtError).toBeInstanceOf(RateLimitError);
     expect(caughtError.message).toContain('Rate limit exceeded on provider');
   });
+
+  it('suppresses mirrored contentDelta when reasoning_content is present in the chunk', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      // Chunk 1: pure reasoning chunk
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: 'Thinking...' } }] })}\n\n`);
+      // Chunk 2: mirrored content alongside reasoning_content (NVIDIA NIM fallback behavior)
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'Thinking...', reasoning_content: ' done' } }] })}\n\n`);
+      // Chunk 3: genuine assistant answer content
+      res.write(`data: ${JSON.stringify({ choices: [{ delta: { content: 'The answer is 42.' } }] })}\n\n`);
+      res.write('data: [DONE]\n\n');
+      res.end();
+    };
+
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl });
+    const reasoningChunks: string[] = [];
+    const contentChunks: string[] = [];
+
+    for await (const chunk of adapter.streamChat({
+      modelId: 'nvidia/nemotron-3.5-lightning-30b-a3b',
+      messages: [{ role: 'user', content: 'What is the answer?' }],
+    })) {
+      if (chunk.reasoningDelta) reasoningChunks.push(chunk.reasoningDelta);
+      if (chunk.contentDelta) contentChunks.push(chunk.contentDelta);
+    }
+
+    expect(reasoningChunks.join('')).toBe('Thinking... done');
+    expect(contentChunks.join('')).toBe('The answer is 42.');
+  });
 });

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AgentLoop, PolicyManager, Router } from '@moderado/core';
+import { AgentLoop, DEFAULT_MAX_OUTPUT_TOKENS, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot } from '@moderado/tools';
 import { CliParsedArgs } from '../args.js';
@@ -118,7 +118,7 @@ export async function handleRunCommand(
       approvalHandler,
       router,
       policy,
-      maxOutputTokens: args.maxTokens ?? 250,
+      maxOutputTokens: args.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       routeOptions: {
         pinnedModelId: selectedModel,
         allowPaid,

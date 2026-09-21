@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { AgentLoop, PolicyManager, Router, cleanConversationalFiller } from '@moderado/core';
+import { AgentLoop, PolicyManager, Router, cleanConversationalFiller, DEFAULT_MAX_OUTPUT_TOKENS } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, resolveInJail, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
@@ -734,7 +734,7 @@ export async function executeBtwQuery(
     const stream = provider.streamChat({
       modelId: currentModel,
       messages: btwMessages,
-      maxTokens: 250,
+      maxTokens: 2048,
       signal: activeSignal,
     });
 
@@ -1446,7 +1446,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
       const runAgent = () => loop.run(evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
-        maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? 250,
+        maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'assistant_delta') {
