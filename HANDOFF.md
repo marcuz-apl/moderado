@@ -1,6 +1,6 @@
 # Project Handoff
 
-Updated: 2026-09-21 21:00 UTC
+Updated: 2026-09-21 21:05 UTC
 Branch: master
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -9,7 +9,8 @@ Branch: master
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
-Commit: `v0.2.58+260921u`
+<<<<<<< HEAD
+Commit: `v0.2.58+260921v`
 Status: Widened /help popup box and slash command candidate suggestions box to hold long descriptions without spearing out. All 317 tests passing, packaging certified, and typecheck clean.
 =======
 Commit: `v0.2.51+260921p`
@@ -39,22 +40,29 @@ Status: Positioned command queue above the editable question box (Cline / Antigr
 Commit: `v0.2.57+2609216`
 Status: Implemented separate bordered box for Queued Commands directly above the Editable question input box (Cline / Antigravity IDE UI). All 330 tests passing offline, typecheck clean, binary linked globally.
 >>>>>>> c397d0b (v0.2.58+2609217 docs: update HANDOFF.md with separate queued commands box details)
+=======
+Commit: `v0.2.58+2609219`
+Status: Implemented Claude Code-style `/btw` ("by the way") ephemeral side question slash command. All 332 tests passing offline, typecheck clean, binary linked globally.
+>>>>>>> c11e23a (v0.2.59+260921a docs: update handoff with /btw feature completion)
 
 ## Summary
 
-1. **Dedicated Bordered Queued Commands Box ([`apps/cli/src/ui/welcome.ts`](file:///d:/projects/moderado/apps/cli/src/ui/welcome.ts#L67-L94))**:
+1. **Claude Code-style `/btw` Slash Command ([`apps/cli/src/commands/chat.ts`](file:///d:/projects/moderado/apps/cli/src/commands/chat.ts#L818-L910))**:
+   - **Zero Session Pollution**: Ephemeral side questions bypass `activeSession.messages` and disk persistence, preventing context window bloating.
+   - **Brevity & Token Cap**: Runs a single-turn completion with a custom extreme brevity system prompt and strict 250-token limit with no tools.
+   - **Dismissible Overlay**: Results render in an in-place bordered popup box (`renderBoxLines('By The Way (/btw)', ...)`) dismissible with `Esc`, `Enter`, or `q`.
+   - **Recent History Review**: Bare `/btw` with no arguments reviews the 5 most recent side questions from the current session or shows usage guidance if empty.
+   - **Help & Autocomplete Integration**: Registered in `STANDARD_SLASH_COMMANDS`, `SLASH_COMMANDS`, and `/help` popup box.
+2. **Dedicated Bordered Queued Commands Box ([`apps/cli/src/ui/welcome.ts`](file:///d:/projects/moderado/apps/cli/src/ui/welcome.ts#L67-L94))**:
    - Implemented `renderQueuedCommandsBox`: renders a standalone bordered box (`╭─ Queued Commands (N) ──────────╮ ... ╰──────────────────────────╯`) using terminal box-drawing characters with amber highlights.
-   - Positioned this separate box directly **above** the editable question composer card, separated by a clean spacer line.
-   - Width and centering indentation strictly match the composer card.
-   - When no commands are queued, zero extra lines are drawn, keeping the interface minimalist.
-   - Verified via unit and integration tests in `apps/cli/tests/welcome.test.ts`.
-2. **Extreme Brevity & Default Minimal Token Architecture**:
-   - **Layer 1 (System Prompt Extreme Brevity Directives)**: In `packages/core/src/agent.ts`, `DEFAULT_SYSTEM_PROMPT` mandates 1–2 sentences / <35 words, zero conversational filler, code-only output for code queries, and no headers.
-   - **Layer 2 (Ultra-Compact Instant Local Fast-Routing)**: In `apps/cli/src/commands/chat.ts`, `resolveLocalMetaQuery` returns ultra-concise one-line responses for identity, model, provider, tokens/cost, version, and workspace in 1ms without API calls.
-   - **Layer 3 (Physical Output Token Cap)**: Lowered default `maxOutputTokens` from 1024 to 250 tokens across `packages/core/src/agent.ts`, `apps/cli/src/commands/chat.ts`, and `apps/cli/src/commands/run.ts`.
-   - **Layer 4 (Anti-Filler Filter & Tool Truncation)**: `cleanConversationalFiller` automatically strips remote model preambles and postambles before display.
-3. **Verification & Linking**:
-   - All 48 test suites and 330 tests pass offline (`npm test`).
+   - Positioned directly above the editable question composer card.
+3. **Four-Layer Token Minimization & Brevity**:
+   - **Layer 1**: System prompt brevity directives.
+   - **Layer 2**: Ultra-compact local fast-routing.
+   - **Layer 3**: 250-token output cap.
+   - **Layer 4**: Conversational filler cleaner.
+4. **Verification & Linking**:
+   - All 48 test suites and 332 tests pass offline (`npm test`).
    - Rebuilt all packages (`npm run build; npm run prepare:package`).
    - Globally linked (`npm --prefix apps/cli link`).
 
@@ -62,10 +70,11 @@ Status: Implemented separate bordered box for Queued Commands directly above the
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build; npm run prepare:package` — PASS
-- `npm test` — PASS (48 test files, 330 tests passed)
+- `npm test` — PASS (48 test files, 332 tests passed)
 - `npm --prefix apps/cli link` — PASS
-- `node apps/cli/dist/index.js --version` — PASS (`v0.2.57+2609216`)
+- `node apps/cli/dist/index.js --version` — PASS (`v0.2.58+2609219`)
 
 ## Blockers
 
 - None.
+
