@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { AgentLoop } from '../src/agent.js';
+import { AgentLoop, cleanConversationalFiller } from '../src/agent.js';
 import { PolicyManager } from '../src/policy.js';
 import { Router } from '../src/router.js';
 import { FakeProviderAdapter } from '@moderado/providers';
@@ -544,9 +544,9 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(provider.recordedCalls.length).toBe(1);
     const systemMessage = provider.recordedCalls[0].messages.find((m) => m.role === 'system');
     expect(systemMessage).toBeDefined();
-    expect(systemMessage?.content).toContain('CONCISENESS & TOKEN EFFICIENCY (DEFAULT MODE)');
+    expect(systemMessage?.content).toContain('CRITICAL DIRECTIVE — EXTREME BREVITY');
     expect(systemMessage?.content).toContain('Zero conversational filler');
-    expect(systemMessage?.content).toContain('Answer in the fewest tokens possible');
+    expect(systemMessage?.content).toContain('Answer in 1 to 2 short sentences or under 35 words');
   });
 
   it('bounds output tokens via maxTokens (Layer 3) with default or custom cap', async () => {
@@ -559,7 +559,7 @@ describe('AgentLoop (Core Execution Engine)', () => {
       approvalHandler: autoApproveHandler,
     });
 
-    expect(provider.recordedCalls[0].maxTokens).toBe(1024);
+    expect(provider.recordedCalls[0].maxTokens).toBe(250);
 
     provider.queueTextResponse('Response with custom limit.');
     await loop.run('Custom limit test', {
@@ -567,10 +567,10 @@ describe('AgentLoop (Core Execution Engine)', () => {
       provider,
       tools,
       approvalHandler: autoApproveHandler,
-      maxOutputTokens: 256,
+      maxOutputTokens: 180,
     });
 
-    expect(provider.recordedCalls[1].maxTokens).toBe(256);
+    expect(provider.recordedCalls[1].maxTokens).toBe(180);
   });
 
   it('truncates older tool output payloads in conversation history (Layer 4) to protect token budget', async () => {
@@ -596,5 +596,13 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(toolMsg).toBeDefined();
     expect((toolMsg?.content as string).length).toBeLessThan(1600);
     expect(toolMsg?.content).toContain('earlier tool output truncated for token efficiency');
+  });
+
+  it('strips conversational filler and preambles from model output (Layer 4)', () => {
+    const rawWithPreamble = 'Sure! Here is the answer:\nGit stash temporarily stashes changes.\nHope this helps! Let me know if you need anything else.';
+    expect(cleanConversationalFiller(rawWithPreamble)).toBe('Git stash temporarily stashes changes.');
+
+    const rawSingleLine = 'Certainly! The sum is 4.';
+    expect(cleanConversationalFiller(rawSingleLine)).toBe('The sum is 4.');
   });
 });

@@ -118,7 +118,7 @@ export async function handleRunCommand(
       approvalHandler,
       router,
       policy,
-      maxOutputTokens: args.maxTokens ?? 1024,
+      maxOutputTokens: args.maxTokens ?? 250,
       routeOptions: {
         pinnedModelId: selectedModel,
         allowPaid,

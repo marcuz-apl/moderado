@@ -42,7 +42,7 @@ export interface AgentRunOptions {
   onMutationCompleted?: (toolName: string, parameters: unknown, result: ToolResult) => Promise<void> | void;
   /** Internal boundary: child loops must not create further subagents. */
   allowSubagentDelegation?: boolean;
-  /** Hard cap on generated output tokens to prevent runaway token spend. Defaults to 1024. */
+  /** Hard cap on generated output tokens to prevent runaway token spend. Defaults to 250. */
   maxOutputTokens?: number;
 }
 
@@ -60,18 +60,17 @@ export interface AgentRunResult {
   usage?: ChatUsage;
 }
 
-export const DEFAULT_SYSTEM_PROMPT = `You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
+export const DEFAULT_SYSTEM_PROMPT = `CRITICAL DIRECTIVE — EXTREME BREVITY (DEFAULT MODE):
+- Extreme brevity is mandatory. Answer in 1 to 2 short sentences or under 35 words.
+- Zero conversational filler: Never output greetings, pleasantries, preambles ("Sure", "Here is", "Certainly", "I'd be happy to"), or sign-offs ("Hope this helps", "Let me know").
+- Never restate, rephrase, or echo the user's question before answering. Start immediately with the direct answer.
+- Zero markdown headers (no ## or ###), no bullet lists unless specifically requested, no conclusion sections.
+- For code, commands, or file edits: Output ONLY the raw code or command block. Do NOT explain what it does or how it works.
+- State only direct, factual answers. Do NOT provide unsolicited background, tips, or commentary.
+
+You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
 You follow the Ponytail Decision Ladder: YAGNI, standard library first, zero unnecessary dependencies, and minimal code.
 Use the provided workspace tools to inspect, read, search, modify, and test files within the workspace.
-
-CONCISENESS & TOKEN EFFICIENCY (DEFAULT MODE):
-- Be extremely direct, concise, and compact. Answer in the fewest tokens possible.
-- Output ONLY what is necessary to answer the question or complete the task.
-- Zero conversational filler: Never output preambles ("Sure!", "I'd be happy to help", "Certainly"), polite pleasantries, apologies, or conversational transitions.
-- Never restate, rephrase, or echo the user's prompt or question before answering.
-- Avoid postambles, summaries, or unsolicited tips ("Let me know if you need anything else!").
-- When asked a question, provide direct, factual one-liners or bullet points rather than lengthy essays.
-- For code modifications or code questions, output only the minimal necessary code or diff without essay-like commentary unless explicitly requested.
 
 CORE OPERATIONAL RULES:
 - If the user prompt is a greeting, question, explanation request, or conversational query, output regular markdown text directly without calling any tools.
@@ -88,6 +87,18 @@ export function buildSystemPrompt(modelId: string, workspaceRoot: string): strin
 SYSTEM RUNTIME CONTEXT:
 - Active Model: ${modelId}
 - Workspace Root: ${workspaceRoot}`;
+}
+
+export function cleanConversationalFiller(text: string): string {
+  if (!text) return text;
+  let cleaned = text.trim();
+  // Strip common multi-line leading filler
+  cleaned = cleaned.replace(/^(?:Sure(?: thing)?[!,.]?|Certainly[!,.]?|Of course[!,.]?|Here is[^\n:]*[:.]?|Here's[^\n:]*[:.]?|I would be happy to[^\n:]*[:.]?|I'd be happy to[^\n:]*[:.]?|Great[!,.]?|Okay[!,.]?|Alright[!,.]?)\s*(?:\r?\n)+/i, '');
+  // Strip single-line leading filler prefix like "Sure! Here is the answer: " or "Sure, ..."
+  cleaned = cleaned.replace(/^(?:Sure(?: thing)?[!,.]?|Certainly[!,.]?|Of course[!,.]?|I'd be happy to help[!,.]?)\s+(?:Here (?:is|are)[^:\n]*:\s*)?/i, '');
+  // Strip common trailing sign-offs
+  cleaned = cleaned.replace(/(?:\r?\n)+(?:Hope this helps[^\n]*|Let me know if (?:you need|you have)[^\n]*|Feel free to ask[^\n]*)\.?\s*$/i, '');
+  return cleaned.trim();
 }
 
 const PSEUDO_ANSWER_TOOLS = new Set([
@@ -262,7 +273,7 @@ export class AgentLoop {
                   ...options.tools.getDeclarations(),
                   ...(options.allowSubagentDelegation === false ? [] : [SUBAGENT_DECLARATION]),
                 ],
-          maxTokens: options.maxOutputTokens ?? 1024,
+          maxTokens: options.maxOutputTokens ?? 250,
           signal,
         });
 
@@ -349,7 +360,7 @@ export class AgentLoop {
         };
       }
 
-      finalAssistantText = assistantText || null;
+      finalAssistantText = cleanConversationalFiller(assistantText) || null;
 
       // 4. Assemble Completed Tool Calls
       const completedToolCalls: ToolCall[] = [];

@@ -1,6 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
-import { AgentLoop, PolicyManager, Router } from '@moderado/core';
+import { AgentLoop, PolicyManager, Router, cleanConversationalFiller } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, resolveInJail, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
@@ -176,7 +176,7 @@ export function resolveTurnAssistantAnswer(
   const turnMessages = result.messages.slice(previousHistoryLength);
   const turnAssistant = [...turnMessages].reverse().find((m) => m.role === 'assistant' && m.content?.trim())?.content;
   return {
-    answer: turnAssistant || streamedAnswer,
+    answer: cleanConversationalFiller(turnAssistant || streamedAnswer),
     isError: false,
   };
 }
@@ -386,36 +386,31 @@ export interface LocalMetaQueryContext {
 
 export function resolveLocalMetaQuery(input: string, context: LocalMetaQueryContext): string | undefined {
   if (isLocalIdentityQuery(input)) {
-    const model = context.currentModel ?? 'no model connected';
+    const model = context.currentModel ?? 'no model';
     const provider = context.providerName ?? 'unconnected';
-    return `I am **Moderado**, a lightweight, pragmatic AI coding assistant built on the Ponytail Decision Ladder: minimalist, standard-library-first, and bloat-free.\n\n` +
-      `• **Active Model:** ${model}\n` +
-      `• **Provider:** ${provider}\n` +
-      `• **Mode:** [${context.activeMode}]\n` +
-      `• **Workspace:** \`${context.workspace}\`\n\n` +
-      `To switch models, type \`/model\`. To switch or connect providers, type \`/connect\`.`;
+    return `**Moderado** — minimalist, bloat-free AI coding agent (${model} via ${provider}).`;
   }
   if (isLocalModelQuery(input)) {
-    const model = context.currentModel ?? 'no model connected';
+    const model = context.currentModel ?? 'none';
     const provider = context.providerName ?? 'unconnected';
-    return `Currently running against model: **${model}**\nProvider: **${provider}**\nMode: **${context.activeMode}**\nWorkspace: \`${context.workspace}\`\n\nTo switch models, type \`/model\`. To switch or connect providers, type \`/connect\`.`;
+    return `**Model:** \`${model}\` (${provider}, [${context.activeMode}]).`;
   }
   if (isLocalProviderQuery(input)) {
-    const provider = context.providerName ?? 'no provider connected';
-    const model = context.currentModel ?? 'no model connected';
-    return `Currently connected to provider: **${provider}**\nActive model: **${model}**\nMode: **${context.activeMode}**\nWorkspace: \`${context.workspace}\`\n\nTo switch or connect a different provider, type \`/connect\`.`;
+    const provider = context.providerName ?? 'none';
+    const model = context.currentModel ?? 'none';
+    return `**Provider:** ${provider} (model: \`${model}\`).`;
   }
   if (isLocalTokenQuery(input)) {
     const tokens = context.sessionTokens ?? 0;
     const cost = context.sessionCost ?? '$0.00';
-    return `📊 **Session Usage:**\n• **Tokens:** ${tokens.toLocaleString()} tokens\n• **Estimated Cost:** ${cost}`;
+    return `**Session:** ${tokens.toLocaleString()} tokens (${cost})`;
   }
   if (isLocalVersionQuery(input)) {
     const ver = context.version ?? 'unknown';
-    return `⚡ **Moderado Version:** \`${ver}\` (Alfazen-governed lightweight CLI coding agent)`;
+    return `\`${ver}\``;
   }
   if (isLocalWorkspaceQuery(input)) {
-    return `📁 **Active Workspace:** \`${context.workspace}\``;
+    return `\`${context.workspace}\``;
   }
   return undefined;
 }
@@ -1267,7 +1262,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
       const runAgent = () => loop.run(evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
-        maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? 1024,
+        maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? 250,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'assistant_delta') {

@@ -393,8 +393,6 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(answer).toBeDefined();
     expect(answer).toContain('nvidia/nemotron-3-ultra-550b-a55b');
     expect(answer).toContain('NVIDIA NIM');
-    expect(answer).toContain('/test/workspace');
-    expect(answer).toContain('/model');
   });
 
   it('detects and resolves identity questions ("who are you?") instantly without external network calls', () => {
@@ -415,12 +413,8 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
 
     expect(answer).toBeDefined();
     expect(answer).toContain('Moderado');
-    expect(answer).toContain('Ponytail Decision Ladder');
     expect(answer).toContain('agnes-3.0-flash');
     expect(answer).toContain('agnes');
-    expect(answer).toContain('/test/workspace');
-    expect(answer).toContain('/model');
-    expect(answer).toContain('/connect');
   });
 
   it('TurnCommandQueue manages FIFO commands and editing draft', () => {
@@ -721,16 +715,14 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     };
 
     const tokenAnswer = resolveLocalMetaQuery('how many tokens?', context);
-    expect(tokenAnswer).toContain('Session Usage');
+    expect(tokenAnswer).toContain('Session:');
     expect(tokenAnswer).toContain('1,250 tokens');
     expect(tokenAnswer).toContain('$0.0025');
 
     const versionAnswer = resolveLocalMetaQuery('what version?', context);
-    expect(versionAnswer).toContain('Moderado Version');
     expect(versionAnswer).toContain('v0.2.52+test');
 
     const workspaceAnswer = resolveLocalMetaQuery('where are we?', context);
-    expect(workspaceAnswer).toContain('Active Workspace');
     expect(workspaceAnswer).toContain('D:/test/workspace');
   });
 });
