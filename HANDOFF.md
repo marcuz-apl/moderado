@@ -1,6 +1,6 @@
 # Project Handoff
 
-Updated: 2026-09-21 20:55 UTC
+Updated: 2026-09-21 21:00 UTC
 Branch: master
 <<<<<<< HEAD
 <<<<<<< HEAD
@@ -8,7 +8,8 @@ Branch: master
 <<<<<<< HEAD
 <<<<<<< HEAD
 <<<<<<< HEAD
-Commit: `v0.2.57+260921s`
+<<<<<<< HEAD
+Commit: `v0.2.57+260921t`
 Status: Widened /help popup box and slash command candidate suggestions box to hold long descriptions without spearing out. All 317 tests passing, packaging certified, and typecheck clean.
 =======
 Commit: `v0.2.51+260921p`
@@ -34,20 +35,26 @@ Status: Enforced extreme brevity default mode (1-2 sentences / <35 words, 250 to
 Commit: `v0.2.56+2609214`
 Status: Positioned command queue above the editable question box (Cline / Antigravity IDE layout). All 330 tests passing offline, typecheck clean, binary linked globally.
 >>>>>>> 3553fcd (v0.2.57+2609215 docs: update HANDOFF.md with command queue position above input box)
+=======
+Commit: `v0.2.57+2609216`
+Status: Implemented separate bordered box for Queued Commands directly above the Editable question input box (Cline / Antigravity IDE UI). All 330 tests passing offline, typecheck clean, binary linked globally.
+>>>>>>> c397d0b (v0.2.58+2609217 docs: update HANDOFF.md with separate queued commands box details)
 
 ## Summary
 
-1. **Command Queue Positioned Above Question Box (Cline / Antigravity IDE UI)**:
-   - In `apps/cli/src/ui/welcome.ts`, restructured `renderWelcomeCard` so that queued commands are rendered in a clean, numbered list directly **above** the editable question composer box (`textBox`), matching the layout of Cline and Antigravity IDE.
-   - Preserves cursor alignment on `textBox` across redraws and resizes with zero cursor drift.
-   - Verified via `apps/cli/tests/welcome.test.ts` asserting that `Queued (N):` strictly precedes the prompt marker `❯`.
+1. **Dedicated Bordered Queued Commands Box ([`apps/cli/src/ui/welcome.ts`](file:///d:/projects/moderado/apps/cli/src/ui/welcome.ts#L67-L94))**:
+   - Implemented `renderQueuedCommandsBox`: renders a standalone bordered box (`╭─ Queued Commands (N) ──────────╮ ... ╰──────────────────────────╯`) using terminal box-drawing characters with amber highlights.
+   - Positioned this separate box directly **above** the editable question composer card, separated by a clean spacer line.
+   - Width and centering indentation strictly match the composer card.
+   - When no commands are queued, zero extra lines are drawn, keeping the interface minimalist.
+   - Verified via unit and integration tests in `apps/cli/tests/welcome.test.ts`.
 2. **Extreme Brevity & Default Minimal Token Architecture**:
-   - **Layer 1 (System Prompt Extreme Brevity Directives)**: In `packages/core/src/agent.ts`, moved `CRITICAL DIRECTIVE — EXTREME BREVITY (DEFAULT MODE)` to the very top of `DEFAULT_SYSTEM_PROMPT`. Mandates answers in 1–2 short sentences or <35 words, zero filler, zero headers, code-only output for code questions, and no summaries.
-   - **Layer 2 (Ultra-Compact Instant Local Fast-Routing)**: In `apps/cli/src/commands/chat.ts`, streamlined `resolveLocalMetaQuery` to return ultra-concise one-line responses for identity, model, provider, tokens/cost, version, and workspace with 0 LLM calls in 1ms.
-   - **Layer 3 (Physical Output Token Cap)**: Lowered `maxOutputTokens` default from 1024 down to 250 tokens across `packages/core/src/agent.ts`, `apps/cli/src/commands/chat.ts`, and `apps/cli/src/commands/run.ts`.
-   - **Layer 4 (Anti-Filler Post-Processing Filter & Tool Truncation)**: Exported and applied `cleanConversationalFiller` to strip any conversational preambles ("Sure!", "Certainly!", "Here is...") and trailing pleasantries.
+   - **Layer 1 (System Prompt Extreme Brevity Directives)**: In `packages/core/src/agent.ts`, `DEFAULT_SYSTEM_PROMPT` mandates 1–2 sentences / <35 words, zero conversational filler, code-only output for code queries, and no headers.
+   - **Layer 2 (Ultra-Compact Instant Local Fast-Routing)**: In `apps/cli/src/commands/chat.ts`, `resolveLocalMetaQuery` returns ultra-concise one-line responses for identity, model, provider, tokens/cost, version, and workspace in 1ms without API calls.
+   - **Layer 3 (Physical Output Token Cap)**: Lowered default `maxOutputTokens` from 1024 to 250 tokens across `packages/core/src/agent.ts`, `apps/cli/src/commands/chat.ts`, and `apps/cli/src/commands/run.ts`.
+   - **Layer 4 (Anti-Filler Filter & Tool Truncation)**: `cleanConversationalFiller` automatically strips remote model preambles and postambles before display.
 3. **Verification & Linking**:
-   - All 48 test suites, 330 tests pass offline (`npm test`).
+   - All 48 test suites and 330 tests pass offline (`npm test`).
    - Rebuilt all packages (`npm run build; npm run prepare:package`).
    - Globally linked (`npm --prefix apps/cli link`).
 
@@ -57,7 +64,7 @@ Status: Positioned command queue above the editable question box (Cline / Antigr
 - `npm run build; npm run prepare:package` — PASS
 - `npm test` — PASS (48 test files, 330 tests passed)
 - `npm --prefix apps/cli link` — PASS
-- `node apps/cli/dist/index.js --version` — PASS (`v0.2.56+2609214`)
+- `node apps/cli/dist/index.js --version` — PASS (`v0.2.57+2609216`)
 
 ## Blockers
 
