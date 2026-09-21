@@ -1,9 +1,9 @@
 # Project Handoff
 
-Updated: 2026-09-21 05:38 UTC
+Updated: 2026-09-21 05:41 UTC
 Branch: master
-Commit: 2243201 (`v0.2.39+2609212`)
-Status: M7.8 complete in the working tree; typecheck, build, and test suite green.
+Commit: 4339581 (`v0.2.40+2609213`)
+Status: M7.8 committed; typecheck, build, and test suite green.
 
 ## Summary
 
