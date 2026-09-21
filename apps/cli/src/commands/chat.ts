@@ -815,7 +815,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           commandQueue.push(task);
         }
       },
-      onBtw: async (command, drawFrame) => {
+      onBtw: async (command, drawFrame, btwSignal) => {
         const question = command.replace(/^\/btw\s*/i, '').trim();
         if (!question) {
           if (btwHistory.length === 0) {
@@ -860,8 +860,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         await drawFrame(renderBoxLines('By The Way (/btw)', [
           `Q: ${question}`,
           '',
-          'Thinking (/btw)...',
-        ], 76));
+          '\x1b[38;5;221mThinking (/btw)... (Press Esc to cancel)\x1b[0m',
+        ], 76), { waitDismiss: false });
+
+        if (btwSignal?.aborted || signal?.aborted) return;
 
         try {
           const btwMessages: ChatMessage[] = [
@@ -876,11 +878,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           ];
 
           let answer = '';
+          const activeSignal = btwSignal || signal;
           const stream = provider.streamChat({
             modelId: currentModel,
             messages: btwMessages,
             maxTokens: 250,
-            signal,
+            signal: activeSignal,
           });
 
           for await (const chunk of stream) {
@@ -888,6 +891,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
               answer += chunk.contentDelta;
             }
           }
+
+          if (activeSignal?.aborted) return;
 
           const cleanedAnswer = cleanConversationalFiller(answer) || 'No response generated.';
           btwHistory.push({ question, answer: cleanedAnswer, timestamp: Date.now() });
@@ -901,6 +906,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             '\x1b[38;5;244m(Not saved to session history • Esc or Enter to close)\x1b[0m',
           ], 76));
         } catch (err: any) {
+          if (btwSignal?.aborted || signal?.aborted) {
+            return;
+          }
           await drawFrame(renderBoxLines('By The Way (/btw) — Error', [
             `Failed to answer side question: ${err?.message || String(err)}`,
             '',

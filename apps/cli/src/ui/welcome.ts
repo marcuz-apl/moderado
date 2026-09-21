@@ -518,7 +518,11 @@ export interface PromptInteractiveTurnOptions {
   onMcp?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onQueue?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
-  onBtw?: (command: string, drawFrame: (popupLines: string[]) => void | Promise<void>) => Promise<void>;
+  onBtw?: (
+    command: string,
+    drawFrame: (popupLines: string[], options?: { waitDismiss?: boolean }) => void | Promise<void>,
+    signal?: AbortSignal
+  ) => Promise<void>;
   onWorkflow?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<'build' | undefined>;
   onInit?: (drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onMentionComplete?: (token: string) => Promise<string[]>;
@@ -901,22 +905,36 @@ export async function promptInteractiveTurn(
           setInput('');
           unbindComposerInput();
           if (options.onBtw) {
-            await options.onBtw(command, async (popupLines) => {
-              stdout.write('\x1b[H\x1b[J');
-              stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
-              await new Promise<void>((dismissResolve) => {
-                const onDismiss = (s: string, k: any) => {
-                  if (
-                    (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
-                    s === 'q' || s === 'Q' || s === '\x1b'
-                  ) {
-                    stdin.removeListener('keypress', onDismiss);
-                    dismissResolve();
-                  }
-                };
-                stdin.on('keypress', onDismiss);
-              });
-            });
+            const ac = new AbortController();
+            const onBtwKey = (s: string, k: any) => {
+              if ((k && k.name === 'escape') || s === '\x1b') {
+                ac.abort();
+              }
+            };
+            stdin.on('keypress', onBtwKey);
+
+            try {
+              await options.onBtw(command, async (popupLines, frameOpts) => {
+                stdout.write('\x1b[H\x1b[J');
+                stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+                if (frameOpts?.waitDismiss !== false && !ac.signal.aborted) {
+                  await new Promise<void>((dismissResolve) => {
+                    const onDismiss = (s: string, k: any) => {
+                      if (
+                        (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
+                        s === 'q' || s === 'Q' || s === '\x1b'
+                      ) {
+                        stdin.removeListener('keypress', onDismiss);
+                        dismissResolve();
+                      }
+                    };
+                    stdin.on('keypress', onDismiss);
+                  });
+                }
+              }, ac.signal);
+            } finally {
+              stdin.removeListener('keypress', onBtwKey);
+            }
           }
           readlineModule.emitKeypressEvents(stdin);
           stdin.resume();
