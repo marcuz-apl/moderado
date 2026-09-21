@@ -691,6 +691,27 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(aborted).toBe(false);
   });
 
+  it('handleGenerationKeypress routes /btw directly to onBtw action instead of queue', () => {
+    const queue = new TurnCommandQueue();
+    let btwCalledWith = '';
+    const queuedItems: string[] = [];
+
+    const actions = {
+      abort: () => {},
+      onDraftChange: () => {},
+      onQueueAdd: (item: string) => { queuedItems.push(item); },
+      onBtw: (cmd: string) => { btwCalledWith = cmd; },
+    };
+
+    queue.setDraft('/btw how do I sort an array in TypeScript?');
+    handleGenerationKeypress('\r', { name: 'return' }, queue, actions);
+
+    expect(btwCalledWith).toBe('/btw how do I sort an array in TypeScript?');
+    expect(queue.currentDraft).toBe('');
+    expect(queue.length).toBe(0);
+    expect(queuedItems.length).toBe(0);
+  });
+
   it('detects and resolves local token, cost, version, and workspace queries instantly (Layer 2)', () => {
     expect(isLocalTokenQuery('how many tokens?')).toBe(true);
     expect(isLocalTokenQuery('token count')).toBe(true);

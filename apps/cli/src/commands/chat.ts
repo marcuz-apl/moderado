@@ -15,7 +15,7 @@ import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKey
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
+import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
 import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
@@ -261,6 +261,7 @@ export function handleGenerationKeypress(
     abort: () => void;
     onDraftChange: () => void;
     onQueueAdd: (item: string) => void;
+    onBtw?: (command: string) => void;
   }
 ): void {
   // 1. Ctrl+C: abort generation and clear queue
@@ -280,8 +281,18 @@ export function handleGenerationKeypress(
     return;
   }
 
-  // 3. Return / Enter: commit draft to command queue (support Windows CR \r / LF \n)
+  // 3. Return / Enter: commit draft or execute /btw immediately
   if (key?.name === 'return' || key?.name === 'enter' || str === '\r' || str === '\n') {
+    const trimmed = queue.currentDraft.trim();
+    if (trimmed.startsWith('/btw')) {
+      queue.setDraft('');
+      actions.onDraftChange();
+      if (actions.onBtw) {
+        actions.onBtw(trimmed);
+      }
+      return;
+    }
+
     const added = queue.commitDraft();
     if (added) {
       actions.onQueueAdd(added);
@@ -648,6 +659,116 @@ export async function handleMcpCommand(
   }
 }
 
+export async function executeBtwQuery(
+  command: string,
+  drawFrame: (popupLines: string[], options?: { waitDismiss?: boolean }) => void | Promise<void>,
+  provider: NvidiaAdapter | undefined,
+  currentModel: string | undefined,
+  btwHistory: Array<{ question: string; answer: string; timestamp: number }>,
+  signal?: AbortSignal,
+  btwSignal?: AbortSignal
+): Promise<void> {
+  const question = command.replace(/^\/btw\s*/i, '').trim();
+  if (!question) {
+    if (btwHistory.length === 0) {
+      await drawFrame(renderBoxLines('By The Way (/btw)', [
+        'Ask quick ephemeral side questions without polluting the session context.',
+        '',
+        'Usage:',
+        '  /btw <question>        Ask a side question in an ephemeral popup',
+        '  /btw                   Review recent side questions from this session',
+        '',
+        'Examples:',
+        '  /btw how do I format a date in JS?',
+        '  /btw what does git switch -c do?',
+        '',
+        'Press Esc or Enter to return.',
+      ], 76));
+    } else {
+      const lines: string[] = [];
+      for (let i = btwHistory.length - 1; i >= Math.max(0, btwHistory.length - 5); i--) {
+        const item = btwHistory[i];
+        lines.push(`\x1b[1;38;5;221mQ:\x1b[0m ${item.question}`);
+        lines.push(`\x1b[38;5;253mA:\x1b[0m ${item.answer}`);
+        if (i > Math.max(0, btwHistory.length - 5)) lines.push('---');
+      }
+      lines.push('');
+      lines.push('Press Esc or Enter to return.');
+      await drawFrame(renderBoxLines('By The Way (/btw) — Recent Side Questions', lines, 76));
+    }
+    return;
+  }
+
+  if (!provider || !currentModel) {
+    await drawFrame(renderBoxLines('By The Way (/btw)', [
+      'No model or provider connected.',
+      'Connect a provider with /connect or select a model with /model first.',
+      '',
+      'Press Esc or Enter to return.',
+    ], 72));
+    return;
+  }
+
+  await drawFrame(renderBoxLines('By The Way (/btw)', [
+    `Q: ${question}`,
+    '',
+    '\x1b[38;5;221mThinking (/btw)... (Press Esc to cancel)\x1b[0m',
+  ], 76), { waitDismiss: false });
+
+  if (btwSignal?.aborted || signal?.aborted) return;
+
+  try {
+    const btwMessages: ChatMessage[] = [
+      {
+        role: 'system',
+        content: 'You are Moderado answering a quick side question (by-the-way). Extreme brevity is mandatory. Answer in 1 to 3 short sentences or under 35 words. No conversational filler, pleasantries, or preambles. Output only the direct answer or code.',
+      },
+      {
+        role: 'user',
+        content: question,
+      },
+    ];
+
+    let answer = '';
+    const activeSignal = btwSignal || signal;
+    const stream = provider.streamChat({
+      modelId: currentModel,
+      messages: btwMessages,
+      maxTokens: 250,
+      signal: activeSignal,
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.contentDelta) {
+        answer += chunk.contentDelta;
+      }
+    }
+
+    if (activeSignal?.aborted) return;
+
+    const cleanedAnswer = cleanConversationalFiller(answer) || 'No response generated.';
+    btwHistory.push({ question, answer: cleanedAnswer, timestamp: Date.now() });
+
+    const wrappedAnswer = wrapText(cleanedAnswer, 70);
+    await drawFrame(renderBoxLines('By The Way (/btw)', [
+      `\x1b[1;38;5;221mQ:\x1b[0m ${question}`,
+      '---',
+      ...wrappedAnswer.map((l) => `\x1b[38;5;253m${l}\x1b[0m`),
+      '',
+      '\x1b[38;5;244m(Not saved to session history • Esc or Enter to close)\x1b[0m',
+    ], 76));
+  } catch (err: any) {
+    if (btwSignal?.aborted || signal?.aborted) {
+      return;
+    }
+    await drawFrame(renderBoxLines('By The Way (/btw) — Error', [
+      `Failed to answer side question: ${err?.message || String(err)}`,
+      '',
+      'Press Esc or Enter to return.',
+    ], 76));
+  }
+}
+
 export async function handleChatSession(args: CliParsedArgs, version: string, signal?: AbortSignal): Promise<number> {
   let canonicalWorkspace: string;
   try { canonicalWorkspace = canonicalizeRoot(path.resolve(process.cwd(), args.workspace)); }
@@ -816,105 +937,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
       },
       onBtw: async (command, drawFrame, btwSignal) => {
-        const question = command.replace(/^\/btw\s*/i, '').trim();
-        if (!question) {
-          if (btwHistory.length === 0) {
-            await drawFrame(renderBoxLines('By The Way (/btw)', [
-              'Ask quick ephemeral side questions without polluting the session context.',
-              '',
-              'Usage:',
-              '  /btw <question>        Ask a side question in an ephemeral popup',
-              '  /btw                   Review recent side questions from this session',
-              '',
-              'Examples:',
-              '  /btw how do I format a date in JS?',
-              '  /btw what does git switch -c do?',
-              '',
-              'Press Esc or Enter to return.',
-            ], 76));
-          } else {
-            const lines: string[] = [];
-            for (let i = btwHistory.length - 1; i >= Math.max(0, btwHistory.length - 5); i--) {
-              const item = btwHistory[i];
-              lines.push(`\x1b[1;38;5;221mQ:\x1b[0m ${item.question}`);
-              lines.push(`\x1b[38;5;253mA:\x1b[0m ${item.answer}`);
-              if (i > Math.max(0, btwHistory.length - 5)) lines.push('---');
-            }
-            lines.push('');
-            lines.push('Press Esc or Enter to return.');
-            await drawFrame(renderBoxLines('By The Way (/btw) — Recent Side Questions', lines, 76));
-          }
-          return;
-        }
-
-        if (!provider || !currentModel) {
-          await drawFrame(renderBoxLines('By The Way (/btw)', [
-            'No model or provider connected.',
-            'Connect a provider with /connect or select a model with /model first.',
-            '',
-            'Press Esc or Enter to return.',
-          ], 72));
-          return;
-        }
-
-        await drawFrame(renderBoxLines('By The Way (/btw)', [
-          `Q: ${question}`,
-          '',
-          '\x1b[38;5;221mThinking (/btw)... (Press Esc to cancel)\x1b[0m',
-        ], 76), { waitDismiss: false });
-
-        if (btwSignal?.aborted || signal?.aborted) return;
-
-        try {
-          const btwMessages: ChatMessage[] = [
-            {
-              role: 'system',
-              content: 'You are Moderado answering a quick side question (by-the-way). Extreme brevity is mandatory. Answer in 1 to 3 short sentences or under 35 words. No conversational filler, pleasantries, or preambles. Output only the direct answer or code.',
-            },
-            {
-              role: 'user',
-              content: question,
-            },
-          ];
-
-          let answer = '';
-          const activeSignal = btwSignal || signal;
-          const stream = provider.streamChat({
-            modelId: currentModel,
-            messages: btwMessages,
-            maxTokens: 250,
-            signal: activeSignal,
-          });
-
-          for await (const chunk of stream) {
-            if (chunk.contentDelta) {
-              answer += chunk.contentDelta;
-            }
-          }
-
-          if (activeSignal?.aborted) return;
-
-          const cleanedAnswer = cleanConversationalFiller(answer) || 'No response generated.';
-          btwHistory.push({ question, answer: cleanedAnswer, timestamp: Date.now() });
-
-          const wrappedAnswer = wrapText(cleanedAnswer, 70);
-          await drawFrame(renderBoxLines('By The Way (/btw)', [
-            `\x1b[1;38;5;221mQ:\x1b[0m ${question}`,
-            '---',
-            ...wrappedAnswer.map((l) => `\x1b[38;5;253m${l}\x1b[0m`),
-            '',
-            '\x1b[38;5;244m(Not saved to session history • Esc or Enter to close)\x1b[0m',
-          ], 76));
-        } catch (err: any) {
-          if (btwSignal?.aborted || signal?.aborted) {
-            return;
-          }
-          await drawFrame(renderBoxLines('By The Way (/btw) — Error', [
-            `Failed to answer side question: ${err?.message || String(err)}`,
-            '',
-            'Press Esc or Enter to return.',
-          ], 76));
-        }
+        await executeBtwQuery(command, drawFrame, provider, currentModel, btwHistory, signal, btwSignal);
       },
       onMcp: async (command, drawFrame) => {
         await handleMcpCommand(command, drawFrame, { reloadMcpTools, signal });
@@ -1289,39 +1312,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     try {
       const requestAbort = new AbortController();
       const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
-      const onGenerationKeypress = (str: string, key: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined): void => {
-        handleGenerationKeypress(str, key, commandQueue, {
-          abort: () => {
-            commandQueue.clear();
-            requestAbort.abort();
-          },
-          onDraftChange: () => {
-            redrawChatFrame();
-          },
-          onQueueAdd: () => {
-            redrawChatFrame();
-          },
-        });
-      };
-      if (process.stdin.isTTY) {
-        const readlineModule = await import('node:readline');
-        const attachGenerationListener = (): void => {
-          readlineModule.emitKeypressEvents(process.stdin);
-          process.stdin.resume();
-          process.stdin.setRawMode(true);
-          process.stdin.on('keypress', onGenerationKeypress);
-        };
-        attachGenerationListener();
-        suspendGenerationInput = () => {
-          process.stdin.removeListener('keypress', onGenerationKeypress);
-          try { process.stdin.setRawMode(false); process.stdin.pause(); } catch { /* ignore */ }
-          return () => { if (!requestSignal.aborted) attachGenerationListener(); };
-        };
-        removeGenerationListener = () => {
-          process.stdin.removeListener('keypress', onGenerationKeypress);
-          suspendGenerationInput = undefined;
-        };
-      }
       let streamedAnswer = '';
       lastAnswer = '';
       let firstAssistantDeltaAt: number | undefined;
@@ -1354,6 +1344,97 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           answerPosition = renderChatAnswerDelta(displayAnswer, { row: 15, column: 1 }, maxWidth);
         }
       };
+
+      const onGenerationKeypress = (str: string, key: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined): void => {
+        handleGenerationKeypress(str, key, commandQueue, {
+          abort: () => {
+            commandQueue.clear();
+            requestAbort.abort();
+          },
+          onDraftChange: () => {
+            redrawChatFrame();
+          },
+          onQueueAdd: () => {
+            redrawChatFrame();
+          },
+          onBtw: async (command) => {
+            const resume = suspendGenerationInput?.();
+            const ac = new AbortController();
+            const onBtwKey = (s: string, k: any) => {
+              if ((k && k.name === 'escape') || s === '\x1b') {
+                ac.abort();
+              }
+            };
+            process.stdin.on('keypress', onBtwKey);
+
+            try {
+              await executeBtwQuery(
+                command,
+                async (popupLines, frameOpts) => {
+                  process.stdout.write('\x1b[H\x1b[J');
+                  process.stdout.write(renderWelcomePopupLayer({
+                    model: currentModel ?? 'No model connected',
+                    tokens: Math.round(sessionTokens),
+                    cost: costLabel(),
+                    usageAvailable: activeSession.usage.available,
+                    workspace: canonicalWorkspace,
+                    mode: activeMode,
+                    autoApprove: activeAutoApprove,
+                    chatQuestion: trimmed,
+                    chatAnswer: streamedAnswer || lastAnswer,
+                    chatThoughtTime: Math.max(0.001, (Date.now() - startedAt) / 1000),
+                    isTurnSettled: false,
+                    queuedCommands: commandQueue.items,
+                  }, popupLines, process.stdout.columns, process.stdout.rows));
+
+                  if (frameOpts?.waitDismiss !== false && !ac.signal.aborted) {
+                    await new Promise<void>((dismissResolve) => {
+                      const onDismiss = (s: string, k: any) => {
+                        if (
+                          (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
+                          s === 'q' || s === 'Q' || s === '\x1b'
+                        ) {
+                          process.stdin.removeListener('keypress', onDismiss);
+                          dismissResolve();
+                        }
+                      };
+                      process.stdin.on('keypress', onDismiss);
+                    });
+                  }
+                },
+                provider,
+                currentModel,
+                btwHistory,
+                signal,
+                ac.signal
+              );
+            } finally {
+              process.stdin.removeListener('keypress', onBtwKey);
+              redrawChatFrame();
+              resume?.();
+            }
+          },
+        });
+      };
+      if (process.stdin.isTTY) {
+        const readlineModule = await import('node:readline');
+        const attachGenerationListener = (): void => {
+          readlineModule.emitKeypressEvents(process.stdin);
+          process.stdin.resume();
+          process.stdin.setRawMode(true);
+          process.stdin.on('keypress', onGenerationKeypress);
+        };
+        attachGenerationListener();
+        suspendGenerationInput = () => {
+          process.stdin.removeListener('keypress', onGenerationKeypress);
+          try { process.stdin.setRawMode(false); process.stdin.pause(); } catch { /* ignore */ }
+          return () => { if (!requestSignal.aborted) attachGenerationListener(); };
+        };
+        removeGenerationListener = () => {
+          process.stdin.removeListener('keypress', onGenerationKeypress);
+          suspendGenerationInput = undefined;
+        };
+      }
 
       // Move to the chat layout before the provider can emit its first event.
       redrawChatFrame();
