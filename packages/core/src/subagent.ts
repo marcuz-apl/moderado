@@ -5,8 +5,10 @@
  * approval handler as its parent, so it cannot bypass core policy. No new
  * package. No LSP work. Minimal surface: one class, one method.
  */
-import { AgentLoop, AgentRunOptions, AgentRunResult } from './agent.js';
+import { AgentLoop } from './agent.js';
+import type { AgentRunOptions, AgentRunResult } from './agent.js';
 import { AgentEventListener, IApprovalHandler, IProviderAdapter, IToolRegistry } from '@moderado/contracts';
+import { PolicyManager } from './policy.js';
 
 export class SubagentDelegator {
   constructor(
@@ -14,6 +16,9 @@ export class SubagentDelegator {
     private readonly tools: IToolRegistry,
     private readonly approvalHandler: IApprovalHandler,
     private readonly parentEventListener?: AgentEventListener,
+    private readonly parentPolicy = new PolicyManager(),
+    private readonly onMutationApproved?: AgentRunOptions['onMutationApproved'],
+    private readonly onMutationCompleted?: AgentRunOptions['onMutationCompleted'],
   ) {}
 
   /**
@@ -32,7 +37,7 @@ export class SubagentDelegator {
     provider: IProviderAdapter,
     options: { maxSteps?: number; signal?: AbortSignal } = {},
   ): Promise<AgentRunResult> {
-    const childSteps = options.maxSteps ?? 5;
+    const childSteps = Math.min(options.maxSteps ?? 5, this.parentPolicy.maxSteps);
     const signal = options.signal;
 
     const childEventListener: AgentEventListener = (event) => {
@@ -45,20 +50,20 @@ export class SubagentDelegator {
       provider,
       tools: this.tools,
       approvalHandler: this.approvalHandler,
-      policy: { maxSteps: childSteps, readOnly: false, nonInteractive: true, timeoutSeconds: 300 } as any,
+      policy: new PolicyManager({
+        maxSteps: childSteps,
+        readOnly: this.parentPolicy.readOnly,
+        nonInteractive: this.parentPolicy.nonInteractive,
+        timeoutSeconds: this.parentPolicy.timeoutSeconds,
+      }),
       eventListener: childEventListener,
       signal,
       conversationHistory: [],
+      allowSubagentDelegation: false,
+      onMutationApproved: this.onMutationApproved,
+      onMutationCompleted: this.onMutationCompleted,
     };
 
     return child.run(task, childOptions);
   }
-}
-
-/**
- * Subagent event extension tag. When a SubagentDelegator emits parent events,
- * it attaches this field so the host can filter or label subagent activity.
- */
-export interface SubagentEventTag {
-  subagentTask?: string;
 }

@@ -178,7 +178,7 @@ describe('Workspace Tools Suite', () => {
       );
 
       expect(result.status).toBe('success');
-      expect(result.output).toContain('a.ts:1: function authenticate()');
+      expect(result.output).toContain('a.ts:1:function authenticate()');
       expect(result.output).not.toContain('b.ts');
     });
   });
@@ -258,6 +258,10 @@ describe('Workspace Tools Suite', () => {
 
       const declarations = registry.getDeclarations();
       expect(declarations.length).toBe(12);
+      expect(declarations.map((declaration) => declaration.name)).not.toContain('bash');
+      expect(declarations.map((declaration) => declaration.name)).not.toContain('grep');
+      expect(declarations.find((declaration) => declaration.name === 'run_command')?.description).toContain('shell alias');
+      expect(declarations.find((declaration) => declaration.name === 'search_files')?.description).toContain('grep alias');
       const readDecl = declarations.find((d) => d.name === 'read_file');
       expect(readDecl?.parameters).toBeDefined();
       expect((readDecl?.parameters as any).type).toBe('object');

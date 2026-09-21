@@ -1,54 +1,48 @@
 # Project Handoff
 
-Updated: 2026-09-21 02:44 UTC
+Updated: 2026-09-21 03:09 UTC
 Branch: master
-Commit: 9b8550b (`v0.2.38+260920q`)
-Status: M7.9 implemented in the working tree; repository-wide verification blocked by unrelated staged M7.8/M7.10 work.
+Commit: 6db8058 (`v0.2.38+2609211`)
+Status: M7.10 complete in the working tree; awaiting owner review/commit.
 
 ## Summary
 
-M7.9 adds `/session undo`, `/session redo`, and `/session share <path>`. Undo/redo alternate through conflict-checked workspace checkpoints; share writes the existing redacted Markdown export through the approved, jail-enforced `write_file` tool.
+M7.10 now provides a core-owned, dependency-injected `subagent` declaration. A child agent shares the parent’s registry, approval handler, policy, mutation lifecycle hooks, and event stream; nested delegation is prohibited. The existing `run_command` and `search_files` tools advertise shell/grep UX aliases without introducing new tool contracts.
 
 ## Completed
 
-- `WorkspaceCheckpointStore` now retains a redo snapshot on undo, retains an undo snapshot on redo, and invalidates redo after a newer completed mutation.
-- `/session` includes undo, redo, and share. Each destructive/write action requests terminal approval. Share requires an explicit workspace-contained destination and writes via `WriteFileTool`.
-- Help and the session picker expose the new commands.
-- Focused verification passed: `npx vitest run packages/tools/tests/checkpoints.test.ts apps/cli/tests/chat.test.ts apps/cli/tests/welcome.test.ts` (54 tests).
-- `git diff --check` passed.
-
-## In progress
-
-- M7.9 has uncommitted changes in `apps/cli/src/commands/chat.ts`, `apps/cli/src/ui/welcome.ts`, `apps/cli/tests/chat.test.ts`, `apps/cli/tests/welcome.test.ts`, `packages/tools/src/checkpoints.ts`, and `packages/tools/tests/checkpoints.test.ts`.
+- Core subagent declaration is exposed only to tool-capable root agents and validates a trimmed, non-empty task up to 2,000 characters.
+- Child agents preserve read-only, non-interactive, timeout, approval, and M7.9 checkpoint lifecycle behavior; child events reach ordinary and host listeners.
+- Nested or hallucinated child delegation is rejected, bounding each delegation to one child with at most five steps.
+- `run_command` remains `shell: false` and `search_files` returns grep-style `path:line:content` output; neither `bash` nor `grep` exists as a tool.
+- Roadmap marks M7.10 complete.
 
 ## Working tree
 
-- Existing staged M7.8/M7.10 changes: `apps/cli/src/commands/chat.ts`, `apps/cli/src/ui/file_mentions.ts`, `packages/core/src/agent.ts`, `packages/core/src/index.ts`, `packages/core/src/subagent.ts`, `packages/tools/src/registry.ts`.
-- M7.9 changes are unstaged (with `chat.ts` also containing staged M7.8 work).
-- Existing untracked artifacts: `.tmp-m78-wiring.mjs`, `.tmp-read-welcome.mjs`, `docs/demo-weather-webapp.png`.
+- M7.10 changes: `packages/core/src/agent.ts`, `packages/core/src/subagent.ts`, `packages/core/tests/agent.test.ts`, `packages/core/tests/subagent.test.ts`, `packages/tools/src/registry.ts`, `packages/tools/src/tools/run_command.ts`, `packages/tools/src/tools/search_files.ts`, and `packages/tools/tests/tools.test.ts`.
+- Documentation/handoff: `docs/CLI_CAPABILITY_ROADMAP.md`, `HANDOFF.md`.
 
 ## Checks
 
-- `npx vitest run packages/tools/tests/checkpoints.test.ts apps/cli/tests/chat.test.ts apps/cli/tests/welcome.test.ts` — PASS (54 tests)
-- `git diff --check` — PASS
-- `npm run typecheck` — FAIL: unrelated staged M7.8/M7.10 references missing `SubagentTool`, `SubagentDelegator`, `initWorkspace`, and `listFiles` symbols.
-- `npm run test` — FAIL: 242/243 pass; `tests/integration/e2e_model_failover.test.ts` fails because the staged M7.10 code references undefined `SubagentDelegator`.
+- `npx vitest run --pool=threads --maxWorkers=1 --minWorkers=1` — PASS (45 files, 249 tests)
+- `git diff --check` — PASS before documentation-only updates
+- `npm run typecheck` — FAIL only in the pre-existing M7.8 files `apps/cli/src/commands/chat.ts` and `apps/cli/src/ui/file_mentions.ts` (`onInit`, `initWorkspace`, and `listFiles` are incomplete).
+- `npm run build` — FAIL for the same pre-existing M7.8 errors.
 
 ## Decisions and context
 
-- M7.9 work deliberately preserves the pre-existing M7.8/M7.10 staged edits; it does not repair or discard them.
-- Redo is invalidated only after a completed newer mutation, not merely after a checkpoint capture, so a denied or failed mutation does not lose redo history.
-- `/session share` uses `targetFile` in the approval payload, so the terminal approval UI shows the exact destination.
+- The `subagent` provider declaration is core-owned, not a tools-package contract, so it cannot be independently registered or used to bypass the injected parent policy.
+- M7.10 does not repair the separate M7.8 composer implementation; it remains the only typecheck/build blocker.
 
 ## Blockers
 
-- Full typecheck, build, and test-suite verification require repairing or separating the incomplete staged M7.8/M7.10 work.
+- Full typecheck/build cannot pass until M7.8 is finished or its incomplete committed code is repaired.
 
 ## Next action
 
-1. Decide whether to finish or remove/separate the staged M7.8/M7.10 work; then rerun `npm run typecheck`, `npm run test`, and `npm run build` before committing M7.9.
+1. Review and commit the M7.10 working-tree changes, or continue directly with M7.8 to remove the build blocker.
 
 ## Resume notes
 
-- M7.9 implementation starts at `apps/cli/src/commands/chat.ts` (`resolveSessionSharePath` and `onSession`) and `packages/tools/src/checkpoints.ts`.
-- Owner explicitly requested that the entire current working tree be committed and pushed after this handoff was recorded.
+- Keep full Vitest constrained to one worker on this Windows environment: `npx vitest run --pool=threads --maxWorkers=1 --minWorkers=1`.
+- Owner explicitly requested that the completed M7.10 working-tree changes be committed and pushed.

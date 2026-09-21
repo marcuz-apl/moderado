@@ -318,7 +318,7 @@ context, and source traceability. M7.3 runs last and certifies the release.
 - Implement `share` on top of the existing session export with an explicit
   output path; no hosted link service for CLI `v0.3.0`.
 
-### M7.10 — Core subagents and shell aliases [planned]
+### M7.10 — Core subagents and shell aliases [complete]
 
 - Add subagent delegation inside `packages/core` via dependency injection: a
   child agent loop reuses the same tool registry and approval handler, and

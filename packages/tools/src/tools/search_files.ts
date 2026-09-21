@@ -22,7 +22,7 @@ const DEFAULT_IGNORED_DIRS = new Set([
 
 export const SearchFilesTool: IToolDefinition<SearchFilesParams> = {
   name: 'search_files',
-  description: 'Search file contents within the workspace using literal strings or regex patterns.',
+  description: 'grep alias: search workspace file contents with literal strings or regex patterns. Results use grep-style path:line:content output.',
   requiresApproval: false,
   parametersSchema: SearchFilesParamsSchema,
 
@@ -98,7 +98,7 @@ export const SearchFilesTool: IToolDefinition<SearchFilesParams> = {
               const line = lines[i];
               matcher.lastIndex = 0;
               if (matcher.test(line)) {
-                matches.push(`${relPath}:${i + 1}: ${line.trim()}`);
+                matches.push(`${relPath}:${i + 1}:${line.trim()}`);
                 if (matches.length >= params.maxResults) {
                   hitLimit = true;
                   return;

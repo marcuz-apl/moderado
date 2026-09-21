@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { z } from 'zod';
 import {
   AgentEventListener,
   HostEventListener,
@@ -14,6 +15,7 @@ import {
   IToolRegistry,
   ModelInventoryEntry,
   ModelUnavailableError,
+  ProviderToolDeclaration,
   RateLimitError,
   ToolCall,
   ToolResult,
@@ -21,6 +23,7 @@ import {
 import { Router, RouteSelectionOptions } from './router.js';
 import { PolicyManager } from './policy.js';
 import { HostEventStream } from './host_event_stream.js';
+import { SubagentDelegator } from './subagent.js';
 
 export interface AgentRunOptions {
   workspaceRoot: string;
@@ -37,6 +40,8 @@ export interface AgentRunOptions {
   modelInventory?: ModelInventoryEntry[];
   onMutationApproved?: (toolName: string, parameters: unknown) => Promise<void> | void;
   onMutationCompleted?: (toolName: string, parameters: unknown, result: ToolResult) => Promise<void> | void;
+  /** Internal boundary: child loops must not create further subagents. */
+  allowSubagentDelegation?: boolean;
 }
 
 export interface AgentRunResult {
@@ -81,6 +86,22 @@ const PSEUDO_ANSWER_TOOLS = new Set([
   'subagent',
 ]);
 
+const SUBAGENT_DECLARATION: ProviderToolDeclaration = {
+  name: 'subagent',
+  description: 'Delegate one focused sub-task to a bounded child agent that follows the same workspace and approval policies.',
+  parameters: {
+    type: 'object',
+    properties: {
+      detail: { type: 'string' },
+    },
+    required: ['detail'],
+  },
+};
+
+const SubagentDetailSchema = z.object({
+  detail: z.string().trim().min(1).max(2000),
+});
+
 export class AgentLoop {
   async run(task: string, options: AgentRunOptions): Promise<AgentRunResult> {
     const hostStream = options.hostEventListener ? new HostEventStream(options.hostEventListener) : undefined;
@@ -88,6 +109,15 @@ export class AgentLoop {
     const policy = options.policy ?? new PolicyManager();
     const router = options.router ?? new Router();
     const signal = options.signal;
+    const delegator = new SubagentDelegator(
+      options.workspaceRoot,
+      options.tools,
+      options.approvalHandler,
+      (event) => emit(event),
+      policy,
+      options.onMutationApproved,
+      options.onMutationCompleted,
+    );
     let latestUsage: ChatUsage | undefined;
 
     if (signal?.aborted) {
@@ -193,7 +223,10 @@ export class AgentLoop {
           tools:
             currentModel.classification.toolSupport === 'unsupported'
               ? undefined
-              : options.tools.getDeclarations(),
+              : [
+                  ...options.tools.getDeclarations(),
+                  ...(options.allowSubagentDelegation === false ? [] : [SUBAGENT_DECLARATION]),
+                ],
           signal,
         });
 
@@ -259,7 +292,6 @@ export class AgentLoop {
             });
             currentModel = fallback;
             step--; // Retry current step without consuming step limit
-    const delegator = new SubagentDelegator(workspaceRoot, tools, approvalHandler, eventListener);
             continue;
           }
         }
@@ -390,6 +422,34 @@ export class AgentLoop {
           timestamp: Date.now(),
         });
 
+        const isSubagentCall = call.name.toLowerCase() === 'subagent';
+        let subagentTask: string | undefined;
+        if (isSubagentCall) {
+          if (options.allowSubagentDelegation === false) {
+            const nestedResult: ToolResult = {
+              toolName: call.name,
+              status: 'error',
+              output: 'Nested subagent delegation is not allowed.',
+            };
+            emit({ type: 'tool_result', toolCallId: call.id, result: nestedResult, timestamp: Date.now() });
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, content: nestedResult.output, status: 'error' });
+            continue;
+          }
+
+          const parsedTask = SubagentDetailSchema.safeParse(call.arguments);
+          if (!parsedTask.success) {
+            const validationResult: ToolResult = {
+              toolName: call.name,
+              status: 'error',
+              output: `Invalid subagent detail: ${parsedTask.error.message}`,
+            };
+            emit({ type: 'tool_result', toolCallId: call.id, result: validationResult, timestamp: Date.now() });
+            messages.push({ role: 'tool', toolCallId: call.id, name: call.name, content: validationResult.output, status: 'error' });
+            continue;
+          }
+          subagentTask = parsedTask.data.detail;
+        }
+
         if (PSEUDO_ANSWER_TOOLS.has(call.name.toLowerCase())) {
           const answerText =
             (typeof call.arguments.text === 'string' && call.arguments.text) ||
@@ -398,14 +458,14 @@ export class AgentLoop {
             (typeof call.arguments.response === 'string' && call.arguments.response) ||
             (typeof call.arguments.answer === 'string' && call.arguments.answer) ||
             (typeof call.arguments._raw === 'string' && call.arguments._raw) ||
-            (call.name.toLowerCase() === 'subagent' && typeof call.arguments.detail === 'string' ? call.arguments.detail : undefined) ||
+            subagentTask ||
             JSON.stringify(call.arguments);
 
           // Subagent tool: delegate to a bounded child agent loop
-          if (call.name.toLowerCase() === 'subagent' && typeof call.arguments.detail === 'string') {
-            const task = call.arguments.detail;
+          if (isSubagentCall && subagentTask) {
+            const task = subagentTask;
             emit({ type: 'progress', step: -1, status: `Delegating sub-task: ${task.slice(0, 80)}...`, timestamp: Date.now() });
-            const subagentResult = await delegator.delegate(task, options.provider, { maxSteps: policy.maxSteps ?? 5, signal });
+            const subagentResult = await delegator.delegate(task, options.provider, { maxSteps: 5, signal });
             const subResultText = subagentResult.finalMessage ?? subagentResult.status;
             emit({
               type: 'assistant_delta',

@@ -7,7 +7,7 @@ import { PolicyManager } from '../src/policy.js';
 import { Router } from '../src/router.js';
 import { FakeProviderAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry } from '@moderado/tools';
-import { AgentEvent, IApprovalHandler } from '@moderado/contracts';
+import { AgentEvent, HostEventEnvelope, IApprovalHandler } from '@moderado/contracts';
 
 describe('AgentLoop (Core Execution Engine)', () => {
   let tempDir: string;
@@ -55,6 +55,61 @@ describe('AgentLoop (Core Execution Engine)', () => {
 
     const completionEvent = events.find((e) => e.type === 'completion');
     expect(completionEvent).toBeDefined();
+  });
+
+  it('advertises the core-owned subagent declaration to tool-capable models', async () => {
+    provider.queueTextResponse('Done.');
+
+    await loop.run('Delegate a focused investigation when useful.', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+    });
+
+    expect(provider.recordedCalls[0]?.tools).toContainEqual({
+      name: 'subagent',
+      description: 'Delegate one focused sub-task to a bounded child agent that follows the same workspace and approval policies.',
+      parameters: {
+        type: 'object',
+        properties: {
+          detail: { type: 'string' },
+        },
+        required: ['detail'],
+      },
+    });
+  });
+
+  it('rejects an invalid subagent detail without starting a child loop', async () => {
+    provider.queueToolCallResponse('subagent', { detail: '   ' });
+    const result = await loop.run('Delegate a task.', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      eventListener: (event) => events.push(event),
+    });
+
+    expect(provider.recordedCalls).toHaveLength(1);
+    expect(result.finalMessage).toBe('');
+    expect(events.some((event) => event.type === 'tool_result' && event.result.output.startsWith('Invalid subagent detail:'))).toBe(true);
+  });
+
+  it('forwards child events to the parent host event listener', async () => {
+    provider.queueToolCallResponse('subagent', { detail: 'Answer the focused question.' });
+    provider.queueTextResponse('Child answer.');
+    provider.queueTextResponse('Parent answer.');
+    const hostEvents: HostEventEnvelope[] = [];
+
+    await loop.run('Delegate a task.', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      hostEventListener: (event) => hostEvents.push(event),
+    });
+
+    expect(hostEvents.some((event) => event.event.type === 'assistant_delta' && event.event.delta === 'Child answer.')).toBe(true);
   });
 
   it('returns provider-reported usage from a completed run', async () => {

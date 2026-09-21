@@ -32,7 +32,7 @@ export function getSanitizedEnv(): NodeJS.ProcessEnv {
 
 export const RunCommandTool: IToolDefinition<RunCommandParams> = {
   name: 'run_command',
-  description: 'Execute an external command using an argument array with shell: false.',
+  description: 'shell alias: execute an external command and argument array with shell: false; shell syntax is not interpreted.',
   requiresApproval: true,
   parametersSchema: RunCommandParamsSchema,
 
