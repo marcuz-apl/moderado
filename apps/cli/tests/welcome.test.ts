@@ -22,6 +22,7 @@ import {
   promptInteractiveTurn,
   selectCommandCandidate,
   renderMentionSuggestionsBox,
+  renderSuggestionsBox,
   SLASH_COMMANDS,
 } from '../src/ui/welcome.js';
 import { handleMcpCommand } from '../src/commands/chat.js';
@@ -552,6 +553,49 @@ describe('OpenCode-style Welcome TUI', () => {
     const plainLines = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n')).split('\n');
     expect(plainLines[0]).not.toMatch(/^\s/);
     expect(plainLines[1]).not.toMatch(/^\s/);
+  });
+
+  it('renderHelpPopupBox encloses all lines within boxWidth without spearing out', () => {
+    const lines = renderHelpPopupBox('v0.2.0', 'd:\\test', 80);
+    const plainLines = lines.map((line) => stripAnsi(line));
+    const expectedWidth = 80;
+    for (const line of plainLines) {
+      expect(line.length).toBe(expectedWidth);
+      expect(line.startsWith('╭') || line.startsWith('│') || line.startsWith('╰')).toBe(true);
+      expect(line.endsWith('╮') || line.endsWith('│') || line.endsWith('╯')).toBe(true);
+    }
+  });
+
+  it('renderSuggestionsBox encloses all lines within boxWidth and holds full command context', () => {
+    const lines = renderSuggestionsBox(SLASH_COMMANDS, 80);
+    const plainLines = lines.map((line) => stripAnsi(line));
+    const expectedWidth = 80;
+    for (const line of plainLines) {
+      expect(line.length).toBe(expectedWidth);
+      expect(line.startsWith('╭') || line.startsWith('│') || line.startsWith('╰')).toBe(true);
+      expect(line.endsWith('╮') || line.endsWith('│') || line.endsWith('╯')).toBe(true);
+    }
+    const joined = plainLines.join('\n');
+    expect(joined).toContain('/session');
+    expect(joined).toContain('Create, resume, undo, redo, share, export, or compact sessions');
+    expect(joined).toContain('/workflow');
+    expect(joined).toContain('Inspect Git, build plans, or undo agent changes');
+  });
+
+  it('renderWelcomeCard encloses slash command candidates popup when user types /', () => {
+    const card = renderWelcomeCard({
+      model: 'meta/llama-3.3-70b-instruct',
+      tokens: 0,
+      cost: '$0.00',
+      workspace: 'd:\\test',
+      mode: 'Execute',
+      autoApprove: false,
+      input: '/',
+      width: 80,
+    });
+    expect(card).toContain('Commands (Press Tab to autocomplete)');
+    expect(card).toContain('/session');
+    expect(card).toContain('Create, resume, undo, redo, share, export, or compact sessions');
   });
 
   it('selects and completes slash command candidates by index', () => {

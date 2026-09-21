@@ -131,7 +131,7 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   } else if (options.input && options.input.startsWith('/')) {
     const matching = getMatchingCommands(options.input);
     if (matching.length > 0) {
-      cardLines.push(...renderSuggestionsBox(matching).map((line) => indent + line));
+      cardLines.push(...renderSuggestionsBox(matching, width).map((line) => indent + line));
     }
   }
 
@@ -168,16 +168,29 @@ export function selectCommandCandidate(input: string, currentIndex: number, dire
   return commands[index];
 }
 
-export function renderSuggestionsBox(commands: SlashCommand[]): string[] {
+export function renderSuggestionsBox(commands: SlashCommand[], width?: number): string[] {
   if (commands.length === 0) return [];
+  const terminalWidth = width ?? (process.stdout?.columns || 80);
+  const targetWidth = 82;
+  const boxWidth = Math.max(78, Math.min(terminalWidth, targetWidth));
+  const innerW = boxWidth - 4;
+  const title = 'Commands (Press Tab to autocomplete)';
+  const remainingDashes = Math.max(0, boxWidth - title.length - 5);
+  const nameColWidth = 10;
+  const availDescWidth = Math.max(20, innerW - nameColWidth - 2);
+
   const lines: string[] = [];
-  lines.push('\x1b[38;5;240m  ╭─ Commands (Press Tab to autocomplete) ──────────────╮\x1b[0m');
+  lines.push('\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + title + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
   for (const cmd of commands) {
-    const nameStr = `\x1b[1;38;5;75m${cmd.name.padEnd(8)}\x1b[0m`;
-    const descStr = `\x1b[38;5;244m${cmd.desc.padEnd(38)}\x1b[0m`;
-    lines.push(`\x1b[38;5;240m  │\x1b[0m  ${nameStr} ${descStr}\x1b[38;5;240m│\x1b[0m`);
+    const nameStr = `\x1b[1;38;5;75m${cmd.name.padEnd(nameColWidth)}\x1b[0m`;
+    let desc = cmd.desc;
+    if (desc.length > availDescWidth) {
+      desc = desc.slice(0, availDescWidth - 1) + '…';
+    }
+    const descStr = `\x1b[38;5;244m${desc.padEnd(availDescWidth)}\x1b[0m`;
+    lines.push(`\x1b[38;5;240m│\x1b[0m  ${nameStr}  ${descStr}\x1b[38;5;240m│\x1b[0m`);
   }
-  lines.push('\x1b[38;5;240m  ╰─────────────────────────────────────────────────────╯\x1b[0m');
+  lines.push('\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
   return lines;
 }
 
@@ -353,7 +366,8 @@ export function renderWelcomePopupLayer(
 
 export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {
   const terminalWidth = width ?? (process.stdout.columns || 80);
-  const boxWidth = Math.min(terminalWidth, 74);
+  const targetWidth = 82;
+  const boxWidth = Math.max(76, Math.min(terminalWidth, targetWidth));
   const innerW = boxWidth - 4;
   const shortWs = workspace.length > 38 ? '...' + workspace.slice(-35) : workspace;
 
@@ -363,13 +377,14 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
   const content: string[] = [
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
     '\x1b[1m/init\x1b[0m       Scaffold AGENTS.md from workspace scan',
-    '\x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
-    '\x1b[1m/connect\x1b[0m     Connect NVIDIA NIM or another compatible provider',
+    '\x1b[1m/model\x1b[0m      Switch active AI model (Free, Paid, or Custom)',
+    '\x1b[1m/connect\x1b[0m    Connect NVIDIA NIM or another compatible provider',
     '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
     '\x1b[1m/session\x1b[0m   Create, resume, undo, redo, share, export, or compact sessions',
-    '\x1b[1m/clear\x1b[0m       Reset conversation memory and context history',
-    '\x1b[1m/help\x1b[0m        Display this commands, shortcuts & version guide',
-    '\x1b[1m/exit\x1b[0m        Exit Moderado session cleanly',
+    '\x1b[1m/workflow\x1b[0m  Inspect Git, build plans, or undo agent changes',
+    '\x1b[1m/clear\x1b[0m      Reset conversation memory and context history',
+    '\x1b[1m/help\x1b[0m       Display this commands, shortcuts & version guide',
+    '\x1b[1m/exit\x1b[0m       Exit Moderado session cleanly',
     '',
     '\x1b[1;38;5;114mKeyboard Shortcuts:\x1b[0m',
     '\x1b[1mTab\x1b[0m          Toggle between [Plan] and [Execute] mode',
@@ -388,8 +403,13 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
   lines.push('\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
   for (const item of content) {
     const plain = item.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
-    const spaces = Math.max(0, innerW - plain.length);
-    lines.push('\x1b[38;5;240m│\x1b[0m  ' + item + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
+    let displayItem = item;
+    if (plain.length > innerW) {
+      displayItem = plain.slice(0, innerW - 1) + '…';
+    }
+    const displayPlain = displayItem.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    const spaces = Math.max(0, innerW - displayPlain.length);
+    lines.push('\x1b[38;5;240m│\x1b[0m  ' + displayItem + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
   }
   lines.push('\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
   return lines;
