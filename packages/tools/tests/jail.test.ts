@@ -218,10 +218,16 @@ describe('Workspace Security Jail', () => {
     });
 
     it('rejects UNC network paths attempting to escape workspace', () => {
-      expect(() => resolveInJail(tempDir, '\\\\malicious-server\\share\\payload.txt')).toThrow(SecurityViolationError);
       expect(() => resolveInJail(tempDir, '//malicious-server/share/payload.txt')).toThrow(SecurityViolationError);
       expect(() => resolveInJail(tempDir, '\\\\wsl$\\Ubuntu\\etc\\shadow')).toThrow(SecurityViolationError);
       expect(() => resolveInJail(tempDir, '\\\\wsl.localhost\\Ubuntu\\root\\secret.key')).toThrow(SecurityViolationError);
+
+      // Backslash-only UNC notation is absolute on Windows only. On POSIX it is an
+      // ordinary relative name that resolves inside the jail, so only assert the
+      // rejection where the notation actually addresses a network location.
+      if (/^[a-zA-Z]:/.test(canonicalizeRoot(tempDir))) {
+        expect(() => resolveInJail(tempDir, '\\\\malicious-server\\share\\payload.txt')).toThrow(SecurityViolationError);
+      }
     });
   });
 

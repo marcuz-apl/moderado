@@ -31,6 +31,9 @@ jobs:
           registry-url: https://registry.npmjs.org
           cache: npm
       - run: npm ci
+      # Workspace packages resolve @moderado/* through their dist entry points,
+      # which are build outputs and never committed.
+      - run: npm run build
       - run: npm test
       - run: npm run verify:package
       - run: npm publish apps/cli/*.tgz --provenance --access public

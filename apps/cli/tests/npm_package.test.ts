@@ -42,9 +42,15 @@ describe('npm package preparation', () => {
   });
 
   it('runs npm through node on Windows without enabling a shell', () => {
-    const invocation = getNpmInvocation('win32', 'C:/Program Files/nodejs/node.exe');
-    expect(invocation.command).toBe('C:/Program Files/nodejs/node.exe');
-    expect(invocation.prefix[0].replaceAll('\\', '/')).toBe('C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js');
+    const previousNpmExecPath = process.env.npm_execpath;
+    delete process.env.npm_execpath;
+    try {
+      const invocation = getNpmInvocation('win32', 'C:/Program Files/nodejs/node.exe');
+      expect(invocation.command).toBe('C:/Program Files/nodejs/node.exe');
+      expect(invocation.prefix[0].replaceAll('\\', '/')).toBe('C:/Program Files/nodejs/node_modules/npm/bin/npm-cli.js');
+    } finally {
+      if (previousNpmExecPath !== undefined) process.env.npm_execpath = previousNpmExecPath;
+    }
   });
 
   it('uses a supplied temporary npm cache', () => {
@@ -52,7 +58,7 @@ describe('npm package preparation', () => {
   });
 
   it('runs the installed CLI through node on Windows without enabling a shell', () => {
-    const invocation = getInstalledCliInvocation('C:/temp/moderado', 'C:/Program Files/nodejs/node.exe');
+    const invocation = getInstalledCliInvocation('C:/temp/moderado', 'C:/Program Files/nodejs/node.exe', 'win32');
     expect(invocation.command).toBe('C:/Program Files/nodejs/node.exe');
     expect(invocation.args[0].replaceAll('\\', '/')).toBe('C:/temp/moderado/node_modules/moderado/dist/index.js');
     expect(invocation.args[1]).toBe('--help');
