@@ -30,6 +30,7 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
           cache: npm
+      - run: npm install -g npm@latest
       - run: npm ci
       # Workspace packages resolve @moderado/* through their dist entry points,
       # which are build outputs and never committed.
@@ -37,6 +38,13 @@ jobs:
       - run: npm test
       - run: npm run verify:package
       - run: npm publish apps/cli/*.tgz --provenance --access public
-      - run: gh release create "${{ inputs.tag }}" --verify-tag "${{ inputs.tag }}" --title "Moderado ${{ inputs.tag }}" --generate-notes
+      - run: |
+          RUN_ID="$(gh run list --workflow 'Verify release artifacts' --branch '${{ inputs.tag }}' --limit 1 --json databaseId --jq '.[0].databaseId')"
+          test -n "$RUN_ID" || { echo 'No Verify release artifacts run found for tag ${{ inputs.tag }}.' >&2; exit 1; }
+          gh run download "$RUN_ID" -n moderado-binaries -D artifacts/release
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - run: npm run generate:manifests -- "artifacts/release/manifest.json" distribution "https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag }}"
+      - run: gh release create "${{ inputs.tag }}" --verify-tag "${{ inputs.tag }}" --title "Moderado ${{ inputs.tag }}" --generate-notes "artifacts/release/moderado-win-x64.exe#moderado-win-x64.exe" "artifacts/release/moderado-win-x64.exe.sha256" "artifacts/release/moderado-macos-arm64#moderado-macos-arm64" "artifacts/release/moderado-macos-arm64.sha256" "artifacts/release/moderado-linux-x64#moderado-linux-x64" "artifacts/release/moderado-linux-x64.sha256" "artifacts/release/manifest.json#manifest.json" "distribution/homebrew/moderado.rb#moderado.rb" "distribution/scoop/moderado.json#moderado.json" "distribution/winget/Moderado.yaml#Moderado.yaml" "distribution/aur/PKGBUILD#PKGBUILD"
         env:
           GH_TOKEN: ${{ github.token }}

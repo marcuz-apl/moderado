@@ -92,10 +92,39 @@ Public publication requires explicit maintainer confirmation through the manual 
      ```bash
      npm publish apps/cli/*.tgz --provenance --access public
      ```
-  4. Creates the official GitHub Release with auto-generated release notes:
+  4. Creates the official GitHub Release with binaries, checksums, the verified manifest, and reviewable community manifests:
      ```bash
-     gh release create "${TAG}" --verify-tag "${TAG}" --title "Moderado ${TAG}" --generate-notes
+     gh release create "${TAG}" --verify-tag "${TAG}" --title "Moderado ${TAG}" --generate-notes "artifacts/release/moderado-win-x64.exe#moderado-win-x64.exe" "artifacts/release/moderado-win-x64.exe.sha256" "artifacts/release/moderado-macos-arm64#moderado-macos-arm64" "artifacts/release/moderado-macos-arm64.sha256" "artifacts/release/moderado-linux-x64#moderado-linux-x64" "artifacts/release/moderado-linux-x64.sha256" "artifacts/release/manifest.json#manifest.json" "distribution/homebrew/moderado.rb#moderado.rb" "distribution/scoop/moderado.json#moderado.json" "distribution/winget/Moderado.yaml#Moderado.yaml" "distribution/aur/PKGBUILD#PKGBUILD"
      ```
 
 No long-lived credentials or API tokens are stored in the repository. Authentication is handled entirely via GitHub OIDC trusted publishing.
+
+---
+
+## 4. Community Distribution Channels
+
+Every release publishes reviewable manifests alongside the binaries, so
+community-maintained packages stay in sync without hand-written hashes:
+
+- **Scoop**: submit `distribution/scoop/moderado.json` to a `scoop-moderado`
+  bucket (`bucket/moderado.json`). Per-release cost is one JSON bump.
+- **Homebrew**: publish `distribution/homebrew/moderado.rb` through a
+  `homebrew-moderado` tap (`brew tap <owner>/moderado; brew install moderado`).
+- **winget**: submit `distribution/winget/Moderado.yaml` to
+  `microsoft/winget-pkgs` as `MarcuzApl.Moderado` (one manifest PR per
+  release; `wingetcreate update` can automate it).
+- **AUR**: submit `distribution/aur/PKGBUILD` as `moderado-bin`; per-release
+  cost is one checksum bump.
+- **curl installer**: `scripts/install.sh` downloads the matching binary for
+  Linux x64 or macOS arm64 from the latest GitHub Release, verifies its
+  SHA-256 checksum against both the `.sha256` sidecar and `manifest.json`,
+  and refuses to install on mismatch:
+
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash
+  ```
+
+Binaries are unsigned (`signed: false` in `manifest.json`); expect first-run
+prompts from Windows SmartScreen and macOS Gatekeeper. Chocolatey is
+deliberately out of scope.
 

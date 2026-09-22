@@ -1,9 +1,9 @@
 # Project Handoff
 
-Updated: 2026-09-21 23:20 UTC
+Updated: 2026-09-22 09:45 UTC
 Branch: master
-Commit: `7a47384` (`v0.3.0+260921M`)
-Status: Moderado CLI `v0.3.0` is PUBLISHED. npm `moderado@0.3.0` claimed by first manual publish (no `--provenance`: OIDC unavailable outside CI); GitHub Release `v0.3.0` exists with all 7 verified binary assets attached. Verify workflow run 35664869192 green. Publish workflow run 35665118071 failed at `npm publish` with E404 (no credentials — expected pre-bootstrap). Next: configure the npm trusted publisher, then future releases publish via CI.
+Commit: `e023a27` (`v0.3.1+2609223`)
+Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenance`); GitHub Release `v0.3.0` carries all 7 binary assets. Distribution wiring for every channel except Chocolatey is implemented on master (`e023a27`, `v0.3.1+2609223`): `scripts/install.sh` (curl|bash, Linux x64 + macOS arm64, dual checksum gate), per-platform `distribution_manifests.mjs`, `release.yml` distribution job, `publish.yml` release attachments + `npm@latest` OIDC fix. Local checks green (50 suites, 347 tests; `verify:package` PASS). NOT pushed: `origin/master` is still at `9b1e6ef`. Next: commit HANDOFF, push master, then create the `scoop-moderado` bucket + `homebrew-moderado` tap repos and submit winget (see Remaining steps).
 
 ## Summary
 

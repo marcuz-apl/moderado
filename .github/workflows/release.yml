@@ -90,3 +90,23 @@ jobs:
         with:
           name: moderado-binaries
           path: artifacts/release
+
+  distribution-manifests:
+    needs: [verify-package, binary-metadata]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - uses: actions/download-artifact@v4
+        with:
+          name: moderado-binaries
+          path: artifacts/release
+      - run: npm run generate:manifests -- "artifacts/release/manifest.json" distribution "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moderado-distribution
+          path: distribution/
