@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.3.0%2B260921I-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.3.0%2B2609221-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -80,16 +80,35 @@ moderado run "Analyze security boundaries" --read-only
 
 ## Install Moderado
 
-Moderado requires **Node.js 20 or newer**. M6.1 creates a verified npm tarball
-but does not publish a public npm release yet. Once a release is published,
-the global install command will be:
+Moderado requires **Node.js 20 or newer**.
 
 ```bash
 npm install -g moderado
-moderado
+moderado --help
 ```
 
-Until then, build from the source checkout:
+`moderado@0.3.0` is live on the public npm registry (`latest` → `0.3.0`).
+The same command works with any npm-compatible installer:
+
+```bash
+bun add -g moderado        # Bun
+pnpm add -g moderado       # pnpm
+yarn global add moderado   # Yarn Classic
+npx -y moderado@latest --help   # try without installing
+```
+
+Prefer a dependency-free binary? Download the prebuilt executable for your
+platform from the
+[GitHub Release v0.3.0](https://github.com/marcuz-apl/moderado/releases/tag/v0.3.0)
+(`moderado-win-x64.exe`, `moderado-macos-arm64`, `moderado-linux-x64`),
+verify it against the attached `.sha256` checksum and `manifest.json`, then
+run it directly — no Node.js required.
+
+> Not yet available: there is no `curl | bash` installer and no
+> winget/scoop/chocolatey/Homebrew package. `npm install -g moderado`
+> (or the release binaries above) are the supported install paths.
+
+To build from source instead:
 
 ```bash
 git clone https://github.com/marcuz-apl/moderado.git
