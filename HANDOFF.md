@@ -1,9 +1,9 @@
 # Project Handoff
 
-Updated: 2026-09-22 09:45 UTC
+Updated: 2026-09-22 16:05 UTC
 Branch: master
-Commit: `e023a27` (`v0.3.1+2609223`)
-Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenance`); GitHub Release `v0.3.0` carries all 7 binary assets. Distribution wiring for every channel except Chocolatey is implemented on master (`e023a27`, `v0.3.1+2609223`): `scripts/install.sh` (curl|bash, Linux x64 + macOS arm64, dual checksum gate), per-platform `distribution_manifests.mjs`, `release.yml` distribution job, `publish.yml` release attachments + `npm@latest` OIDC fix. Local checks green (50 suites, 347 tests; `verify:package` PASS). NOT pushed: `origin/master` is still at `9b1e6ef`. Next: commit HANDOFF, push master, then create the `scoop-moderado` bucket + `homebrew-moderado` tap repos and submit winget (see Remaining steps).
+Commit: `7267c8b` (`v0.3.1+2609224`)
+Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenance`); GitHub Release `v0.3.0` carries all 7 binary assets. All distribution channels except Chocolatey (deliberately out of scope) are DONE: curl installer (`scripts/install.sh`, dual checksum gate, 2 offline tests), Homebrew tap `marcuz-apl/homebrew-moderado` and Scoop bucket `marcuz-apl/scoop-moderado` seeded with byte-identical v0.3.0 manifests, winget submission open as [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) (validation queued), AUR payload attached to the Release (awaiting an Arch uploader). CI wiring landed on master (`9530ddc`, `v0.3.1+2609223`): `release.yml` distribution job, `publish.yml` release attachments + `npm@latest` OIDC fix. Local checks green (50 suites, 347 tests; typecheck clean). Docs for all of it: `docs/DISTRIBUTION.md` + `docs/FIRST_PUBLISH.md`.
 
 ## Summary
 
@@ -43,15 +43,15 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 
 - `npm run typecheck` — PASS (0 errors)
 - `npm run build` — PASS
-- `npm test` — PASS (49 test files, 343 tests passed)
+- `npm test` — PASS (50 test files, 347 tests passed; one earlier run flaked a timing-sensitive test under parallel load, two consecutive reruns green)
 - `npm run verify:package` — PASS (`Verified moderado-0.3.0.tgz`)
 - `git diff --check` — PASS (CRLF advisories only)
 
 ## Remaining release steps (owner-gated)
 
-1. Configure the npm trusted publisher at `https://www.npmjs.com/package/moderado/access` (Trusted Publisher → GitHub Actions): repository `marcuz-apl/moderado`, workflow filename `publish.yml`, environment `release` (or blank). Package must exist first — it now does.
-2. For v0.3.1+: fix `publish.yml` npm version first — add `npm install -g npm@latest` before `npm publish` (OIDC needs npm ≥ 11.5.1; setup-node on Node 20 ships npm 10).
-3. Then the normal flow works: push tag → green Verify run → dispatch Publish with `confirm: PUBLISH`.
+1. Configure the npm trusted publisher at `https://www.npmjs.com/package/moderado/access` (Trusted Publisher → GitHub Actions): repository `marcuz-apl/moderado`, workflow filename `publish.yml`, environment `release` (or blank). Package now exists.
+2. For v0.3.1+: the `npm@latest` OIDC fix is already on master in `publish.yml`; the normal flow is push tag → green Verify run → dispatch Publish with `confirm: PUBLISH`.
+3. Distribution follow-through: watch [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) to merge; AUR needs an Arch uploader for `moderado-bin`; per-release tap/bucket bumps are manual copies (auto-push needs a cross-repo `TAP_PUSH_TOKEN` — owner decision, see `docs/DISTRIBUTION.md` §6).
 
 ## Blockers
 

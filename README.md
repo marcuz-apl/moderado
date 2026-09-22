@@ -104,9 +104,10 @@ platform from the
 verify it against the attached `.sha256` checksum and `manifest.json`, then
 run it directly — no Node.js required.
 
-> Not yet available: there is no `curl | bash` installer and no
-> winget/scoop/chocolatey/Homebrew package. `npm install -g moderado`
-> (or the release binaries above) are the supported install paths.
+> Install channels at a glance: npm (npm/bun/pnpm/yarn/npx), the curl
+> installer, Homebrew and Scoop taps are live; winget and AUR submissions are
+> pending (see the table below and [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md)).
+> Chocolatey is deliberately out of scope.
 
 To build from source instead:
 
@@ -121,6 +122,19 @@ node apps/cli/dist/index.js
 Maintainers can install a verified release artifact directly with
 `npm install -g ./moderado-<version>.tgz`. See
 [docs/RELEASING.md](docs/RELEASING.md) for the review procedure.
+
+### Other install channels
+
+| Channel | Command / location | Notes |
+|---|---|---|
+| Prebuilt binary | [GitHub Release v0.3.0](https://github.com/marcuz-apl/moderado/releases/tag/v0.3.0) (`moderado-win-x64.exe`, `moderado-macos-arm64`, `moderado-linux-x64`) | Verify against the attached `.sha256` + `manifest.json`; no Node.js needed |
+| curl installer (Linux x64, macOS arm64) | `curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh \| bash` | Verifies SHA-256 against `.sha256` and `manifest.json` before installing to `~/.local/bin`; `--version vX.Y.Z` pins a release |
+| Homebrew | `brew tap marcuz-apl/moderado && brew install moderado` | Tap: [homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado) |
+| Scoop | `scoop bucket add moderado https://github.com/marcuz-apl/scoop-moderado && scoop install moderado` | Bucket: [scoop-moderado](https://github.com/marcuz-apl/scoop-moderado) |
+| winget | `winget install MarcuzApl.Moderado` | Submission [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) is open, awaiting merge; until then use the `Moderado.yaml` attached to the GitHub Release with `winget install --manifest` |
+| AUR | Build `moderado-bin` from the `PKGBUILD` attached to the GitHub Release | Awaiting an AUR maintainer upload; Chocolatey is deliberately out of scope |
+
+Windows binaries are unsigned — expect a SmartScreen prompt on first run.
 
 ### Connect a provider
 
