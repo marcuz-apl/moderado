@@ -46,9 +46,9 @@ describe('CLI Argument Parser', () => {
     expect(args.workspace).toBe('./src');
   });
 
-  it('parses singular and plural skills commands', () => {
+  it('parses plural skills command only', () => {
     expect(parseCliArgs(['skills']).command).toBe('skills');
-    expect(parseCliArgs(['skill']).command).toBe('skills');
+    expect(parseCliArgs(['skill']).command).toBe('run');
   });
   it('parses --help and --version flags', () => {
     expect(parseCliArgs(['--help']).help).toBe(true);

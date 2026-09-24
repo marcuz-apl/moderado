@@ -44,7 +44,6 @@ export const STANDARD_SLASH_COMMANDS = [
   '/session',
   '/queue',
   '/workflow',
-  '/skill',
   '/skills',
   '/clear',
   '/help',
@@ -1172,7 +1171,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       continue;
     }
 
-    if (trimmed === '/skill' || trimmed === '/skills' || trimmed.startsWith('/skill ') || trimmed.startsWith('/skills ')) {
+    if (trimmed === '/skills' || trimmed.startsWith('/skills ')) {
       skills = discoverSkills();
       lastQuestion = trimmed;
       lastAnswer = skills.length
@@ -1200,7 +1199,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         '  /session   - Create, resume, undo, redo, share, export, or compact sessions\n' +
         '  /queue     - Add, inspect, or clear queued follow-up commands\n' +
         '  /workflow  - Inspect Git, build plans, or undo agent changes\n' +
-        '  /skill     - List installed user skills and reload them (alias: /skills)\n' +
+        '  /skills    - List installed user skills and reload them\n' +
         '  /clear     - Reset conversation memory\n' +
         '  /help      - Display commands, shortcuts & version\n' +
         '  /exit      - Exit Moderado';

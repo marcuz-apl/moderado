@@ -59,7 +59,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
 
   if (positionals.length > 0) {
     const first = positionals[0].toLowerCase();
-    if (first === 'doctor') { command = 'doctor'; } else if (first === 'skill' || first === 'skills') { command = 'skills'; } else if (first === 'models') {
+    if (first === 'doctor') { command = 'doctor'; } else if (first === 'skills') { command = 'skills'; } else if (first === 'models') {
       command = 'models';
     } else if (first === 'run') {
       command = 'run';

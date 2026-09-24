@@ -703,11 +703,11 @@ describe('OpenCode-style Welcome TUI', () => {
     // land on the single composer row, otherwise the cursor escapes the box.
     expect(new Set(positions.map((position) => position.row)).size).toBe(1);
   });
-  it('includes /skill and /skills in slash completion and help popup', () => {
-    expect(SLASH_COMMANDS.some((c) => c.name === '/skill')).toBe(true);
+  it('includes only /skills in slash completion and help popup', () => {
+    expect(SLASH_COMMANDS.some((c) => c.name === '/skill')).toBe(false);
     expect(SLASH_COMMANDS.some((c) => c.name === '/skills')).toBe(true);
     const plain = stripAnsi(renderHelpPopupBox('v0.3.2', 'd:\\test', 80).join('\n'));
-    expect(plain).toContain('/skill');
+    expect(plain).not.toContain('/skill\n');
     expect(plain).toContain('/skills');
   });
   it('includes /init in SLASH_COMMANDS and help popup', () => {

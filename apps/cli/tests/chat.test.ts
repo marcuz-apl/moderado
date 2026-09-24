@@ -675,9 +675,9 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(findSlashCommandAdvice('/queue add do something')).toEqual({ isSlashCommand: true, isValid: true });
   });
 
-  it('accepts both /skill and /skills', () => {
-    expect(findSlashCommandAdvice('/skill')).toEqual({ isSlashCommand: true, isValid: true });
+  it('accepts only /skills as the skills slash command', () => {
     expect(findSlashCommandAdvice('/skills')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/skill')).toEqual({ isSlashCommand: true, isValid: false, suggestion: '/skills', advice: 'Unknown command "/skill". Did you mean "/skills"? Type /help to see available commands.' });
   });
   it('recognizes /btw as a valid standard slash command', () => {
     expect(findSlashCommandAdvice('/btw')).toEqual({ isSlashCommand: true, isValid: true });
