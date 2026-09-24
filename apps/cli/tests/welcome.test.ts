@@ -312,6 +312,9 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/help');
     expect(plain).toContain('/exit');
     expect(plain).toContain('Commands (Press Tab to autocomplete)');
+    const lines = plain.split('\n');
+    expect(lines.findIndex((line) => line.includes('Commands (Press Tab to autocomplete)')))
+      .toBeLessThan(lines.findIndex((line) => line.includes('❯ /')));
   });
 
   it('filters slash commands suggestions by prefix', () => {
@@ -330,6 +333,24 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/model');
     expect(plain).not.toContain('/clear');
     expect(plain).not.toContain('/help');
+  });
+
+  it.each([
+    { screen: 'Welcome', extraOptions: {} },
+    { screen: 'Chat', extraOptions: { chatQuestion: 'previous question', chatAnswer: 'previous answer' } },
+  ])('keeps the $screen cursor on the composer after slash suggestions move above it', async ({ extraOptions }) => {
+    await runComposerTurn(async (stdin, context) => {
+      stdin.emit('keypress', '/', { name: '/', ctrl: false, meta: false });
+      const frame = context.writes.slice().reverse().find((write) => stripAnsi(write).includes('Commands (Press Tab to autocomplete)'));
+      expect(frame).toBeDefined();
+      const plainFrame = stripAnsi(frame!);
+      const screenLines = plainFrame.split('\n');
+      const inputLine = screenLines.findLastIndex((line) => line.includes('❯ /'));
+      const terminalScroll = Math.max(0, (plainFrame.match(/\n/g)?.length ?? 0) - (context.rows - 1));
+      expect(lastComposerWrite(context.writes).row).toBe(inputLine + 1 - terminalScroll);
+      for (const character of 'unknown') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    }, extraOptions);
   });
 
   it('offers /mcp in slash-command completion', () => {

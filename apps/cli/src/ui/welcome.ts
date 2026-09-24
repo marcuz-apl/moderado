@@ -146,6 +146,13 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     cardLines.push('');
   }
 
+  if (!options.mentionFiles?.length && options.input?.startsWith('/')) {
+    const matching = getMatchingCommands(options.input);
+    if (matching.length > 0) {
+      cardLines.push(...renderSuggestionsBox(matching, width).map((line) => indent + line));
+    }
+  }
+
   cardLines.push(
     indent + surfaceLine(),
     indent + surfaceLine(textBox),
@@ -156,11 +163,6 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
 
   if (options.mentionFiles && options.mentionFiles.length > 0) {
     cardLines.push(...renderMentionSuggestionsBox(options.mentionFiles, options.mentionSelection ?? 0).map((line) => indent + line));
-  } else if (options.input && options.input.startsWith('/')) {
-    const matching = getMatchingCommands(options.input);
-    if (matching.length > 0) {
-      cardLines.push(...renderSuggestionsBox(matching, width).map((line) => indent + line));
-    }
   }
 
   return cardLines.join('\n');
@@ -635,10 +637,7 @@ export async function promptInteractiveTurn(
   stdin.setRawMode(true);
 
   const getExtraLines = () => {
-    if (mentionFiles.length > 0) return mentionFiles.length + 2;
-    if (!input.startsWith('/')) return 0;
-    const matching = getMatchingCommands(input);
-    return matching.length > 0 ? matching.length + 2 : 0;
+    return mentionFiles.length > 0 ? mentionFiles.length + 2 : 0;
   };
 
   /** Rows between the painted composer line and the terminal's last row. */
