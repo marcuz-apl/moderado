@@ -9,6 +9,7 @@ import { handleRunCommand } from './commands/run.js';
 import { handleChatSession } from './commands/chat.js';
 import { handleDoctorCommand } from './commands/doctor.js';
 import { writeDiagnosticLog } from './diagnostic_log.js';
+import { handleSkillsCommand } from './commands/skills.js';
 
 function getVersion(): string {
   try {
@@ -56,7 +57,9 @@ async function main(): Promise<void> {
 
   let exitCode = 0;
   try {
-    if (args.command === 'doctor') { exitCode = await handleDoctorCommand(args); } else if (args.command === 'models') {
+    if (args.command === 'doctor') { exitCode = await handleDoctorCommand(args); } else if (args.command === 'skills') {
+      exitCode = handleSkillsCommand();
+    } else if (args.command === 'models') {
       exitCode = await handleModelsCommand(args);
     } else if (args.command === 'run') {
       exitCode = await handleRunCommand(args, abortController.signal);

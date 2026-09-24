@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 
 export interface CliParsedArgs {
-  command?: 'models' | 'run' | 'doctor';
+  command?: 'models' | 'run' | 'doctor' | 'skills';
   task?: string;
   workspace: string;
   model?: string;
@@ -54,12 +54,12 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   });
 
   const positionals = parsed.positionals;
-  let command: 'models' | 'run' | 'doctor' | undefined;
+  let command: 'models' | 'run' | 'doctor' | 'skills' | undefined;
   let task: string | undefined;
 
   if (positionals.length > 0) {
     const first = positionals[0].toLowerCase();
-    if (first === 'doctor') { command = 'doctor'; } else if (first === 'models') {
+    if (first === 'doctor') { command = 'doctor'; } else if (first === 'skills') { command = 'skills'; } else if (first === 'models') {
       command = 'models';
     } else if (first === 'run') {
       command = 'run';
@@ -110,7 +110,8 @@ USAGE:
 
 COMMANDS:
   models                 Discover live models, capability & access tiers
-  run "<task>"           Execute a bounded coding task in the workspace\n  doctor                 Check local Moderado setup
+  run "<task>"           Execute a bounded coding task in the workspace\n  skills                 List installed user skills
+  doctor                 Check local Moderado setup
 
 OPTIONS:
   -w, --workspace <path> Target workspace directory (default: current directory)
