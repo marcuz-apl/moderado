@@ -1,7 +1,7 @@
 import { ProviderConnection } from '../config.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
-import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
+import { fetchOpenRouterFreeModels, fetchProviderFreeModels, fetchProviderModels } from '@moderado/providers';
 import type { ModelInventoryEntry } from '@moderado/contracts';
 
 export interface ConnectionInput {
@@ -159,9 +159,11 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   let defaultModel: string | undefined;
   if (selectedValue === 'ollama' || selectedValue === 'lm-studio' || selectedValue === 'orcarouter') {
     try {
-      const models = await fetchProviderModels(baseUrl!, apiKey, { signal: options.signal });
+      const models = selectedValue === 'orcarouter'
+        ? await fetchProviderFreeModels(baseUrl!, apiKey, { signal: options.signal })
+        : await fetchProviderModels(baseUrl!, apiKey, { signal: options.signal });
       if (models.length) {
-        const choices = models.map((entry) => ({ label: entry.id, value: entry.id, description: 'Provider model' }));
+        const choices = models.map((entry) => ({ label: entry.id, value: entry.id, description: selectedValue === 'orcarouter' ? 'Free model' : 'Provider model' }));
         const picked = options.drawFrame
           ? await selectListPopup('Choose a model', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
           : (await askSelect('Choose a model', choices, 0, { signal: options.signal })).value;

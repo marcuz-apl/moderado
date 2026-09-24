@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fetchOpenRouterFreeModels, isFreeModelEntry, partitionFreeModels } from '../src/model_discovery.js';
+import { fetchOpenRouterFreeModels, fetchProviderFreeModels, isFreeModelEntry, partitionFreeModels } from '../src/model_discovery.js';
 import type { ModelInventoryEntry } from '@moderado/contracts';
 
 const entry = (id: string, promptPrice = '0'): ModelInventoryEntry => ({
@@ -40,6 +40,11 @@ describe('model discovery', () => {
     expect(models.map((m) => m.id)).toEqual(['deepseek/deepseek-r1:free']);
   });
 
+  it('filters a provider catalog to advertised free models', async () => {
+    const fetchImpl: typeof fetch = async () => jsonResponse({ data: [entry('free-model'), entry('paid-model', '0.01')] });
+    const models = await fetchProviderFreeModels('https://provider.test/v1', undefined, { fetchImpl });
+    expect(models.map((model) => model.id)).toEqual(['free-model']);
+  });
   it('throws a ProviderError on HTTP failure', async () => {
     const fetchImpl: typeof fetch = async () => new Response('no', { status: 503 });
     await expect(fetchOpenRouterFreeModels({ fetchImpl })).rejects.toThrow(/status 503/);

@@ -69,6 +69,16 @@ export function isFreeModelEntry(entry: ModelInventoryEntry): boolean {
   return entry.pricing?.['prompt'] === '0';
 }
 
+export async function fetchProviderFreeModels(
+  baseUrl: string,
+  apiKey: string | undefined,
+  optionsOrSignal?: AbortSignal | { signal?: AbortSignal; fetchImpl?: typeof fetch }
+): Promise<ModelInventoryEntry[]> {
+  const models = await fetchProviderModels(baseUrl, apiKey, optionsOrSignal);
+  return models.filter(isFreeModelEntry);
+}
+
+
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 
 /**
