@@ -35,6 +35,7 @@ function buildContentTypes() {
   <Default Extension="css" ContentType="text/css" />
   <Default Extension="html" ContentType="text/html" />
   <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="svg" ContentType="image/svg+xml" />
 </Types>
 `;
 }
@@ -73,8 +74,8 @@ export function packageVsix(targetDir = vscodeRoot) {
   const mediaDir = path.join(targetDir, 'media');
   if (existsSync(mediaDir)) {
     mkdirSync(path.join(extensionDir, 'media'), { recursive: true });
-    // Copy only production media assets (.html, .css, .js)
-    const mediaFiles = ['index.html', 'styles.css', 'main.js'];
+    // Copy only production media assets (.html, .css, .js, .svg)
+    const mediaFiles = ['index.html', 'styles.css', 'main.js', 'icon.svg'];
     for (const f of mediaFiles) {
       const src = path.join(mediaDir, f);
       if (existsSync(src)) {
