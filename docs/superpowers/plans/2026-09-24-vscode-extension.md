@@ -152,31 +152,32 @@ Commit only contract source, exports, and tests with a connected `feat(contracts
 - `serveHostProtocol(input, output, sessionFactory, signal?)` validates requests, routes responses/events, and closes its runtime on EOF or protocol failure.
 - `handleHostCommand(workspace, signal?)` owns process stdio and keeps stdout protocol-only; logs go to stderr.
 
-- [ ] **Step 1: Write transport tests**
+- [x] **Step 1: Write transport tests**
 
 Test split chunks, multiple lines in one chunk, CRLF, UTF-8 text, malformed JSON, EOF with an incomplete line, exact 1 MiB acceptance, a line over 1 MiB before newline, output backpressure, and zero stray stdout logging.
 
-- [ ] **Step 2: Run transport tests and confirm failure**
+- [x] **Step 2: Run transport tests and confirm failure**
 
 Run: `npm test -- apps/cli/tests/host_transport.test.ts`
 Expected: FAIL because the host transport modules do not exist.
 
-- [ ] **Step 3: Implement the byte-capped reader and writer**
+- [x] **Step 3: Implement the byte-capped reader and writer**
 
 Accumulate buffers by bytes rather than decoded character count; fail immediately once an unterminated line exceeds 1 MiB; parse each complete UTF-8 line; reject invalid JSON; await `drain` after `write` returns false. Never print diagnostics on stdout.
 
-- [ ] **Step 4: Add host CLI parsing and dispatch**
+- [x] **Step 4: Add host CLI parsing and dispatch**
 
 Add `host` to `CliParsedArgs.command`, usage text, and `main()` dispatch. `moderado host --workspace <path> --protocol 1` must reject missing workspace and unsupported versions before serving; start no terminal prompt or TUI.
 
-- [ ] **Step 5: Run CLI argument, transport, and typecheck gates**
+- [x] **Step 5: Run CLI argument, transport, and typecheck gates**
 
 Run: `npm test -- apps/cli/tests/host_transport.test.ts apps/cli/tests/args.test.ts` and `npm --prefix apps/cli run typecheck`.
 Expected: host command validation and transport cases pass.
 
-- [ ] **Step 6: Commit the transport and CLI entry point**
+- [x] **Step 6: Commit the transport and CLI entry point**
 
 Commit the transport, command dispatch, and tests with a connected `feat(cli): add headless host transport` subject.
+
 
 ## Task 4: Compose headless sessions, approvals, and stable event stream
 

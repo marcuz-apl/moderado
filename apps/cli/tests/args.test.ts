@@ -60,4 +60,24 @@ describe('CLI Argument Parser', () => {
   it('requires an explicit doctor migration flag', () => {
     expect(parseCliArgs(['doctor', '--migrate-credentials']).migrateCredentials).toBe(true);
   });
+
+  it('parses host command with workspace and protocol', () => {
+    const args = parseCliArgs(['host', '--workspace', './my-workspace', '--protocol', '1']);
+    expect(args.command).toBe('host');
+    expect(args.workspace).toBe('./my-workspace');
+    expect(args.protocol).toBe(1);
+  });
+
+  it('leaves workspace empty when host command is called without --workspace', () => {
+    const args = parseCliArgs(['host', '--protocol', '1']);
+    expect(args.command).toBe('host');
+    expect(args.workspace).toBe('');
+    expect(args.protocol).toBe(1);
+  });
+
+  it('parses custom or invalid protocol version as number or undefined', () => {
+    const args = parseCliArgs(['host', '-w', './src', '--protocol', '2']);
+    expect(args.command).toBe('host');
+    expect(args.protocol).toBe(2);
+  });
 });

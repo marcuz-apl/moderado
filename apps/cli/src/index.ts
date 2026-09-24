@@ -10,6 +10,7 @@ import { handleChatSession } from './commands/chat.js';
 import { handleDoctorCommand } from './commands/doctor.js';
 import { writeDiagnosticLog } from './diagnostic_log.js';
 import { handleSkillsCommand } from './commands/skills.js';
+import { handleHostCommand } from './commands/host.js';
 
 function getVersion(): string {
   try {
@@ -48,8 +49,12 @@ async function main(): Promise<void> {
 
   const abortController = new AbortController();
   const handleSigint = () => {
-    process.stdout.write('\n\x1b[33mReceived SIGINT, aborting session gracefully...\x1b[0m\n');
-    abortController.abort();
+    if (args.command === 'host') {
+      abortController.abort();
+    } else {
+      process.stdout.write('\n\x1b[33mReceived SIGINT, aborting session gracefully...\x1b[0m\n');
+      abortController.abort();
+    }
   };
 
   process.on('SIGINT', handleSigint);
@@ -57,10 +62,14 @@ async function main(): Promise<void> {
 
   let exitCode = 0;
   try {
-    if (args.command === 'doctor') { exitCode = await handleDoctorCommand(args); } else if (args.command === 'skills') {
+    if (args.command === 'doctor') {
+      exitCode = await handleDoctorCommand(args);
+    } else if (args.command === 'skills') {
       exitCode = handleSkillsCommand();
     } else if (args.command === 'models') {
       exitCode = await handleModelsCommand(args);
+    } else if (args.command === 'host') {
+      exitCode = await handleHostCommand(args, abortController.signal);
     } else if (args.command === 'run') {
       exitCode = await handleRunCommand(args, abortController.signal);
     } else {

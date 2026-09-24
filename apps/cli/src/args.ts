@@ -1,9 +1,10 @@
 import { parseArgs } from 'node:util';
 
 export interface CliParsedArgs {
-  command?: 'models' | 'run' | 'doctor' | 'skills';
+  command?: 'models' | 'run' | 'doctor' | 'skills' | 'host';
   task?: string;
   workspace: string;
+  protocol?: number;
   model?: string;
   provider?: string;
   profile: string;
@@ -26,7 +27,8 @@ export interface CliParsedArgs {
 
 export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedArgs {
   const optionsConfig = {
-    workspace: { type: 'string' as const, short: 'w', default: '.' },
+    workspace: { type: 'string' as const, short: 'w' },
+    protocol: { type: 'string' as const, default: '1' },
     model: { type: 'string' as const, short: 'm' },
     provider: { type: 'string' as const },
     profile: { type: 'string' as const, short: 'p', default: 'hosted-nvidia' },
@@ -54,13 +56,19 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   });
 
   const positionals = parsed.positionals;
-  let command: 'models' | 'run' | 'doctor' | 'skills' | undefined;
+  let command: 'models' | 'run' | 'doctor' | 'skills' | 'host' | undefined;
   let task: string | undefined;
 
   if (positionals.length > 0) {
     const first = positionals[0].toLowerCase();
-    if (first === 'doctor') { command = 'doctor'; } else if (first === 'skills') { command = 'skills'; } else if (first === 'models') {
+    if (first === 'doctor') {
+      command = 'doctor';
+    } else if (first === 'skills') {
+      command = 'skills';
+    } else if (first === 'models') {
       command = 'models';
+    } else if (first === 'host') {
+      command = 'host';
     } else if (first === 'run') {
       command = 'run';
       task = positionals.slice(1).join(' ');
@@ -71,14 +79,20 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
     }
   }
 
+  const rawWorkspace = parsed.values.workspace as string | undefined;
+  const workspace = rawWorkspace ?? (command === 'host' ? '' : '.');
+
   const maxSteps = parseInt(parsed.values['max-steps'] as string, 10);
   const maxTokens = parsed.values['max-tokens'] ? parseInt(parsed.values['max-tokens'] as string, 10) : undefined;
   const timeout = parseInt(parsed.values.timeout as string, 10);
+  const rawProtocol = parsed.values.protocol ? parseInt(parsed.values.protocol as string, 10) : undefined;
+  const protocol = rawProtocol !== undefined && !isNaN(rawProtocol) ? rawProtocol : undefined;
 
   return {
     command,
     task: task?.trim() || undefined,
-    workspace: parsed.values.workspace as string,
+    workspace,
+    protocol,
     model: parsed.values.model as string | undefined,
     provider: parsed.values.provider as string | undefined,
     profile: parsed.values.profile as string,
@@ -106,15 +120,19 @@ export function getHelpText(): string {
 USAGE:
   moderado models [options]
   moderado run "<task>" [options]
+  moderado host --workspace <path> --protocol 1
   moderado "<task>" [options]
 
 COMMANDS:
   models                 Discover live models, capability & access tiers
-  run "<task>"           Execute a bounded coding task in the workspace\n  skills                 List installed user skills
+  run "<task>"           Execute a bounded coding task in the workspace
+  skills                 List installed user skills
   doctor                 Check local Moderado setup
+  host                   Run headless host sidecar over NDJSON stdio
 
 OPTIONS:
   -w, --workspace <path> Target workspace directory (default: current directory)
+  --protocol <version>   Host wire protocol version (host command only; default: 1)
   -m, --model <id>       Pin a specific model (disables AUTO fallback)
   -p, --profile <name>   Target configured profile (default: hosted-nvidia)
   --max-steps <int>      Upper bound on tool interaction cycles (default: 25)
