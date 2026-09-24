@@ -5,6 +5,15 @@ Branch: master
 Commit: `bbe1506` (`v0.3.1+2609225`)
 Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenance`); GitHub Release `v0.3.0` carries all 7 binary assets. README reorganized (`bbe1506`, `v0.3.1+2609225`): Tech Stack section, feature/reference sections moved to `docs/GUIDE.md`, Install Moderado rewritten per-OS (Linux/macOS/Windows) with no "Other install channels". All distribution channels except Chocolatey (deliberately out of scope) are DONE: curl installer (`scripts/install.sh`, dual checksum gate, 2 offline tests), Homebrew tap `marcuz-apl/homebrew-moderado` and Scoop bucket `marcuz-apl/scoop-moderado` seeded with byte-identical v0.3.0 manifests, winget submission open as [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) (validation queued), AUR payload attached to the Release (awaiting an Arch uploader). CI wiring landed on master (`9530ddc`, `v0.3.1+2609223`): `release.yml` distribution job, `publish.yml` release attachments + `npm@latest` OIDC fix. Local checks green (50 suites, 347 tests; typecheck clean). Docs: `docs/DISTRIBUTION.md`, `docs/FIRST_PUBLISH.md`, `docs/GUIDE.md`.
 
+## Current feature implementation
+
+- User skills are discovered from `~/.moderado/skills/<name>/SKILL.md` and injected into the model system context as untrusted advisory instructions.
+- Supported metadata: `name` and `description`; malformed, oversized, mismatched, and symlinked skill files are ignored.
+- Interactive TUI command: `/skill` lists and reloads installed skills.
+- Skills do not grant tools or bypass approval, workspace jail, non-interactive, or secret protections.
+- Validation: `npm run typecheck`, `npm run build`, and `npm test` pass (51 files, 350 tests).
+
+
 ## Summary
 
 1. **CLI `v0.3.0` released (Alfazen minor increment)**:

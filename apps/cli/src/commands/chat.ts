@@ -21,6 +21,7 @@ import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } f
 import { askModalChoice } from '../ui/prompt.js';
 import { findModelPricing } from '../model_pricing.js';
 import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
+import { discoverSkills, formatSkillContext, UserSkill } from '../skills.js';
 
 function mutationPaths(toolName: string, parameters: unknown): string[] {
   const value = parameters as { path?: unknown; edits?: { path?: unknown }[] };
@@ -43,6 +44,7 @@ export const STANDARD_SLASH_COMMANDS = [
   '/session',
   '/queue',
   '/workflow',
+  '/skill',
   '/clear',
   '/help',
   '/exit',
@@ -813,6 +815,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let isFirst = true;
   if (config.typescriptLanguageServer) process.env.MODERADO_TYPESCRIPT_LANGUAGE_SERVER = config.typescriptLanguageServer;
   let tools: IToolRegistry = createDefaultToolRegistry();
+  let skills: UserSkill[] = discoverSkills();
+  const skillContext = (): string => formatSkillContext(skills);
   const reloadMcpTools = async (): Promise<void> => {
     config = loadConfig();
     tools = await createMcpToolRegistry(config.mcpServers, resolveWebSearchOptions(config));
@@ -1167,6 +1171,20 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       continue;
     }
 
+    if (trimmed === '/skill' || trimmed.startsWith('/skill ')) {
+      skills = discoverSkills();
+      lastQuestion = trimmed;
+      lastAnswer = skills.length
+        ? 'User skills loaded:\n' + skills.map((skill) => `  ${skill.name} — ${skill.description}`).join('\n')
+        : 'No valid user skills found in ~/.moderado/skills.';
+      lastThoughtTime = 0.001;
+      lastOutputTokenRate = undefined;
+      process.stdout.write('\x1b[H\x1b[J');
+      process.stdout.write(renderFullWelcomeScreen({ model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
+      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      continue;
+    }
+
     if (trimmed === '/exit' || trimmed === '/quit') {
       exitCleanly('\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
     }
@@ -1181,6 +1199,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         '  /session   - Create, resume, undo, redo, share, export, or compact sessions\n' +
         '  /queue     - Add, inspect, or clear queued follow-up commands\n' +
         '  /workflow  - Inspect Git, build plans, or undo agent changes\n' +
+        '  /skill     - List installed user skills and reload them\n' +
         '  /clear     - Reset conversation memory\n' +
         '  /help      - Display commands, shortcuts & version\n' +
         '  /exit      - Exit Moderado';
@@ -1447,6 +1466,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const runAgent = () => loop.run(evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
         maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+        skillContext: skillContext(),
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'assistant_delta') {

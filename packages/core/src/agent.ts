@@ -47,6 +47,8 @@ export interface AgentRunOptions {
   allowSubagentDelegation?: boolean;
   /** Hard cap on generated output tokens to prevent runaway token spend. Defaults to DEFAULT_MAX_OUTPUT_TOKENS (4096). */
   maxOutputTokens?: number;
+  /** Optional untrusted user skill context appended to the system prompt. */
+  skillContext?: string;
 }
 
 export interface AgentRunResult {
@@ -79,12 +81,12 @@ CORE OPERATIONAL RULES:
 - Do NOT invent tool names.
 - For anything that changes over time (weather, news, scores, prices, schedules, releases), call the web_search tool immediately with a clear query. Never fetch this with run_command, and never ask the user to look it up themselves. Answer with the facts and values only, in the fewest readable lines, without listing sources or URLs.`;
 
-export function buildSystemPrompt(modelId: string, workspaceRoot: string): string {
+export function buildSystemPrompt(modelId: string, workspaceRoot: string, skillContext?: string): string {
   return `${DEFAULT_SYSTEM_PROMPT}
 
 SYSTEM RUNTIME CONTEXT:
 - Active Model: ${modelId}
-- Workspace Root: ${workspaceRoot}`;
+- Workspace Root: ${workspaceRoot}${skillContext ? `\n\n${skillContext}` : ''}`;
 }
 
 export function cleanConversationalFiller(text: string): string {
@@ -215,7 +217,7 @@ export class AgentLoop {
     // 2. Initialize Conversation Context
     const systemPromptMessage: ChatMessage = {
       role: 'system',
-      content: buildSystemPrompt(currentModel.id, options.workspaceRoot),
+      content: buildSystemPrompt(currentModel.id, options.workspaceRoot, options.skillContext),
     };
 
     let baseHistory = options.conversationHistory ? [...options.conversationHistory] : [];

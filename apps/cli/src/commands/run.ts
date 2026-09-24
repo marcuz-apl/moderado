@@ -9,6 +9,7 @@ import { getActiveConnection, resolveApiKey, resolveConnectionCredential, saveCo
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
+import { discoverSkills, formatSkillContext } from '../skills.js';
 
 export async function handleRunCommand(
   args: CliParsedArgs,
@@ -119,6 +120,7 @@ export async function handleRunCommand(
       router,
       policy,
       maxOutputTokens: args.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+      skillContext: formatSkillContext(discoverSkills()),
       routeOptions: {
         pinnedModelId: selectedModel,
         allowPaid,

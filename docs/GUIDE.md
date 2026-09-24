@@ -74,6 +74,20 @@ Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or Ja
 
 Install `typescript-language-server` yourself, then set `typescriptLanguageServer` in `~/.moderado/config.json` to its executable path. Moderado can then use read-only definition and reference lookup for TypeScript/JavaScript files. When the executable is unavailable, it reports how to configure it and leaves normal tools available.
 
+### User skills
+
+Moderado discovers user skills at `~/.moderado/skills/<skill-name>/SKILL.md`. Each skill uses simple frontmatter:
+
+```markdown
+---
+name: typescript-review
+description: Review TypeScript changes for type-safety and runtime issues
+---
+Review TypeScript changes carefully.
+```
+
+Valid skills are loaded into the model context as untrusted advisory instructions. They cannot change approval policy, bypass the workspace jail, run commands automatically, or access secrets. Use `/skill` in the interactive TUI to list and reload installed skills. Malformed files, oversized files, and symlinked `SKILL.md` files are ignored.
+
 ### Local MCP tools
 
 Use `/mcp` in the interactive TUI to manage trusted local stdio servers. The
