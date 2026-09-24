@@ -54,7 +54,7 @@ async function resolveDefaultProvider(
 ): Promise<IProviderAdapter> {
   const config = loadConfig(customHome);
   const activeConn = providerIdOverride
-    ? (config.connections[providerIdOverride] ?? getActiveConnection(config))
+    ? (config.connections?.[providerIdOverride] ?? getActiveConnection(config))
     : getActiveConnection(config);
   const store =
     credentialStore ??
