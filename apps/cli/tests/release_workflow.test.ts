@@ -32,5 +32,7 @@ describe('release workflow', () => {
     expect(yaml).toContain('npm publish');
     expect(yaml).toContain('gh release create');
     expect(yaml).toContain('id-token: write');
+    expect(yaml).toContain('--commit "$GITHUB_SHA"');
+    expect(yaml).not.toContain("--branch '${{ inputs.tag }}'");
   });
 });
