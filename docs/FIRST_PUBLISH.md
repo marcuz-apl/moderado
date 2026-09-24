@@ -102,9 +102,9 @@ save time, mismatches surface only at publish:
 | Workflow filename | `publish.yml` (exact, with extension) |
 | Environment | `release` (or blank; `publish.yml` declares `environment: release`) |
 
-Repo side is already correct: `publish.yml` has `id-token: write`,
+Repo side is now correct: `publish.yml` has `id-token: write`,
 publishes with `--provenance`, and `apps/cli/package.json`
-`repository.url` is `git+https://github.com/marcuz-apl/moderado.git`
+`repository.url` is `https://github.com/marcuz-apl/moderado.git`
 (exact match required).
 
 One fix still owed before the next release: `publish.yml` sets up Node 20,

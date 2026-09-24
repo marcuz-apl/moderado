@@ -11,7 +11,7 @@
   "files": ["dist", "README.md", "LICENSE"],
   "engines": { "node": ">=20" },
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/marcuz-apl/moderado.git" },
+  "repository": { "type": "git", "url": "https://github.com/marcuz-apl/moderado.git" },
   "bugs": { "url": "https://github.com/marcuz-apl/moderado/issues" },
   "homepage": "https://github.com/marcuz-apl/moderado#readme",
   "keywords": ["ai", "agent", "coding-agent", "cli", "nvidia-nim", "openrouter"],
