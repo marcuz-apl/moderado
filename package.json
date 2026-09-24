@@ -18,7 +18,7 @@
     "verify:binaries": "node scripts/binaries.mjs verify",
     "merge-binaries": "node scripts/binaries.mjs merge",
     "generate:manifests": "node scripts/distribution_manifests.mjs",
-    "build:vscode": "tsc --project apps/vscode/tsconfig.json",
+    "build:vscode": "tsc --project apps/vscode/tsconfig.json && node apps/vscode/scripts/build_extension.mjs",
     "test:vscode": "vitest run apps/vscode/tests",
     "typecheck:vscode": "tsc --project apps/vscode/tsconfig.json --noEmit",
     "package:vscode": "npm --prefix apps/vscode run package"

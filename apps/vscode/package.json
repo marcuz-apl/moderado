@@ -68,7 +68,7 @@
     }
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node ./scripts/build_extension.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "package": "node ./scripts/package_vsix.mjs"

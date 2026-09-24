@@ -3,6 +3,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } fr
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildExtension } from './build_extension.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const vscodeRoot = path.resolve(__dirname, '..');
@@ -46,6 +47,9 @@ export function packageVsix(targetDir = vscodeRoot) {
     throw new Error(`package.json not found at ${pkgPath}`);
   }
   const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+
+  // Ensure fresh standalone bundle
+  buildExtension();
 
   const stageDir = path.join(tmpdir(), `vsix-stage-${Date.now()}`);
   const extensionDir = path.join(stageDir, 'extension');
