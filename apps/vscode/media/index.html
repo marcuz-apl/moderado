@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src {{cspSource}} 'unsafe-inline'; script-src {{cspSource}} 'nonce-{{nonce}}';">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Moderado</title>
+  <link rel="stylesheet" href="{{styleUri}}">
+</head>
+<body>
+  <header class="task-header" id="task-header">
+    <div class="header-title">
+      <span>Moderado</span>
+      <span class="status-badge" id="status-badge">Idle</span>
+    </div>
+    <div class="header-actions">
+      <button class="icon-btn" id="new-task-btn" title="New Session" aria-label="New Session">+</button>
+    </div>
+  </header>
+
+  <main class="transcript-container" id="transcript-container" role="log" aria-live="polite">
+    <div class="turn-block" id="empty-state">
+      <div class="assistant-bubble">
+        <p><strong>Welcome to Moderado.</strong></p>
+        <p>Ask a question, describe a change, or attach editor context to begin.</p>
+      </div>
+    </div>
+  </main>
+
+  <footer class="composer-section" id="composer-section">
+    <div id="context-chip-container" style="display: none;">
+      <span class="context-chip" id="context-chip">
+        <span id="context-chip-label">src/index.ts:1-10</span>
+        <span class="chip-remove" id="context-chip-remove" title="Remove attachment" role="button" tabindex="0">×</span>
+      </span>
+    </div>
+
+    <div class="composer-input-box">
+      <textarea
+        class="composer-textarea"
+        id="composer-input"
+        placeholder="Type a task or instruction... (Enter to send, Shift+Enter for newline)"
+        rows="2"
+        aria-label="Task prompt"
+      ></textarea>
+      <div class="composer-footer">
+        <div class="composer-tools">
+          <button class="icon-btn" id="attach-selection-btn" title="Attach Active Editor Selection" aria-label="Attach Selection">📎</button>
+        </div>
+        <div class="composer-actions">
+          <button class="btn btn-secondary" id="cancel-btn" style="display: none;">Cancel</button>
+          <button class="btn btn-primary" id="send-btn">Send</button>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script nonce="{{nonce}}" src="{{scriptUri}}"></script>
+</body>
+</html>

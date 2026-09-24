@@ -1,85 +1,15 @@
 import * as vscode from 'vscode';
 import { SidecarClient, SidecarError } from './sidecar.js';
-import type { HostEventEnvelope } from './protocol.js';
-
-export interface ExtensionState {
-  sidecar: SidecarClient | null;
-  activeSessionId: string | null;
-}
-
-export class ModeradoChatViewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewType = 'moderado.chatView';
-  private view?: vscode.WebviewView;
-
-  constructor(
-    private readonly extensionUri: vscode.Uri,
-    public readonly getSidecar: () => Promise<SidecarClient>,
-    public readonly onEvent?: (envelope: HostEventEnvelope) => void,
-  ) {}
-
-  public resolveWebviewView(
-    webviewView: vscode.WebviewView,
-    _context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken,
-  ): void {
-    this.view = webviewView;
-
-    webviewView.webview.options = {
-      enableScripts: true,
-      localResourceRoots: [this.extensionUri],
-    };
-
-    webviewView.webview.html = this.getHtmlForWebview(webviewView.webview);
-
-    webviewView.onDidDispose(() => {
-      this.view = undefined;
-    });
-  }
-
-  public getView(): vscode.WebviewView | undefined {
-    return this.view;
-  }
-
-  private getHtmlForWebview(_webview: vscode.Webview): string {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Moderado</title>
-  <style>
-    body {
-      font-family: var(--vscode-font-family);
-      color: var(--vscode-foreground);
-      background-color: var(--vscode-editor-background);
-      padding: 12px;
-      margin: 0;
-    }
-    .placeholder {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 8px;
-      padding: 24px 0;
-    }
-  </style>
-</head>
-<body>
-  <div class="placeholder">
-    <h3>Moderado Coding Assistant</h3>
-    <p>Ready to start a task.</p>
-  </div>
-</body>
-</html>`;
-  }
-}
+import { ModeradoWebviewPanel } from './webview/panel.js';
 
 let activeSidecar: SidecarClient | null = null;
 let activeSessionId: string | null = null;
 
-export async function getOrStartSidecar(workspaceRoot?: string, executablePathOverride?: string): Promise<SidecarClient> {
+export async function getOrStartSidecar(
+  panel?: ModeradoWebviewPanel,
+  workspaceRoot?: string,
+  executablePathOverride?: string,
+): Promise<SidecarClient> {
   if (activeSidecar && !activeSidecar.isClosed()) {
     return activeSidecar;
   }
@@ -96,6 +26,9 @@ export async function getOrStartSidecar(workspaceRoot?: string, executablePathOv
   const client = new SidecarClient({
     workspaceRoot: root,
     executablePath: executablePath || undefined,
+    onEvent: (envelope) => {
+      panel?.handleHostEvent(envelope);
+    },
     onError: (err) => {
       vscode.window.showErrorMessage(err.message);
     },
@@ -114,10 +47,11 @@ export async function getOrStartSidecar(workspaceRoot?: string, executablePathOv
 }
 
 export function activate(context: vscode.ExtensionContext): void {
-  const provider = new ModeradoChatViewProvider(context.extensionUri, () => getOrStartSidecar());
+  let panel: ModeradoWebviewPanel | undefined;
+  panel = new ModeradoWebviewPanel(context.extensionUri, () => getOrStartSidecar(panel));
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(ModeradoChatViewProvider.viewType, provider, {
+    vscode.window.registerWebviewViewProvider(ModeradoWebviewPanel.viewType, panel, {
       webviewOptions: {
         retainContextWhenHidden: true,
       },
@@ -133,7 +67,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('moderado.newSession', async () => {
       try {
-        const sidecar = await getOrStartSidecar();
+        const sidecar = await getOrStartSidecar(panel);
         const result = await sidecar.request<{ sessionId: string }>('session.new', {});
         activeSessionId = result.sessionId;
         vscode.window.showInformationMessage(`Started new Moderado session: ${result.sessionId.slice(0, 8)}`);
@@ -146,7 +80,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('moderado.resumeSession', async (targetSessionId?: string) => {
       try {
-        const sidecar = await getOrStartSidecar();
+        const sidecar = await getOrStartSidecar(panel);
         if (!targetSessionId) {
           vscode.window.showInformationMessage('No session ID specified to resume.');
           return;

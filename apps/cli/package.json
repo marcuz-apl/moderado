@@ -1,6 +1,6 @@
 {
   "name": "moderado",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "A lightweight, provider-independent CLI coding agent with free-first model routing.",
   "type": "module",
   "bin": {

@@ -288,33 +288,33 @@ Commit manifest, extension host, sidecar client, and tests with a connected `fea
 - `TranscriptState.apply(envelope: HostEventEnvelope)` updates a pure view model for assistant messages, progress/tool activity, pending approvals, completion, and error states.
 - The extension host checks schemas and active session/request IDs before dispatching any webview message.
 
-- [ ] **Step 1: Add failing pure UI state tests**
+- [x] **Step 1: Add failing pure UI state tests**
 
 Test assistant deltas append to the current turn; progress/tool events group under the active task; repeated/old events are ignored; sequence gaps show a recoverable protocol state; approvals are shown once with exact request IDs; completion/error/cancellation close active state; malformed webview messages have no effect.
 
-- [ ] **Step 2: Confirm UI state tests fail**
+- [x] **Step 2: Confirm UI state tests fail**
 
 Run: `npm test -- apps/vscode/tests/webview_messages.test.ts apps/vscode/tests/transcript.test.ts`
 Expected: FAIL because webview schemas and transcript reducer do not exist.
 
-- [ ] **Step 3: Implement message schema and transcript reducer**
+- [x] **Step 3: Implement message schema and transcript reducer**
 
 Use pure TypeScript functions and shared event types. Render no reasoning events. Do not include secrets in state, event text, or error diagnostics.
 
-- [ ] **Step 4: Implement Cline-referenced layout and composer**
+- [x] **Step 4: Implement Cline-referenced layout and composer**
 
 Build an Activity Bar task view with conversation history, new/resume task controls, streamed answer bubbles, grouped collapsible tool/progress cards, a composer, and active editor selection/file context. Use VS Code theme variables, CSP nonces, local scripts/styles only, keyboard navigation, and accessible labels. Do not implement arbitrary resource search or multi-root UI.
 
-- [ ] **Step 5: Implement review and action cards**
+- [x] **Step 5: Implement review and action cards**
 
 Render a unified diff using existing bounded `diffPreview`; display exact command argv/cwd and tool intent; provide explicit Approve and Reject controls bound to the pending request ID. Keep the workspace unmodified until sidecar resolves approval. Show local-executable setup guidance if disconnected.
 
-- [ ] **Step 6: Run extension tests and package compile**
+- [x] **Step 6: Run extension tests and package compile**
 
 Run: `npm test -- apps/vscode/tests/webview_messages.test.ts apps/vscode/tests/transcript.test.ts apps/vscode/tests/sidecar.test.ts` and `npm --prefix apps/vscode run typecheck`.
 Expected: pure transcript behavior and webview boundary tests pass.
 
-- [ ] **Step 7: Commit the VS Code view**
+- [x] **Step 7: Commit the VS Code view**
 
 Commit UI, webview, styles, and tests with a connected `feat(vscode): add moderated task chat view` subject.
 

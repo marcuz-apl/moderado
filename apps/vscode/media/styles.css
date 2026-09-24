@@ -1,0 +1,367 @@
+:root {
+  --chat-padding: 12px;
+  --bubble-radius: 8px;
+  --card-radius: 6px;
+  --border-color: var(--vscode-panel-border, rgba(128, 128, 128, 0.2));
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+  font-size: var(--vscode-font-size, 13px);
+  color: var(--vscode-foreground);
+  background-color: var(--vscode-sideBar-background, var(--vscode-editor-background));
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header & Controls */
+.task-header {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--vscode-sideBarSectionHeader-background, transparent);
+  flex-shrink: 0;
+}
+
+.header-title {
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--vscode-sideBarTitle-foreground, var(--vscode-foreground));
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-badge {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: var(--vscode-badge-background);
+  color: var(--vscode-badge-foreground);
+}
+
+.status-badge.busy {
+  background: var(--vscode-progressBar-background, #007acc);
+  color: #fff;
+}
+
+.header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.icon-btn {
+  background: transparent;
+  border: none;
+  color: var(--vscode-icon-foreground, var(--vscode-foreground));
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn:hover {
+  background: var(--vscode-toolbar-hoverBackground, rgba(128, 128, 128, 0.15));
+}
+
+/* Transcript Scroll Container */
+.transcript-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--chat-padding);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Turn Blocks */
+.turn-block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.user-bubble {
+  align-self: flex-end;
+  max-width: 90%;
+  background: var(--vscode-input-background);
+  color: var(--vscode-input-foreground);
+  border: 1px solid var(--border-color);
+  border-radius: var(--bubble-radius);
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.assistant-bubble {
+  align-self: flex-start;
+  width: 100%;
+  color: var(--vscode-foreground);
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.assistant-text {
+  white-space: pre-wrap;
+}
+
+/* Progress / Activity Card */
+.progress-card {
+  padding: 6px 10px;
+  border-radius: var(--card-radius);
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
+  border: 1px solid var(--border-color);
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.progress-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--vscode-progressBar-background, #007acc);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* Tool Activity Card */
+.tool-card {
+  border: 1px solid var(--border-color);
+  border-radius: var(--card-radius);
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.05));
+  overflow: hidden;
+  font-size: 12px;
+}
+
+.tool-header {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  background: var(--vscode-sideBarSectionHeader-background, transparent);
+  user-select: none;
+}
+
+.tool-header:hover {
+  background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.1));
+}
+
+.tool-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 500;
+}
+
+.tool-status {
+  font-size: 11px;
+  text-transform: capitalize;
+  opacity: 0.8;
+}
+
+.tool-body {
+  padding: 8px 10px;
+  border-top: 1px solid var(--border-color);
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  white-space: pre-wrap;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+/* Approval Card (Unified Diff & Command) */
+.approval-card {
+  border: 1px solid var(--vscode-editorWarning-foreground, #cca700);
+  border-radius: var(--card-radius);
+  background: var(--vscode-editorWidget-background, #252526);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.approval-card.resolved {
+  border-color: var(--border-color);
+  opacity: 0.75;
+}
+
+.approval-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.approval-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  font-weight: 700;
+  background: var(--vscode-editorWarning-foreground, #cca700);
+  color: #000;
+}
+
+.approval-payload {
+  background: var(--vscode-editor-background);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  padding: 6px 8px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+}
+
+.diff-view {
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  line-height: 1.4;
+  overflow-x: auto;
+}
+
+.diff-line.added {
+  background: var(--vscode-diffEditor-insertedLineBackground, rgba(46, 160, 67, 0.2));
+  color: var(--vscode-diffEditor-insertedTextForeground, #3fb950);
+}
+
+.diff-line.removed {
+  background: var(--vscode-diffEditor-removedLineBackground, rgba(248, 81, 73, 0.2));
+  color: var(--vscode-diffEditor-removedTextForeground, #f85149);
+}
+
+.approval-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: none;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.btn-primary {
+  background: var(--vscode-button-background);
+  color: var(--vscode-button-foreground);
+}
+
+.btn-primary:hover {
+  background: var(--vscode-button-hoverBackground);
+}
+
+.btn-secondary {
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
+.btn-secondary:hover {
+  background: var(--vscode-button-secondaryHoverBackground);
+}
+
+.btn-danger {
+  background: var(--vscode-inputValidation-errorBackground, #5a1d1d);
+  color: var(--vscode-inputValidation-errorForeground, #fff);
+  border: 1px solid var(--vscode-inputValidation-errorBorder, #be1100);
+}
+
+/* Composer Section */
+.composer-section {
+  padding: 8px 12px 12px;
+  border-top: 1px solid var(--border-color);
+  background: var(--vscode-sideBar-background);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.context-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.15));
+  border: 1px solid var(--border-color);
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, #aaa);
+}
+
+.chip-remove {
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.composer-input-box {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--vscode-input-border, var(--border-color));
+  border-radius: var(--card-radius);
+  background: var(--vscode-input-background);
+}
+
+.composer-input-box:focus-within {
+  border-color: var(--vscode-focusBorder);
+}
+
+.composer-textarea {
+  width: 100%;
+  min-height: 60px;
+  max-height: 180px;
+  resize: none;
+  padding: 8px 10px;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: var(--vscode-input-foreground);
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.composer-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px;
+  border-top: 1px solid var(--border-color);
+}
+
+.composer-tools {
+  display: flex;
+  gap: 4px;
+}
+
+.composer-actions {
+  display: flex;
+  gap: 6px;
+}
