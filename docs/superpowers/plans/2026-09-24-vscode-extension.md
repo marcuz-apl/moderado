@@ -365,20 +365,20 @@ Commit the root scripts, docs, and offline smoke test with connected subject `te
 - Root connected identifier has SemVer `0.4.0`; the corrected hook generates the current Alfazen build suffix.
 - CLI and extension package metadata both identify the completed product milestone as `0.4.0`.
 
-- [ ] **Step 1: Add a release metadata consistency test**
+- [x] **Step 1: Add a release metadata consistency test**
 
 Assert normalized root `VERSION` SemVer equals both package versions; allow connected build metadata only in root `VERSION`. Include an explicit `0.4.0` fixture for the milestone check.
 
-- [ ] **Step 2: Confirm metadata test fails before the milestone bump**
+- [x] **Step 2: Confirm metadata test fails before the milestone bump**
 
 Run: `npm test -- apps/vscode/tests/version_metadata.test.ts`
 Expected: FAIL while development metadata remains in `0.3.x`.
 
-- [ ] **Step 3: Set the milestone version**
+- [x] **Step 3: Set the milestone version**
 
 After every functional acceptance criterion is verified, align package metadata and release docs to `0.4.0`, then create the explicit `release(minor): complete VS Code extension alpha` commit from the latest `0.3.x` version. The corrected prepare-commit hook advances root `VERSION` to `0.4.0` with its current connected build suffix and stamps that commit. Keep Marketplace publishing excluded.
 
-- [ ] **Step 4: Verify the final version and full release gates**
+- [x] **Step 4: Verify the final version and full release gates**
 
 After the release commit, run `npm test`, `npm run typecheck`, `npm run build`, `npm --prefix apps/vscode run package`, and `npm test -- apps/vscode/tests/version_metadata.test.ts`; inspect the VSIX metadata.
 Expected: all checks pass, root `VERSION` and both package manifests identify `0.4.0`, and the VSIX metadata reports `0.4.0`.

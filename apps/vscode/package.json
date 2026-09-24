@@ -2,7 +2,7 @@
   "name": "moderado-vscode",
   "displayName": "Moderado",
   "description": "Moderated AI coding assistant sidecar for VS Code",
-  "version": "0.3.9",
+  "version": "0.4.0",
   "publisher": "marcuz-apl",
   "engines": {
     "vscode": "^1.85.0"
