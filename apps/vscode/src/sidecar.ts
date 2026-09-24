@@ -1,5 +1,7 @@
 import { spawn, type ChildProcess, type SpawnOptions } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { existsSync } from 'node:fs';
+import path from 'node:path';
 import {
   HOST_PROTOCOL_VERSION,
   MAX_HOST_LINE_BYTES,
@@ -64,9 +66,32 @@ export class SidecarClient {
       throw new Error('Sidecar client has already been started');
     }
 
-    const executable = this.options.executablePath?.trim() || 'moderado';
-    const args = ['host', '--workspace', this.options.workspaceRoot, '--protocol', String(HOST_PROTOCOL_VERSION)];
+    let executable = this.options.executablePath?.trim() || 'moderado';
+    let args = ['host', '--workspace', this.options.workspaceRoot, '--protocol', String(HOST_PROTOCOL_VERSION)];
     const spawnFn = this.options.spawnFn || spawn;
+
+    if (!this.options.spawnFn) {
+      if (executable.startsWith('node ') || executable.startsWith('node.exe ')) {
+        const parts = executable.split(/\s+/);
+        executable = parts[0];
+        args = [...parts.slice(1), ...args];
+      } else if (executable.endsWith('.js') || executable.endsWith('.mjs') || executable.endsWith('.cjs')) {
+        args = [executable, ...args];
+        executable = 'node';
+      } else if (process.platform === 'win32' && executable === 'moderado') {
+        const localCli = path.join(this.options.workspaceRoot, 'apps', 'cli', 'dist', 'index.js');
+        const globalCli = process.env.APPDATA
+          ? path.join(process.env.APPDATA, 'npm', 'node_modules', 'moderado', 'dist', 'index.js')
+          : '';
+        if (existsSync(localCli)) {
+          args = [localCli, ...args];
+          executable = 'node';
+        } else if (globalCli && existsSync(globalCli)) {
+          args = [globalCli, ...args];
+          executable = 'node';
+        }
+      }
+    }
 
     try {
       this.child = spawnFn(executable, args, {
