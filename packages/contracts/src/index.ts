@@ -4,3 +4,4 @@ export * from './provider.js';
 export * from './tools.js';
 export * from './approvals.js';
 export * from './events.js';
+export * from './host_protocol.js';

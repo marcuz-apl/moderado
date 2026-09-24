@@ -19,7 +19,7 @@
 - Reads follow existing auto-approval rules; every write and command requires explicit approval; disconnect and cancellation fail closed.
 - Use existing dependencies and Node/VS Code APIs; add no runtime dependency without justification.
 - Offline tests use fake providers and temporary workspaces; test runs make no live provider calls.
-- Every commit has the repository connected version prefix; no commit is pushed unless requested.
+- Every commit has the repository connected version prefix; `feat` commits bump patch, `docs`/`fix` commits advance only the build suffix, and a `release(minor)` commit advances to the explicit milestone. When a feature commit changes root SemVer, update `apps/cli/package.json` in that same commit. No implementation commit is pushed unless requested.
 
 ## Review Focus
 
@@ -55,7 +55,7 @@
 - `pre-commit` performs no message-dependent version calculation.
 - `post-commit` writes and amends only `VERSION` into the just-created local commit; unrelated staged paths remain staged. If the amend fails, it reports the error and restores the exact prior HEAD, including for a user-initiated `git commit --amend`, leaving changes staged for retry. Successful commits clear pending state. It does not touch remote history.
 
-- [ ] **Step 1: Write hook regression tests**
+- [x] **Step 1: Write hook regression tests**
 
 Create a temporary Git repository per test with baseline `VERSION` `v0.3.4+${today}1`, where `today` is the current UTC date in `YYMMDD`; configure the baseline commit before enabling hooks, then make a `feat(test): first feature` commit followed by `docs: update notes`. Assert the feature commit changes SemVer to `0.3.5`; the docs commit retains `0.3.5` and advances only the build suffix. Assert each subject's first token equals `VERSION` in that commit's tree.
 
@@ -68,21 +68,21 @@ expect(readSubject(repo).split(' ', 1)[0]).toBe(readVersion(repo));
 
 Also test that `release(minor): publish milestone` changes `0.3.5` to `0.4.0`, that `feat!: breaking API` fails without the major approval variable, that partial commits preserve unrelated staged files, and that commit rejection, signing failure, and both ordinary and user-initiated amend failures leave no invalid commit or version bump. Verify a retry replaces stale pending state. Use temporary git identity and no network.
 
-- [ ] **Step 2: Run the hook tests and confirm failure**
+- [x] **Step 2: Run the hook tests and confirm failure**
 
 Run: `npm test -- tests/version_hooks.test.ts` and `npm test -- apps/cli/tests/package_metadata.test.ts`.
 Expected: the hook regression fails because the current pre-commit hook reads the previous `COMMIT_EDITMSG`; package metadata passes with root and CLI versions aligned at `0.3.4`.
 
-- [ ] **Step 3: Move bumping to the hook that receives the current message**
+- [x] **Step 3: Move bumping to the hook that receives the current message**
 
-Read `$1` in `.githooks/prepare-commit-msg`; strip any existing connected prefix; call `detect_bump_type` on the pending subject; calculate and validate the next ID; prefix the current message; and save the prior HEAD and target under the Git directory without changing `VERSION`. Leave `.githooks/pre-commit` as an empty successful hook. Make `.githooks/commit-msg` validate the prefix against the old version and saved target without mutating `VERSION`. Add executable `.githooks/post-commit` to write and amend only `VERSION` into the just-created local commit, with hooks disabled and inherited `GIT_INDEX_FILE` cleared. On amendment failure, restore the saved HEAD, restore the old worktree `VERSION`, and report recovery. Keep the CLI package version at `0.3.4` while development remains on the `0.3.x` line.
+Read `$1` in `.githooks/prepare-commit-msg`; strip any existing connected prefix; call `detect_bump_type` on the pending subject; calculate and validate the next ID; prefix the current message; and save the prior HEAD and target under the Git directory without changing `VERSION`. Leave `.githooks/pre-commit` as an empty successful hook. Make `.githooks/commit-msg` validate the prefix against the old version and saved target without mutating `VERSION`. Add executable `.githooks/post-commit` to write and amend only `VERSION` into the just-created local commit, with hooks disabled and inherited `GIT_INDEX_FILE` cleared. On amendment failure, restore the saved HEAD, restore the old worktree `VERSION`, and report recovery. When this `feat` commit advances root SemVer from `0.3.4` to `0.3.5`, update `apps/cli/package.json` to `0.3.5` in the same commit; later feature commits follow the same synchronization rule.
 
-- [ ] **Step 4: Run hook tests and verify the clean cycle**
+- [x] **Step 4: Run hook tests and verify the clean cycle**
 
 Run: `npm test -- tests/version_hooks.test.ts`
 Expected: all hook tests pass, including docs/fix build-only behavior, feat patch behavior, explicit minor behavior, and major approval gate.
 
-- [ ] **Step 5: Commit the hook correction**
+- [x] **Step 5: Commit the hook correction**
 
 Stage the four hook files, `tests/version_hooks.test.ts`, and this plan correction; mark `post-commit` executable in Git. Commit with a build-only `fix(versioning): read the pending commit subject` message. Verify that the connected prefix equals the committed tree's `VERSION` and that the worktree has no staged `VERSION` left behind.
 
@@ -92,6 +92,8 @@ Stage the four hook files, `tests/version_hooks.test.ts`, and this plan correcti
 - Create: `packages/contracts/src/host_protocol.ts`
 - Modify: `packages/contracts/src/index.ts`
 - Create: `packages/contracts/tests/host_protocol.test.ts`
+- Modify: `apps/cli/package.json` to match the `0.3.5` patch version generated by this `feat` commit.
+- Modify: `docs/superpowers/plans/2026-09-24-vscode-extension.md` to record the version-sync rule for feature commits.
 
 **Interfaces:**
 - `HostRequestSchema` discriminates `initialize`, `chat.send`, `chat.cancel`, `approval.respond`, `session.new`, and `session.resume`.
@@ -99,7 +101,7 @@ Stage the four hook files, `tests/version_hooks.test.ts`, and this plan correcti
 - `HostNotificationSchema` defines the `event` notification containing `HostEventEnvelope`.
 - Export inferred request/result types for CLI and extension use.
 
-- [ ] **Step 1: Add failing schema tests**
+- [x] **Step 1: Add failing schema tests**
 
 Cover valid examples from the spec, unknown method rejection, missing IDs, empty or >100,000-character prompts, >20,000-character selection text, invalid status, unsupported protocol version, absolute/drive paths, and relative paths containing traversal segments in either slash style. Runtime tests own symlink and canonical-workspace checks.
 
@@ -114,21 +116,22 @@ expect(HostRequestSchema.safeParse({
 }).success).toBe(false);
 ```
 
-- [ ] **Step 2: Confirm the new test fails**
+- [x] **Step 2: Confirm the new test fails**
 
 Run: `npm test -- packages/contracts/tests/host_protocol.test.ts`
 Expected: FAIL because host protocol schemas have not been exported.
 
-- [ ] **Step 3: Implement minimal Zod schemas**
+- [x] **Step 3: Implement minimal Zod schemas**
 
 Implement each union branch with the exact method names and caps in the spec. Validate only syntactic path properties at the contracts boundary; canonical/jail checks remain runtime responsibilities. Reuse `ApprovalStatusSchema` and `HostEventEnvelopeSchema`.
 
-- [ ] **Step 4: Run contract tests and package typecheck**
+- [x] **Step 4: Run contract tests and package typecheck**
 
 Run: `npm test -- packages/contracts/tests/host_protocol.test.ts` and `npm --prefix packages/contracts run typecheck`.
 Expected: all protocol boundary cases pass and contracts compile independently.
 
-- [ ] **Step 5: Commit the host contracts**
+- [x] **Step 5: Commit the host contracts**
+
 
 Commit only contract source, exports, and tests with a connected `feat(contracts): define host protocol v1` subject.
 
