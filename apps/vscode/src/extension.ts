@@ -56,11 +56,8 @@ export function activate(context: vscode.ExtensionContext): void {
   panel = new ModeradoWebviewPanel(context.extensionUri, () => getOrStartSidecar(panel));
 
   context.subscriptions.push(
-    vscode.window.registerWebviewViewProvider(ModeradoWebviewPanel.viewType, panel, {
-      webviewOptions: {
-        retainContextWhenHidden: true,
-      },
-    }),
+    vscode.window.registerWebviewViewProvider(ModeradoWebviewPanel.viewType, panel),
+
   );
 
   context.subscriptions.push(
