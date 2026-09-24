@@ -39,6 +39,14 @@ export const WebviewAttachSelectionMsgSchema = z.object({
   type: z.literal('attachSelection'),
 });
 
+export const WebviewSelectModelMsgSchema = z.object({
+  type: z.literal('selectModel'),
+});
+
+export const WebviewSelectProviderMsgSchema = z.object({
+  type: z.literal('selectProvider'),
+});
+
 export const WebviewToHostMessageSchema = z.discriminatedUnion('type', [
   WebviewSendMsgSchema,
   WebviewCancelMsgSchema,
@@ -47,6 +55,8 @@ export const WebviewToHostMessageSchema = z.discriminatedUnion('type', [
   WebviewApproveMsgSchema,
   WebviewRejectMsgSchema,
   WebviewAttachSelectionMsgSchema,
+  WebviewSelectModelMsgSchema,
+  WebviewSelectProviderMsgSchema,
 ]);
 export type WebviewToHostMessage = z.infer<typeof WebviewToHostMessageSchema>;
 

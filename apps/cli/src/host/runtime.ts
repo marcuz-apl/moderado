@@ -34,6 +34,8 @@ export interface CreateHostRuntimeOptions {
   workspaceRoot: string;
   emit: (notification: HostNotification) => Promise<void>;
   dependencies?: HostRuntimeDependencies;
+  providerId?: string;
+  modelId?: string;
 }
 
 export interface HostRuntime {
@@ -48,9 +50,12 @@ export interface HostRuntime {
 async function resolveDefaultProvider(
   customHome?: string,
   credentialStore?: CredentialStore,
+  providerIdOverride?: string,
 ): Promise<IProviderAdapter> {
   const config = loadConfig(customHome);
-  const activeConn = getActiveConnection(config);
+  const activeConn = providerIdOverride
+    ? (config.connections[providerIdOverride] ?? getActiveConnection(config))
+    : getActiveConnection(config);
   const store =
     credentialStore ??
     (process.platform === 'win32'
@@ -89,7 +94,7 @@ export async function createHostRuntime(options: CreateHostRuntimeOptions): Prom
   const sessionStore = dependencies?.sessionStore ?? new SessionStore(customHome);
   const credentialStore = dependencies?.credentialStore;
   const provider =
-    dependencies?.provider ?? (await resolveDefaultProvider(customHome, credentialStore));
+    dependencies?.provider ?? (await resolveDefaultProvider(customHome, credentialStore, options.providerId));
   const tools = dependencies?.tools ?? createDefaultToolRegistry();
   const loop = dependencies?.agentLoop ?? new AgentLoop();
   const router = new Router();
@@ -248,6 +253,7 @@ export async function createHostRuntime(options: CreateHostRuntimeOptions): Prom
               approvalHandler: approvalQueue,
               router,
               policy,
+              routeOptions: options.modelId ? { pinnedModelId: options.modelId } : undefined,
               eventListener: (event) => hostStream.emit(event),
               signal: abortController.signal,
               conversationHistory: activeSession.messages,

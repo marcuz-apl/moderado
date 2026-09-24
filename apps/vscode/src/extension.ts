@@ -19,13 +19,17 @@ export async function getOrStartSidecar(
     throw new SidecarError('Please open a workspace folder to use Moderado.', 'WORKSPACE_DENIED');
   }
 
+  const config = vscode.workspace.getConfiguration('moderado');
   const executablePath =
-    executablePathOverride ??
-    vscode.workspace.getConfiguration('moderado').get<string>('executablePath')?.trim();
+    executablePathOverride ?? config.get<string>('executablePath')?.trim();
+  const provider = config.get<string>('provider')?.trim();
+  const model = config.get<string>('model')?.trim();
 
   const client = new SidecarClient({
     workspaceRoot: root,
     executablePath: executablePath || undefined,
+    provider: provider || undefined,
+    model: model || undefined,
     onEvent: (envelope) => {
       panel?.handleHostEvent(envelope);
     },
@@ -56,6 +60,95 @@ export function activate(context: vscode.ExtensionContext): void {
       webviewOptions: {
         retainContextWhenHidden: true,
       },
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(async (event) => {
+      if (
+        event.affectsConfiguration('moderado.provider') ||
+        event.affectsConfiguration('moderado.model') ||
+        event.affectsConfiguration('moderado.executablePath')
+      ) {
+        if (activeSidecar && !activeSidecar.isClosed()) {
+          const old = activeSidecar;
+          activeSidecar = null;
+          await old.close();
+          vscode.window.showInformationMessage('Moderado settings changed; sidecar reloaded.');
+        }
+      }
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('moderado.selectProvider', async () => {
+      const config = vscode.workspace.getConfiguration('moderado');
+      const current = config.get<string>('provider') || '(Default / CLI active)';
+      const options = [
+        { label: 'nvidia-nim', description: 'NVIDIA NIM (Nemotron, LLaMA, DeepSeek, Kimi)' },
+        { label: 'openrouter', description: 'OpenRouter (Qwen, DeepSeek, Mistral, LLaMA)' },
+        { label: 'agnes', description: 'Agnes AI (Agnes Flash, Code)' },
+        { label: 'orcarouter', description: 'OrcaRouter' },
+        { label: '(Default / CLI active)', description: 'Use active connection from ~/.moderado/config.json' },
+        { label: 'Custom...', description: 'Enter a custom provider connection ID' },
+      ];
+
+      const picked = await vscode.window.showQuickPick(options, {
+        placeHolder: `Current provider: ${current}. Select provider to use:`,
+      });
+
+      if (!picked) return;
+
+      let value = picked.label;
+      if (value === '(Default / CLI active)') {
+        value = '';
+      } else if (value === 'Custom...') {
+        const input = await vscode.window.showInputBox({
+          prompt: 'Enter provider connection ID',
+          placeHolder: 'e.g. nvidia-nim, openrouter, custom-id',
+        });
+        if (input === undefined) return;
+        value = input.trim();
+      }
+
+      await config.update('provider', value, vscode.ConfigurationTarget.Global);
+      vscode.window.showInformationMessage(`Moderado provider set to: ${value || 'Default (CLI active)'}`);
+    }),
+  );
+
+  context.subscriptions.push(
+    vscode.commands.registerCommand('moderado.selectModel', async () => {
+      const config = vscode.workspace.getConfiguration('moderado');
+      const current = config.get<string>('model') || '(Auto: Free-First)';
+      const options = [
+        { label: '(Auto: Free-First)', description: 'Free-first automatic model routing' },
+        { label: 'z-ai/glm-5.3-flash', description: 'NVIDIA NIM free trial fast coding model' },
+        { label: 'qwen/qwen3.8-27b:free', description: 'OpenRouter free high-capability coding model' },
+        { label: 'meta/llama-3.1-8b-instruct', description: 'NVIDIA NIM free trial lightweight model' },
+        { label: 'nvidia/llama-3.1-nemotron-70b-instruct', description: 'NVIDIA NIM high-intelligence model' },
+        { label: 'Custom...', description: 'Enter a custom model ID' },
+      ];
+
+      const picked = await vscode.window.showQuickPick(options, {
+        placeHolder: `Current model: ${current}. Select model to use:`,
+      });
+
+      if (!picked) return;
+
+      let value = picked.label;
+      if (value === '(Auto: Free-First)') {
+        value = '';
+      } else if (value === 'Custom...') {
+        const input = await vscode.window.showInputBox({
+          prompt: 'Enter model identifier',
+          placeHolder: 'e.g. z-ai/glm-5.3-flash, qwen/qwen3.8-27b:free',
+        });
+        if (input === undefined) return;
+        value = input.trim();
+      }
+
+      await config.update('model', value, vscode.ConfigurationTarget.Global);
+      vscode.window.showInformationMessage(`Moderado model set to: ${value || 'Auto (Free-First)'}`);
     }),
   );
 

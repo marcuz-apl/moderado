@@ -74,7 +74,7 @@ describe('Webview Message Schemas', () => {
       expect(WebviewToHostMessageSchema.safeParse(rejectMsg).success).toBe(true);
     });
 
-    it('validates lifecycle messages (cancel, newSession, resumeSession, attachSelection)', () => {
+    it('validates lifecycle messages (cancel, newSession, resumeSession, attachSelection, selectModel, selectProvider)', () => {
       expect(WebviewToHostMessageSchema.safeParse({ type: 'cancel' }).success).toBe(true);
       expect(WebviewToHostMessageSchema.safeParse({ type: 'newSession' }).success).toBe(true);
       expect(
@@ -84,6 +84,8 @@ describe('Webview Message Schemas', () => {
         }).success,
       ).toBe(true);
       expect(WebviewToHostMessageSchema.safeParse({ type: 'attachSelection' }).success).toBe(true);
+      expect(WebviewToHostMessageSchema.safeParse({ type: 'selectModel' }).success).toBe(true);
+      expect(WebviewToHostMessageSchema.safeParse({ type: 'selectProvider' }).success).toBe(true);
     });
 
     it('rejects unknown or malformed message types', () => {

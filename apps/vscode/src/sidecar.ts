@@ -22,6 +22,8 @@ export type PendingApproval = ApprovalRequest;
 export interface SidecarClientOptions {
   workspaceRoot: string;
   executablePath?: string;
+  provider?: string;
+  model?: string;
   spawnFn?: (command: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   onMessage?: (message: HostResponse | HostNotification) => void;
   onEvent?: (envelope: HostEventEnvelope) => void;
@@ -91,6 +93,13 @@ export class SidecarClient {
           executable = 'node';
         }
       }
+    }
+
+    if (this.options.provider?.trim()) {
+      args.push('--provider', this.options.provider.trim());
+    }
+    if (this.options.model?.trim()) {
+      args.push('--model', this.options.model.trim());
     }
 
     try {

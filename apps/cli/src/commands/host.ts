@@ -25,6 +25,8 @@ export async function handleHostCommand(
       return createHostRuntime({
         workspaceRoot: args.workspace,
         emit,
+        providerId: args.provider,
+        modelId: args.model,
       });
     });
 

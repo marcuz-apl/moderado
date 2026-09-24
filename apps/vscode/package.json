@@ -54,6 +54,14 @@
       {
         "command": "moderado.cancelTurn",
         "title": "Moderado: Cancel Turn"
+      },
+      {
+        "command": "moderado.selectProvider",
+        "title": "Moderado: Select Provider"
+      },
+      {
+        "command": "moderado.selectModel",
+        "title": "Moderado: Select Model"
       }
     ],
     "configuration": {
@@ -63,6 +71,16 @@
           "type": "string",
           "default": "",
           "description": "Path to the moderado executable. Defaults to resolving 'moderado' from the system PATH."
+        },
+        "moderado.provider": {
+          "type": "string",
+          "default": "",
+          "description": "Provider connection ID to use (e.g. 'nvidia-nim', 'openrouter', 'agnes', 'orcarouter'). If empty, uses the active connection from Moderado CLI."
+        },
+        "moderado.model": {
+          "type": "string",
+          "default": "",
+          "description": "Specific model ID to pin for coding tasks (e.g. 'z-ai/glm-5.3-flash', 'qwen/qwen3.8-27b:free'). If empty, uses free-first auto-routing."
         }
       }
     }

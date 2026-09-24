@@ -125,6 +125,38 @@ declare module 'vscode' {
     readonly logUri: Uri;
   }
 
+  export enum ConfigurationTarget {
+    Global = 1,
+    Workspace = 2,
+    WorkspaceFolder = 3,
+  }
+
+  export interface ConfigurationChangeEvent {
+    affectsConfiguration(section: string, scope?: any): boolean;
+  }
+
+  export interface QuickPickItem {
+    label: string;
+    description?: string;
+    detail?: string;
+    picked?: boolean;
+    alwaysShow?: boolean;
+  }
+
+  export interface QuickPickOptions {
+    placeHolder?: string;
+    matchOnDescription?: boolean;
+    matchOnDetail?: boolean;
+    canPickMany?: boolean;
+  }
+
+  export interface InputBoxOptions {
+    prompt?: string;
+    placeHolder?: string;
+    value?: string;
+    password?: boolean;
+  }
+
   export namespace commands {
     export function registerCommand(command: string, callback: (...args: any[]) => any, thisArgs?: any): Disposable;
     export function executeCommand<T = unknown>(command: string, ...rest: any[]): Thenable<T>;
@@ -139,6 +171,8 @@ declare module 'vscode' {
     export function showInformationMessage(message: string, ...items: string[]): Thenable<string | undefined>;
     export function showWarningMessage(message: string, ...items: string[]): Thenable<string | undefined>;
     export function showErrorMessage(message: string, ...items: string[]): Thenable<string | undefined>;
+    export function showQuickPick<T extends string | QuickPickItem>(items: readonly T[] | Promise<readonly T[]>, options?: QuickPickOptions): Thenable<T | undefined>;
+    export function showInputBox(options?: InputBoxOptions): Thenable<string | undefined>;
     export let activeTextEditor: TextEditor | undefined;
   }
 
@@ -146,5 +180,6 @@ declare module 'vscode' {
     export let workspaceFolders: readonly WorkspaceFolder[] | undefined;
     export function getConfiguration(section?: string, scope?: any): WorkspaceConfiguration;
     export function asRelativePath(pathOrUri: string | Uri, includeWorkspaceFolder?: boolean): string;
+    export const onDidChangeConfiguration: Event<ConfigurationChangeEvent>;
   }
 }

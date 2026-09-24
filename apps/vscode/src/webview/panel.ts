@@ -27,8 +27,11 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
   public resolveWebviewView(
     webviewView: vscode.WebviewView,
     _context: vscode.WebviewViewResolveContext,
-    _token: vscode.CancellationToken,
+    token: vscode.CancellationToken,
   ): void {
+    if (token.isCancellationRequested) {
+      return;
+    }
     this.view = webviewView;
 
     webviewView.webview.options = {
@@ -177,6 +180,16 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
           });
           break;
         }
+
+        case 'selectModel': {
+          await vscode.commands.executeCommand('moderado.selectModel');
+          break;
+        }
+
+        case 'selectProvider': {
+          await vscode.commands.executeCommand('moderado.selectProvider');
+          break;
+        }
       }
     } catch (err: any) {
       this.postMessageToWebview({
@@ -236,6 +249,7 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
       <span class="status-badge" id="status-badge">Idle</span>
     </div>
     <div class="header-actions">
+      <button class="icon-btn" id="select-model-btn" title="Model &amp; Provider Settings" aria-label="Model &amp; Provider Settings">⚙️</button>
       <button class="icon-btn" id="new-task-btn" title="New Session" aria-label="New Session">+</button>
     </div>
   </header>

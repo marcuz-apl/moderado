@@ -85,6 +85,30 @@ describe('SidecarClient', () => {
     expect(capturedCmd).toBe('/opt/custom/moderado-bin');
   });
 
+  it('passes provider and model arguments when configured', async () => {
+    const mockProc = createMockProcess();
+    let capturedArgs: readonly string[] = [];
+
+    const spawnFn = vi.fn((_cmd: string, args: readonly string[], _opts: any) => {
+      capturedArgs = args;
+      return mockProc as unknown as ChildProcess;
+    });
+
+    const client = new SidecarClient({
+      workspaceRoot: '/test/workspace',
+      provider: 'nvidia-nim',
+      model: 'z-ai/glm-5.3-flash',
+      spawnFn,
+    });
+
+    client.start();
+
+    expect(capturedArgs).toContain('--provider');
+    expect(capturedArgs).toContain('nvidia-nim');
+    expect(capturedArgs).toContain('--model');
+    expect(capturedArgs).toContain('z-ai/glm-5.3-flash');
+  });
+
   it('provides an actionable error message when the executable is not found (ENOENT)', async () => {
     const mockProc = createMockProcess();
     const spawnFn = vi.fn(() => mockProc as unknown as ChildProcess);

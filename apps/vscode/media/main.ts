@@ -81,6 +81,7 @@ interface EditorSelectionContext {
   const sendBtn = document.getElementById('send-btn') as HTMLButtonElement;
   const cancelBtn = document.getElementById('cancel-btn') as HTMLButtonElement;
   const newTaskBtn = document.getElementById('new-task-btn') as HTMLButtonElement;
+  const selectModelBtn = document.getElementById('select-model-btn') as HTMLButtonElement | null;
   const attachSelectionBtn = document.getElementById('attach-selection-btn') as HTMLButtonElement;
   const contextChipContainer = document.getElementById('context-chip-container') as HTMLElement;
   const contextChipLabel = document.getElementById('context-chip-label') as HTMLElement;
@@ -260,6 +261,12 @@ interface EditorSelectionContext {
   newTaskBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'newSession' });
   });
+
+  if (selectModelBtn) {
+    selectModelBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'selectModel' });
+    });
+  }
 
   attachSelectionBtn.addEventListener('click', () => {
     vscode.postMessage({ type: 'attachSelection' });
