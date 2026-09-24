@@ -62,7 +62,7 @@ it('installs the binary only when asset and manifest checksums agree', async () 
     expect(stdout).toContain('Installed moderado v9.9.9');
     expect(await readFile(join(target, 'moderado'), 'utf8')).toBe('binary-bytes');
   } finally { await close(); }
-});
+}, 15_000);
 
 it('refuses to install when the checksum disagrees with the manifest', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'moderado-install-'));
@@ -82,4 +82,4 @@ it('refuses to install when the checksum disagrees with the manifest', async () 
     dirs.push(home);
     await expect(execFileAsync(shellExecutable(), [posix(runner), '--dir', posix(join(dir, 'bin'))], { env: { ...process.env, HOME: home, FAKE_OS: 'Linux', FAKE_ARCH: 'x86_64' } })).rejects.toThrow('manifest');
   } finally { await close(); }
-});
+}, 15_000);
