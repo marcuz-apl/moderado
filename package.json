@@ -20,7 +20,8 @@
     "generate:manifests": "node scripts/distribution_manifests.mjs",
     "build:vscode": "tsc --project apps/vscode/tsconfig.json",
     "test:vscode": "vitest run apps/vscode/tests",
-    "typecheck:vscode": "tsc --project apps/vscode/tsconfig.json --noEmit"
+    "typecheck:vscode": "tsc --project apps/vscode/tsconfig.json --noEmit",
+    "package:vscode": "npm --prefix apps/vscode run package"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",

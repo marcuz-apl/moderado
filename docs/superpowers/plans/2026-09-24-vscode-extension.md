@@ -331,24 +331,24 @@ Commit UI, webview, styles, and tests with a connected `feat(vscode): add modera
 - Root scripts `build:vscode`, `test:vscode`, and `package:vscode` run the extension's own build/tests/package process.
 - Local install instructions name Node >=20, VS Code, a discoverable `moderado` executable, the command to package a `.vsix`, and VS Code's `Install from VSIX...` workflow.
 
-- [ ] **Step 1: Write a protocol-to-UI offline smoke test**
+- [x] **Step 1: Write a protocol-to-UI offline smoke test**
 
 Connect the extension controller to a fake line server and fake provider; initialize, send a prompt with a selected-code context, receive assistant/progress events, request a write approval, deny it, and verify no file mutation occurs. Resume the persisted session and verify sequence continuation.
 
-- [ ] **Step 2: Confirm integration smoke test fails**
+- [x] **Step 2: Confirm integration smoke test fails**
 
 Run: `npm test -- apps/vscode/tests/host_smoke.test.ts`
 Expected: FAIL until extension and sidecar are connected through the real contracts.
 
-- [ ] **Step 3: Wire workspace scripts and local VSIX documentation**
+- [x] **Step 3: Wire workspace scripts and local VSIX documentation**
 
 Ensure root build references contracts -> tools/providers/core -> CLI -> extension correctly; extension sources compile separately and do not leak VS Code types to CLI. Add scripts for offline tests and packaging. Document executable configuration and VSIX install instructions.
 
-- [ ] **Step 4: Run full verification and inspect VSIX contents**
+- [x] **Step 4: Run full verification and inspect VSIX contents**
 
 Run: `npm test`, `npm run typecheck`, `npm run build`, `npm --prefix apps/vscode run package`, then inspect the generated VSIX archive. Confirm it contains extension host/webview assets only and no keys, config files, workspace contents, or unnecessary source maps/dependencies.
 
-- [ ] **Step 5: Commit integration and docs**
+- [x] **Step 5: Commit integration and docs**
 
 Commit the root scripts, docs, and offline smoke test with connected subject `test(vscode): verify host integration`.
 

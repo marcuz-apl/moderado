@@ -55,6 +55,14 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
     this.postMessageToWebview({ type: 'state', state: this.state });
   }
 
+  public setSessionId(sessionId: string): void {
+    this.state = {
+      ...this.state,
+      sessionId,
+    };
+    this.postMessageToWebview({ type: 'state', state: this.state });
+  }
+
   public getState(): TranscriptState {
     return this.state;
   }
@@ -116,15 +124,20 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
         }
 
         case 'newSession': {
-          const result = await sidecar.request<{ sessionId: string }>('session.new', {});
+          const currentId = this.state.sessionId || randomBytes(16).toString('hex');
+          const result = await sidecar.request<{ sessionId: string }>('session.new', {
+            sessionId: currentId,
+          });
           this.state = initialTranscriptState(result.sessionId);
           this.postMessageToWebview({ type: 'state', state: this.state });
           break;
         }
 
         case 'resumeSession': {
+          const currentId = this.state.sessionId || msg.sessionId;
           const result = await sidecar.request<{ sessionId: string }>('session.resume', {
-            sessionId: msg.sessionId,
+            sessionId: currentId,
+            targetSessionId: msg.sessionId,
           });
           this.state = initialTranscriptState(result.sessionId);
           this.postMessageToWebview({ type: 'state', state: this.state });

@@ -70,7 +70,8 @@
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "package": "node ./scripts/package_vsix.mjs"
   },
   "devDependencies": {
     "@types/vscode": "^1.85.0"

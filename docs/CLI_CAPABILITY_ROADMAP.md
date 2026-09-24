@@ -344,3 +344,20 @@ context, and source traceability. M7.3 runs last and certifies the release.
 - Search responses are bounded, validated, and attributable to source URLs.
 - Offline tests never contact external services.
 - Provider additions remain isolated behind the provider-independent contracts.
+
+---
+
+## Milestone 8 — VS Code Extension & Headless Host Alpha (`v0.4.0`) ✅
+
+**Goal:** Provide a supervised VS Code agentic coding experience using Moderado's headless host protocol, human-in-the-loop approvals, reviewable unified diffs, and session persistence.
+
+### Scope
+
+- **Versioned Host Wire Protocol**: Version 1 NDJSON protocol (`packages/contracts`) for headless sidecar orchestration (`moderado host --workspace <path> --protocol 1`).
+- **Human-in-the-Loop Approval Queue**: Promise-based approval tracking where all file edits and commands strictly require explicit interactive approval.
+- **Fail-Closed Security Boundary**: Disconnection, task cancellation, and process exit automatically settle pending approvals as `aborted`, never approved.
+- **Sidecar Lifecycle**: Robust child process supervision with `shell: false`, argument array isolation, line bounding (1 MiB max), bounded stderr capture, and graceful process termination.
+- **Activity Bar Task Chat Webview**: Dedicated sidebar chat container with real-time assistant streaming, grouped tool activity cards, unified diff review cards, and active editor context attachment.
+- **Offline Integration Smoke Test**: Complete offline verification covering turn dispatch, code context injection, approval denial without workspace mutation, and session resumption with sequence continuity.
+- **Local VSIX Packaging**: Standalone, clean VSIX artifact without bundled dependencies or credentials (`npm run package:vscode`).
+

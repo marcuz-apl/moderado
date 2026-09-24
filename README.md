@@ -44,6 +44,18 @@ moderado run "Analyze security boundaries" --read-only
 
 ---
 
+## VS Code Extension (Alpha)
+
+Moderado provides an official VS Code extension for supervised agentic coding directly from the Activity Bar:
+- **Interactive Review**: Review proposed file edits as colorized unified diffs before granting permission.
+- **Strict Human-in-the-Loop**: File modifications and command executions require explicit approval (`Approve` / `Reject`).
+- **Fail-Closed Security**: Disconnection or cancellation automatically aborts pending operations.
+- **Zero Autonomous Writes**: The agent never mutates files without your explicit consent.
+
+See [apps/vscode/README.md](apps/vscode/README.md) for local VSIX build and installation instructions.
+
+---
+
 ## Install Moderado
 
 `moderado@0.3.0` is live on the public npm registry (`latest` → 0.3.0).

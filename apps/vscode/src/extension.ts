@@ -43,6 +43,7 @@ export async function getOrStartSidecar(
   const initResult = await client.initialize();
   activeSessionId = initResult.sessionId;
   activeSidecar = client;
+  panel?.setSessionId(initResult.sessionId);
   return client;
 }
 
