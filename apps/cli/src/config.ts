@@ -202,7 +202,7 @@ export function removeMcpServer(name: string, customHome?: string): void {
 }
 
 export async function storeConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
-  if (!connection.apiKey?.trim()) throw new Error('A provider API key is required.');
+  if (!connection.apiKey?.trim()) return connection;
   const reference = credentialReference(connection.id);
   await store.set(reference, connection.apiKey.trim());
   return { ...connection, credentialReference: reference };

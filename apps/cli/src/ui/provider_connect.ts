@@ -1,7 +1,7 @@
 import { ProviderConnection } from '../config.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
-import { fetchOpenRouterFreeModels } from '@moderado/providers';
+import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
 import type { ModelInventoryEntry } from '@moderado/contracts';
 
 export interface ConnectionInput {
@@ -21,7 +21,7 @@ export interface PopupConnectionOptions {
 
 export interface ProviderPreset {
   label: string;
-  value: 'nvidia-nim' | 'openrouter' | 'agnes-ai' | 'openai-compatible';
+  value: 'nvidia-nim' | 'openrouter' | 'agnes-ai' | 'orcarouter' | 'ollama' | 'lm-studio' | 'openai-compatible';
   description: string;
   tag?: string;
   displayName?: string;
@@ -32,6 +32,9 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
   { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
+  { label: 'OrcaRouter', value: 'orcarouter', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', description: 'Connect OrcaRouter for adaptive model routing.' },
+  { label: 'Ollama', value: 'ollama', tag: 'Local', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', description: 'Use models served locally by Ollama.' },
+  { label: 'LM Studio', value: 'lm-studio', tag: 'Local', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', description: 'Use models served by LM Studio local server.' },
   { label: 'Other OpenAI-compatible provider', value: 'openai-compatible', description: 'Connect any compatible endpoint with its base URL, key, and model ID.' },
 ];
 
@@ -103,7 +106,7 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
   const displayName = input.displayName?.trim() || 'OpenAI-compatible provider';
   const defaultModel = input.defaultModel?.trim();
   if (!defaultModel) throw new Error('A default model is required for an OpenAI-compatible provider.');
-  if (!input.apiKey?.trim()) throw new Error('An API key is required.');
+  if (!input.apiKey?.trim() && !['ollama', 'lm-studio'].includes(connectionId(displayName))) throw new Error('An API key is required.');
   if (!input.baseUrl?.trim()) throw new Error('A base URL is required.');
 
   let url: URL;
@@ -117,7 +120,7 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
     displayName,
     kind: 'openai-compatible',
     baseUrl: url.toString().replace(/\/+$/, ''),
-    apiKey: input.apiKey.trim(),
+    apiKey: input.apiKey?.trim() || undefined,
     defaultModel,
   };
 }
@@ -135,7 +138,7 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   if (saved && options.resolveSavedConnection) {
     try {
       const resolved = await options.resolveSavedConnection(saved);
-      if (resolved.apiKey?.trim()) return resolved;
+      if (resolved.apiKey?.trim() || (saved.id === 'ollama' || saved.id === 'lm-studio')) return resolved;
     } catch {
       // Continue to key entry when the credential service is unavailable.
     }
@@ -150,8 +153,23 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   const displayName = preset?.displayName ?? await askPopupText('Provider name (for example, OpenRouter)', options);
   if (!displayName) return undefined;
   const baseUrl = preset?.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
-  const apiKey = await askPopupText('API key', options, true);
+  const apiKey = selectedValue === 'ollama' || selectedValue === 'lm-studio'
+    ? undefined
+    : await askPopupText('API key', options, true);
   let defaultModel: string | undefined;
+  if (selectedValue === 'ollama' || selectedValue === 'lm-studio' || selectedValue === 'orcarouter') {
+    try {
+      const models = await fetchProviderModels(baseUrl!, apiKey, { signal: options.signal });
+      if (models.length) {
+        const choices = models.map((entry) => ({ label: entry.id, value: entry.id, description: 'Provider model' }));
+        const picked = options.drawFrame
+          ? await selectListPopup('Choose a model', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
+          : (await askSelect('Choose a model', choices, 0, { signal: options.signal })).value;
+        if (!picked) return undefined;
+        defaultModel = picked;
+      }
+    } catch { /* allow manual model entry */ }
+  }
   if (selectedValue === 'openrouter') {
     // Free-first: offer the live free-model catalog (no key needed to list);
     // fall back to manual entry on any discovery failure.
@@ -174,7 +192,7 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
     }
   }
   defaultModel = defaultModel ?? await askPopupText('Default model ID', options);
-  if (!baseUrl || !apiKey || !defaultModel) return undefined;
+  if (!baseUrl || (!apiKey && selectedValue !== 'ollama' && selectedValue !== 'lm-studio') || !defaultModel) return undefined;
   return buildConnection({ kind: 'openai-compatible', displayName, baseUrl, apiKey, defaultModel });
 }
 

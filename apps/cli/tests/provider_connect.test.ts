@@ -13,18 +13,26 @@ const openRouter = {
 describe('provider connection setup', () => {
   it('offers NVIDIA NIM, OpenRouter, and Agnes AI presets', () => {
     expect(PROVIDER_PRESETS.map((preset) => preset.value)).toEqual([
-      'nvidia-nim', 'openrouter', 'agnes-ai', 'openai-compatible',
+      'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
     ]);
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')?.baseUrl)
       .toBe('https://openrouter.ai/api/v1');
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'agnes-ai')?.baseUrl)
       .toBe('https://apihub.agnes-ai.com/v1');
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'orcarouter')?.baseUrl).toBe('https://api.orcarouter.ai/v1');
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'ollama')?.baseUrl).toBe('http://127.0.0.1:11434/v1');
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'lm-studio')?.baseUrl).toBe('http://127.0.0.1:1234/v1');
   });
 
   it('finds the saved profile for a named provider preset', () => {
     expect(findReusableConnection('openrouter', { openrouter: openRouter })).toEqual(openRouter);
     expect(findReusableConnection('agnes-ai', { openrouter: openRouter })).toBeUndefined();
     expect(findReusableConnection('openai-compatible', { openrouter: openRouter })).toBeUndefined();
+  });
+
+  it('builds local providers without an API key', () => {
+    expect(buildConnection({ kind: 'openai-compatible', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'qwen2.5-coder' })).toMatchObject({ id: 'ollama', apiKey: undefined });
+    expect(buildConnection({ kind: 'openai-compatible', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', defaultModel: 'local-model' })).toMatchObject({ id: 'lm-studio', apiKey: undefined });
   });
 
   it('recognizes provider authentication failures without exposing a key', () => {
