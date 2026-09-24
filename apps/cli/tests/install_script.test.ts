@@ -9,13 +9,12 @@ const execFileAsync = promisify(execFile);
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true }))); });
 
-// Git Bash on Windows mangles native paths (C:\...) passed as arguments,
-// so convert fixture paths to POSIX form before handing them to bash.
-// NOTE: resolve Git Bash explicitly — C:\Windows\System32\bash.exe is WSL,
-// which cannot see Windows temp paths.
-const GIT_BASH = 'C:\\Program Files\\Git\\bin\\bash.exe';
 function posix(p: string): string {
   return p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
+}
+
+function shellExecutable(): string {
+  return process.platform === 'win32' ? 'C:\\Program Files\\Git\\bin\\bash.exe' : '/bin/bash';
 }
 
 async function fixtureServer(root: string, tag: string, assetSha: string, manifestSha: string): Promise<{ port: number; close: () => Promise<void> }> {
@@ -59,7 +58,7 @@ it('installs the binary only when asset and manifest checksums agree', async () 
     const home = await mkdtemp(join(tmpdir(), 'moderado-home-'));
     dirs.push(home);
     const target = join(dir, 'bin');
-    const { stdout } = await execFileAsync(GIT_BASH, [posix(runner), '--dir', posix(target)], { env: { ...process.env, HOME: home, FAKE_OS: 'Linux', FAKE_ARCH: 'x86_64' } });
+    const { stdout } = await execFileAsync(shellExecutable(), [posix(runner), '--dir', posix(target)], { env: { ...process.env, HOME: home, FAKE_OS: 'Linux', FAKE_ARCH: 'x86_64' } });
     expect(stdout).toContain('Installed moderado v9.9.9');
     expect(await readFile(join(target, 'moderado'), 'utf8')).toBe('binary-bytes');
   } finally { await close(); }
@@ -81,6 +80,6 @@ it('refuses to install when the checksum disagrees with the manifest', async () 
     await chmod(runner, 0o755);
     const home = await mkdtemp(join(tmpdir(), 'moderado-home-'));
     dirs.push(home);
-    await expect(execFileAsync(GIT_BASH, [posix(runner), '--dir', posix(join(dir, 'bin'))], { env: { ...process.env, HOME: home, FAKE_OS: 'Linux', FAKE_ARCH: 'x86_64' } })).rejects.toThrow('manifest');
+    await expect(execFileAsync(shellExecutable(), [posix(runner), '--dir', posix(join(dir, 'bin'))], { env: { ...process.env, HOME: home, FAKE_OS: 'Linux', FAKE_ARCH: 'x86_64' } })).rejects.toThrow('manifest');
   } finally { await close(); }
 });
