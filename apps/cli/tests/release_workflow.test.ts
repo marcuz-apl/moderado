@@ -30,6 +30,8 @@ describe('release workflow', () => {
     expect(yaml).toContain('confirm:');
     expect(yaml).toContain('PUBLISH');
     expect(yaml).toContain('npm publish');
+    expect(yaml).toContain('node-version: 22');
+    expect(yaml).toContain('npm@11.5.1');
     expect(yaml).toContain('gh release create');
     expect(yaml).toContain('id-token: write');
     expect(yaml).toContain('--commit "$GITHUB_SHA"');
