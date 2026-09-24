@@ -1,0 +1,32 @@
+#!/bin/sh
+# Git snapshots the tree before the pending message is validated.
+unset GIT_INDEX_FILE
+pending=$(git rev-parse --git-path ALFAZEN_PENDING) || exit 1
+[ -f "$pending" ] || { echo "alfazen-versioning: pending version state is missing" >&2; exit 1; }
+previous=$(sed -n '1p' "$pending") || exit 1
+target=$(sed -n '2p' "$pending") || exit 1
+
+rollback() {
+  echo "alfazen-versioning: could not amend commit with VERSION; rolling back the commit" >&2
+  if [ -n "$previous" ]; then
+    git reset --soft "$previous" || { echo "alfazen-versioning: rollback failed; inspect HEAD and VERSION" >&2; exit 1; }
+  else
+    git update-ref -d HEAD || { echo "alfazen-versioning: rollback failed; inspect HEAD and VERSION" >&2; exit 1; }
+  fi
+  git checkout-index -f -- VERSION || { echo "alfazen-versioning: rollback failed; inspect HEAD and VERSION" >&2; exit 1; }
+  rm -f -- "$pending"
+  exit 1
+}
+
+subject=$(git log -1 --format=%s) || rollback
+version=${subject%% *}
+[ "$version" = "$target" ] || rollback
+committed=$(git show HEAD:VERSION) || rollback
+if [ "$committed" = "$target" ]; then
+  rm -f -- "$pending"
+  exit 0
+fi
+printf '%s\n' "$target" > VERSION || rollback
+git -c core.hooksPath=/dev/null commit --amend --only VERSION --no-edit --quiet || rollback
+[ "$(git show HEAD:VERSION)" = "$target" ] || rollback
+rm -f -- "$pending"

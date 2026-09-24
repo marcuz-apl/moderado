@@ -46,25 +46,27 @@
 - Modify: `.githooks/pre-commit`
 - Modify: `.githooks/prepare-commit-msg`
 - Modify: `.githooks/commit-msg`
+- Create: `.githooks/post-commit`
 - Create: `tests/version_hooks.test.ts`
 
 **Interfaces:**
-- `prepare-commit-msg` receives the current message path as `$1`; calculate the new connected identifier from that message, update/stage `VERSION`, and stamp that same message.
-- `commit-msg` validates that the resulting subject begins with the current `VERSION`; it does not calculate a second bump.
+- `prepare-commit-msg` receives the current message path as `$1`; calculate the new connected identifier, stamp that message, and save the prior HEAD and target identifier under the Git directory without changing `VERSION`. Each attempt replaces stale pending state.
+- `commit-msg` validates the stamped identifier against the current `VERSION`, pending subject, and saved target; it does not mutate `VERSION` before signing and ref updates succeed.
 - `pre-commit` performs no message-dependent version calculation.
+- `post-commit` writes and amends only `VERSION` into the just-created local commit; unrelated staged paths remain staged. If the amend fails, it reports the error and restores the exact prior HEAD, including for a user-initiated `git commit --amend`, leaving changes staged for retry. Successful commits clear pending state. It does not touch remote history.
 
 - [ ] **Step 1: Write hook regression tests**
 
-Create a temporary Git repository per test with baseline `VERSION` `v0.3.4+${today}1`, where `today` is the current UTC date in `YYMMDD`; configure the baseline commit before enabling hooks, then make a `feat(test): first feature` commit followed by `docs: update notes`. Assert the feature commit changes SemVer to `0.3.5`; the docs commit retains `0.3.5` and advances only the build suffix. Assert each subject's first token equals that commit's `VERSION`.
+Create a temporary Git repository per test with baseline `VERSION` `v0.3.4+${today}1`, where `today` is the current UTC date in `YYMMDD`; configure the baseline commit before enabling hooks, then make a `feat(test): first feature` commit followed by `docs: update notes`. Assert the feature commit changes SemVer to `0.3.5`; the docs commit retains `0.3.5` and advances only the build suffix. Assert each subject's first token equals `VERSION` in that commit's tree.
 
-The root `VERSION` SemVer and `apps/cli/package.json` must both remain `0.3.4` during IDE development. Run the existing metadata test to verify they stay aligned.
+Development starts from `0.3.4`. Feature commits follow the repository hook and advance the patch within `0.3.x`; whenever the root SemVer changes, keep `apps/cli/package.json` aligned in the same commit. The published npm release remains `0.3.4` until an explicit release.
 
 ```ts
 expect(readVersion(repo).split('+', 1)[0]).toBe('v0.3.5');
 expect(readSubject(repo).split(' ', 1)[0]).toBe(readVersion(repo));
 ```
 
-Also test that `release(minor): publish milestone` changes `0.3.5` to `0.4.0`, and that `feat!: breaking API` fails without the major approval variable. Use temporary git identity and no network.
+Also test that `release(minor): publish milestone` changes `0.3.5` to `0.4.0`, that `feat!: breaking API` fails without the major approval variable, that partial commits preserve unrelated staged files, and that commit rejection, signing failure, and both ordinary and user-initiated amend failures leave no invalid commit or version bump. Verify a retry replaces stale pending state. Use temporary git identity and no network.
 
 - [ ] **Step 2: Run the hook tests and confirm failure**
 
@@ -73,7 +75,7 @@ Expected: the hook regression fails because the current pre-commit hook reads th
 
 - [ ] **Step 3: Move bumping to the hook that receives the current message**
 
-Read `$1` in `.githooks/prepare-commit-msg`; strip any existing connected prefix; call `detect_bump_type` on the current first subject; calculate and validate the next ID; write/stage `VERSION`; and prefix the current message. Leave `.githooks/pre-commit` as an empty successful hook. Make `.githooks/commit-msg` validate the prefix and fail with a clear error if it differs from `VERSION`. Keep the CLI package version at `0.3.4` while development remains on the `0.3.x` line.
+Read `$1` in `.githooks/prepare-commit-msg`; strip any existing connected prefix; call `detect_bump_type` on the pending subject; calculate and validate the next ID; prefix the current message; and save the prior HEAD and target under the Git directory without changing `VERSION`. Leave `.githooks/pre-commit` as an empty successful hook. Make `.githooks/commit-msg` validate the prefix against the old version and saved target without mutating `VERSION`. Add executable `.githooks/post-commit` to write and amend only `VERSION` into the just-created local commit, with hooks disabled and inherited `GIT_INDEX_FILE` cleared. On amendment failure, restore the saved HEAD, restore the old worktree `VERSION`, and report recovery. Keep the CLI package version at `0.3.4` while development remains on the `0.3.x` line.
 
 - [ ] **Step 4: Run hook tests and verify the clean cycle**
 
@@ -82,7 +84,7 @@ Expected: all hook tests pass, including docs/fix build-only behavior, feat patc
 
 - [ ] **Step 5: Commit the hook correction**
 
-Stage only the three hook files and `tests/version_hooks.test.ts`; commit with a build-only `fix(versioning): read the pending commit subject` message and verify the hook adds the current connected prefix.
+Stage the four hook files, `tests/version_hooks.test.ts`, and this plan correction; mark `post-commit` executable in Git. Commit with a build-only `fix(versioning): read the pending commit subject` message. Verify that the connected prefix equals the committed tree's `VERSION` and that the worktree has no staged `VERSION` left behind.
 
 ## Task 2: Define versioned host protocol contracts
 

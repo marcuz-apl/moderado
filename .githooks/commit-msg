@@ -1,8 +1,17 @@
 #!/bin/sh
-set -eu
+HOOKDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$HOOKDIR/versionlib.sh"
 
-version=$(cat VERSION)
-msgfile=$1
-tmp=$(mktemp)
-awk -v stamp="$version" '!done && $0 !~ /^#/ { sub(/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9][0-9][0-9][0-9][0-9][0-9][0-9a-zA-Z] /, ""); print stamp " " $0; done=1; next } { print }' "$msgfile" > "$tmp"
-mv -f -- "$tmp" "$msgfile"
+old=$(read_version)
+validate_identifier "$old"
+subject=$(sed -n '1p' "$1") || exit 1
+message=$(sed -E '1s/^v[0-9]+[.][0-9]+[.][0-9]+[+-][0-9]{6}[0-9a-zA-Z] //' "$1") || exit 1
+expected=$(next_identifier "$old" "$(utc_yymmdd)" "$(detect_bump_type "$message")") || exit 1
+validate_identifier "$expected"
+pending=$(git rev-parse --git-path ALFAZEN_PENDING) || exit 1
+[ -f "$pending" ] || die "pending version state is missing"
+[ "$(sed -n '2p' "$pending")" = "$expected" ] || die "pending version state does not match '$expected'"
+case "$subject" in
+  "$expected "*) exit 0 ;;
+  *) die "commit subject must begin with expected VERSION '$expected'" ;;
+esac
