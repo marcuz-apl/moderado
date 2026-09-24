@@ -35,8 +35,12 @@ export const HostChatContextSchema = z.object({
 });
 export type HostChatContext = z.infer<typeof HostChatContextSchema>;
 
+export const HOST_PROTOCOL_VERSION = 1;
+export type HostProtocolVersion = typeof HOST_PROTOCOL_VERSION;
+export const MAX_HOST_LINE_BYTES = 1024 * 1024;
+
 export const InitializeParamsSchema = z.object({
-  protocolVersion: z.literal(1),
+  protocolVersion: z.literal(HOST_PROTOCOL_VERSION),
 });
 export type InitializeParams = z.infer<typeof InitializeParamsSchema>;
 

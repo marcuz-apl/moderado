@@ -17,7 +17,10 @@
     "build:binaries": "npm run build && node scripts/binaries.mjs build",
     "verify:binaries": "node scripts/binaries.mjs verify",
     "merge-binaries": "node scripts/binaries.mjs merge",
-    "generate:manifests": "node scripts/distribution_manifests.mjs"
+    "generate:manifests": "node scripts/distribution_manifests.mjs",
+    "build:vscode": "tsc --project apps/vscode/tsconfig.json",
+    "test:vscode": "vitest run apps/vscode/tests",
+    "typecheck:vscode": "tsc --project apps/vscode/tsconfig.json --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.20.3",

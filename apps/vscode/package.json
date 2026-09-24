@@ -1,0 +1,78 @@
+{
+  "name": "moderado-vscode",
+  "displayName": "Moderado",
+  "description": "Moderated AI coding assistant sidecar for VS Code",
+  "version": "0.3.8",
+  "publisher": "marcuz-apl",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "AI",
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onView:moderado.chatView",
+    "onCommand:moderado.focusChat",
+    "onCommand:moderado.newSession",
+    "onCommand:moderado.resumeSession",
+    "onCommand:moderado.cancelTurn"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "moderado-sidebar",
+          "title": "Moderado",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "moderado-sidebar": [
+        {
+          "type": "webview",
+          "id": "moderado.chatView",
+          "name": "Moderado Chat"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "moderado.focusChat",
+        "title": "Moderado: Focus Chat"
+      },
+      {
+        "command": "moderado.newSession",
+        "title": "Moderado: New Session"
+      },
+      {
+        "command": "moderado.resumeSession",
+        "title": "Moderado: Resume Session"
+      },
+      {
+        "command": "moderado.cancelTurn",
+        "title": "Moderado: Cancel Turn"
+      }
+    ],
+    "configuration": {
+      "title": "Moderado",
+      "properties": {
+        "moderado.executablePath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to the moderado executable. Defaults to resolving 'moderado' from the system PATH."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0"
+  }
+}

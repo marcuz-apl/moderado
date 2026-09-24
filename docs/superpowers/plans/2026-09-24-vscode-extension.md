@@ -242,33 +242,33 @@ Commit runtime, approval queue, protocol wiring, and tests with a connected `fea
 - `SidecarClient.close()` cancels/aborts active work, resolves pending approval actions as aborted, closes stdin, waits a bounded grace period, then terminates the child.
 - Inject spawn and VS Code APIs into host-side classes for deterministic unit tests.
 
-- [ ] **Step 1: Write extension manifest and spawn tests**
+- [x] **Step 1: Write extension manifest and spawn tests**
 
 Create failing tests for safe argument passing when workspace path contains spaces/metacharacters, configured executable override, not-found message, protocol mismatch, child exit, output chunk parsing, and close while an approval is pending.
 
-- [ ] **Step 2: Confirm sidecar tests fail**
+- [x] **Step 2: Confirm sidecar tests fail**
 
 Run: `npm test -- apps/vscode/tests/sidecar.test.ts`
 Expected: FAIL because extension app files are absent.
 
-- [ ] **Step 3: Add the workspace extension package**
+- [x] **Step 3: Add the workspace extension package**
 
 Declare VS Code engine compatibility, extension activation events, Moderado Activity Bar container/view, `moderado.executablePath`, commands, scripts for typecheck/test/package, and `@types/vscode`/VSIX tooling as development dependencies only. Add `apps/vscode` to the relevant TypeScript project references without making root CLI builds import VS Code modules.
 
-- [ ] **Step 4: Implement the sidecar client**
+- [x] **Step 4: Implement the sidecar client**
 
 Resolve executable from setting or PATH; spawn with `shell: false`; send `host --workspace <root> --protocol 1` as separate arguments; validate every request/response/event line against shared contracts; enforce 1 MiB lines; capture bounded stderr; surface actionable startup and protocol errors; abort on shutdown.
 
-- [ ] **Step 5: Implement activation and commands**
+- [x] **Step 5: Implement activation and commands**
 
 Register the view provider and focus/new/resume/cancel commands. Start at most one sidecar per workspace; initialize it with protocol version 1; dispose resources and approvals on deactivation.
 
-- [ ] **Step 6: Run extension typecheck and focused tests**
+- [x] **Step 6: Run extension typecheck and focused tests**
 
 Run: `npm --prefix apps/vscode run typecheck` and `npm test -- apps/vscode/tests/sidecar.test.ts`.
 Expected: safe spawn, validation, startup failure, and shutdown behavior pass.
 
-- [ ] **Step 7: Commit extension host scaffolding**
+- [x] **Step 7: Commit extension host scaffolding**
 
 Commit manifest, extension host, sidecar client, and tests with a connected `feat(vscode): scaffold extension sidecar` subject.
 
