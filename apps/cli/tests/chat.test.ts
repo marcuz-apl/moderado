@@ -675,6 +675,10 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(findSlashCommandAdvice('/queue add do something')).toEqual({ isSlashCommand: true, isValid: true });
   });
 
+  it('accepts both /skill and /skills', () => {
+    expect(findSlashCommandAdvice('/skill')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/skills')).toEqual({ isSlashCommand: true, isValid: true });
+  });
   it('recognizes /btw as a valid standard slash command', () => {
     expect(findSlashCommandAdvice('/btw')).toEqual({ isSlashCommand: true, isValid: true });
     expect(findSlashCommandAdvice('/btw how do I format a date in JS?')).toEqual({ isSlashCommand: true, isValid: true });
