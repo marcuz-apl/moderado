@@ -30,6 +30,10 @@ describe('provider connection setup', () => {
     expect(findReusableConnection('openai-compatible', { openrouter: openRouter })).toBeUndefined();
   });
 
+  it('defaults OrcaRouter to its free routing model', () => {
+    const orcarouter = PROVIDER_PRESETS.find((preset) => preset.value === 'orcarouter');
+    expect(orcarouter?.defaultModel).toBe('orcarouter/free');
+  });
   it('builds local providers without an API key', () => {
     expect(buildConnection({ kind: 'openai-compatible', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'qwen2.5-coder' })).toMatchObject({ id: 'ollama', apiKey: undefined });
     expect(buildConnection({ kind: 'openai-compatible', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', defaultModel: 'local-model' })).toMatchObject({ id: 'lm-studio', apiKey: undefined });

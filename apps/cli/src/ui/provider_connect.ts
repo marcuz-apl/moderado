@@ -26,13 +26,14 @@ export interface ProviderPreset {
   tag?: string;
   displayName?: string;
   baseUrl?: string;
+  defaultModel?: string;
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
   { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
-  { label: 'OrcaRouter', value: 'orcarouter', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', description: 'Connect OrcaRouter for adaptive model routing.' },
+  { label: 'OrcaRouter', value: 'orcarouter', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', defaultModel: 'orcarouter/free', description: 'Connect OrcaRouter for adaptive model routing.' },
   { label: 'Ollama', value: 'ollama', tag: 'Local', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', description: 'Use models served locally by Ollama.' },
   { label: 'LM Studio', value: 'lm-studio', tag: 'Local', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', description: 'Use models served by LM Studio local server.' },
   { label: 'Other OpenAI-compatible provider', value: 'openai-compatible', description: 'Connect any compatible endpoint with its base URL, key, and model ID.' },
@@ -156,8 +157,8 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   const apiKey = selectedValue === 'ollama' || selectedValue === 'lm-studio'
     ? undefined
     : await askPopupText('API key', options, true);
-  let defaultModel: string | undefined;
-  if (selectedValue === 'ollama' || selectedValue === 'lm-studio' || selectedValue === 'orcarouter') {
+  let defaultModel: string | undefined = preset?.defaultModel;
+  if (!defaultModel && (selectedValue === 'ollama' || selectedValue === 'lm-studio' || selectedValue === 'orcarouter')) {
     try {
       const models = selectedValue === 'orcarouter'
         ? await fetchProviderFreeModels(baseUrl!, apiKey, { signal: options.signal })
