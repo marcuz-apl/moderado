@@ -11,6 +11,7 @@ export interface ModeradoConfig {
   allowUnknown?: boolean;
   activeConnectionId?: string;
   connections?: Record<string, ProviderConnection>;
+  connectProviders?: ConnectProvidersConfig;
   typescriptLanguageServer?: string;
   /** HTTPS endpoint that returns `{ results: [{ title, url, snippet? }] }`. */
   webSearchEndpoint?: string;
@@ -19,6 +20,25 @@ export interface ModeradoConfig {
   mcpServers?: Record<string, McpServerConfig>;
   /** Upper bound on model output tokens per response turn. */
   maxOutputTokens?: number;
+}
+
+export const CONNECT_PROVIDER_PRESET_IDS = [
+  'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
+] as const;
+
+export type ConnectProviderPresetId = typeof CONNECT_PROVIDER_PRESET_IDS[number];
+
+export interface CustomConnectProvider {
+  id: string;
+  name: string;
+  baseUrl: string;
+  defaultModel?: string;
+}
+
+export interface ConnectProvidersConfig {
+  /** Omit to show all built-ins; an empty list hides every built-in. */
+  enabled?: ConnectProviderPresetId[];
+  custom?: CustomConnectProvider[];
 }
 
 export type ProviderConnectionKind = 'nvidia-nim' | 'openai-compatible';
@@ -62,6 +82,7 @@ export function loadConfig(customHome?: string): ModeradoConfig {
             ? parsed.activeConnectionId
             : undefined,
         connections: Object.keys(connections).length > 0 ? connections : undefined,
+        connectProviders: parseConnectProviders(parsed.connectProviders),
         mcpServers: parseMcpServers(parsed.mcpServers),
         typescriptLanguageServer: typeof parsed.typescriptLanguageServer === 'string' ? parsed.typescriptLanguageServer : undefined,
         webSearchEndpoint: typeof parsed.webSearchEndpoint === 'string' ? parsed.webSearchEndpoint : undefined,
@@ -73,6 +94,52 @@ export function loadConfig(customHome?: string): ModeradoConfig {
   } catch {
     return {};
   }
+}
+
+function parseConnectProviders(value: unknown): ConnectProvidersConfig | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined;
+  const item = value as Record<string, unknown>;
+  const result: ConnectProvidersConfig = {};
+  let recognized = false;
+
+  if (Array.isArray(item.enabled)) {
+    const enabled = new Set(item.enabled.filter(
+      (id): id is ConnectProviderPresetId => typeof id === 'string' && CONNECT_PROVIDER_PRESET_IDS.includes(id as ConnectProviderPresetId),
+    ));
+    result.enabled = [...enabled];
+    recognized = true;
+  }
+
+  if (Array.isArray(item.custom)) {
+    const custom: CustomConnectProvider[] = [];
+    const seen = new Set<string>();
+    for (const entry of item.custom) {
+      if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue;
+      const candidate = entry as Record<string, unknown>;
+      if (typeof candidate.id !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,31}$/.test(candidate.id)) continue;
+      if (CONNECT_PROVIDER_PRESET_IDS.includes(candidate.id as ConnectProviderPresetId) || seen.has(candidate.id)) continue;
+      if (typeof candidate.name !== 'string' || !candidate.name.trim() || candidate.name.trim().length > 80) continue;
+      if (typeof candidate.baseUrl !== 'string' || !candidate.baseUrl.trim()) continue;
+      if (candidate.defaultModel !== undefined && (typeof candidate.defaultModel !== 'string' || !candidate.defaultModel.trim())) continue;
+
+      let url: URL;
+      try { url = new URL(candidate.baseUrl.trim()); } catch { continue; }
+      const localHttpHosts = ['localhost', '127.0.0.1', '[::1]', '::1'];
+      if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && localHttpHosts.includes(url.hostname))) || url.username || url.password) continue;
+
+      custom.push({
+        id: candidate.id,
+        name: candidate.name.trim(),
+        baseUrl: url.toString().replace(/\/+$/, ''),
+        defaultModel: typeof candidate.defaultModel === 'string' ? candidate.defaultModel.trim() : undefined,
+      });
+      seen.add(candidate.id);
+    }
+    result.custom = custom;
+    recognized = true;
+  }
+
+  return recognized ? result : undefined;
 }
 
 function parseMcpServers(value: unknown): Record<string, McpServerConfig> | undefined {

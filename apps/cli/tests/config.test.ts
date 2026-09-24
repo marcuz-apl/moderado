@@ -51,6 +51,32 @@ describe('CLI Configuration Storage', () => {
     expect(loaded.defaultModel).toBe('meta/llama-3.2-11b-vision-instruct');
   });
 
+  it('stores configured connect providers and rejects unsafe custom endpoints', () => {
+    saveConfig({
+      connectProviders: {
+        enabled: ['openrouter', 'ollama'],
+        custom: [{ id: 'company-gateway', name: 'Company Gateway', baseUrl: 'https://llm.example.test/v1/', defaultModel: 'coder-small' }],
+      },
+    }, tempDir);
+    expect(loadConfig(tempDir).connectProviders).toEqual({
+      enabled: ['openrouter', 'ollama'],
+      custom: [{ id: 'company-gateway', name: 'Company Gateway', baseUrl: 'https://llm.example.test/v1', defaultModel: 'coder-small' }],
+    });
+
+    fs.writeFileSync(getConfigPath(tempDir), JSON.stringify({ connectProviders: {
+      enabled: ['openrouter', 'unknown-provider'],
+      custom: [
+        { id: 'unsafe', name: 'Unsafe', baseUrl: 'http://example.test/v1' },
+        { id: 'credentialed', name: 'Credentialed', baseUrl: 'https://user:pass@example.test/v1' },
+        { id: 'safe-local', name: 'Local', baseUrl: 'http://localhost:1234/v1' },
+      ],
+    } }));
+    expect(loadConfig(tempDir).connectProviders).toEqual({
+      enabled: ['openrouter'],
+      custom: [{ id: 'safe-local', name: 'Local', baseUrl: 'http://localhost:1234/v1', defaultModel: undefined }],
+    });
+  });
+
   it('prioritizes environment variable over config file', () => {
     saveConfig({ apiKey: 'nvapi-from-config' }, tempDir);
     process.env.NVIDIA_API_KEY = 'nvapi-from-env';

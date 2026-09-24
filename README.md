@@ -156,6 +156,29 @@ Mistral. Compatibility depends on each provider supporting `/v1/models` and
 streaming `/v1/chat/completions` with tool calls. Provider credentials are saved
 in `~/.moderado/config.json`; protect that file and never commit it.
 
+The `/connect` choices can be customized in `~/.moderado/config.json`. Omit
+`enabled` to show every built-in provider, or list the built-in IDs you want to
+show. Custom entries add named OpenAI-compatible endpoints; credentials are
+still requested when connecting:
+
+```json
+{
+  "connectProviders": {
+    "enabled": ["nvidia-nim", "openrouter", "ollama"],
+    "custom": [
+      {
+        "id": "company-gateway",
+        "name": "Company Gateway",
+        "baseUrl": "https://llm.example.com/v1",
+        "defaultModel": "coder-small"
+      }
+    ]
+  }
+}
+```
+
+Custom endpoints must use HTTPS, except local HTTP endpoints on localhost.
+
 ### 1. Build & Test
 ```bash
 # Install workspace dependencies

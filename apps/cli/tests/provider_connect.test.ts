@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildConnection, findReusableConnection, isAuthenticationFailure, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { buildConnection, buildProviderPresets, findReusableConnection, isAuthenticationFailure, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
 
 const openRouter = {
   id: 'openrouter',
@@ -28,6 +28,26 @@ describe('provider connection setup', () => {
     expect(findReusableConnection('openrouter', { openrouter: openRouter })).toEqual(openRouter);
     expect(findReusableConnection('agnes-ai', { openrouter: openRouter })).toBeUndefined();
     expect(findReusableConnection('openai-compatible', { openrouter: openRouter })).toBeUndefined();
+  });
+
+  it('uses configured built-ins and custom provider entries for the connect menu', () => {
+    const presets = buildProviderPresets({
+      enabled: ['openrouter'],
+      custom: [{ id: 'company-gateway', name: 'Company Gateway', baseUrl: 'https://llm.example.test/v1', defaultModel: 'coder-small' }],
+    });
+    expect(presets.map(({ value }) => value)).toEqual(['openrouter', 'custom:company-gateway']);
+    expect(presets[1]).toMatchObject({
+      label: 'Company Gateway',
+      displayName: 'Company Gateway',
+      baseUrl: 'https://llm.example.test/v1',
+      defaultModel: 'coder-small',
+    });
+    expect(findReusableConnection('custom:company-gateway', { 'company-gateway': { ...openRouter, id: 'company-gateway' } }))
+      .toMatchObject({ id: 'company-gateway' });
+  });
+
+  it('shows all built-in choices when no provider list is configured', () => {
+    expect(buildProviderPresets().map(({ value }) => value)).toEqual(PROVIDER_PRESETS.map(({ value }) => value));
   });
 
   it('defaults OrcaRouter to its free routing model', () => {

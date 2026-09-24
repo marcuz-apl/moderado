@@ -893,7 +893,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         return selection.modelId;
       },
       onConnect: async (drawFrame) => {
-        const connection = await connectProviderInteractive({ signal, drawFrame, savedConnections: config.connections, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
+        const connection = await connectProviderInteractive({ signal, drawFrame, savedConnections: config.connections, connectProviders: config.connectProviders, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
         if (!connection) return currentModel;
         const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
         saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
@@ -1318,7 +1318,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
     if (!provider) {
       process.stdout.write('\nNo provider is connected. Let\'s connect one before sending this task.\n');
-      const connection = await connectProviderInteractive({ signal, savedConnections: config.connections, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
+      const connection = await connectProviderInteractive({ signal, savedConnections: config.connections, connectProviders: config.connectProviders, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
       if (!connection) { process.stdout.write('No provider connected. Use /connect whenever you are ready.\n\n'); continue; }
       const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
       saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
