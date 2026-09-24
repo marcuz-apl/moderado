@@ -91,14 +91,35 @@ export function packageVsix(targetDir = vscodeRoot) {
   }
 
   try {
-    execFileSync(
-      'tar',
-      ['-a', '-cf', vsixPath, 'extension.vsixmanifest', '[Content_Types].xml', 'extension'],
-      {
-        cwd: stageDir,
-        stdio: 'pipe',
-      },
-    );
+    let packed = false;
+    try {
+      execFileSync(
+        'tar',
+        ['--format', 'zip', '-cf', vsixPath, 'extension.vsixmanifest', '[Content_Types].xml', 'extension'],
+        {
+          cwd: stageDir,
+          stdio: 'pipe',
+        },
+      );
+      packed = true;
+    } catch (tarErr) {
+      try {
+        execFileSync(
+          'zip',
+          ['-r', vsixPath, 'extension.vsixmanifest', '[Content_Types].xml', 'extension'],
+          {
+            cwd: stageDir,
+            stdio: 'pipe',
+          },
+        );
+        packed = true;
+      } catch (zipErr) {
+        throw new Error(`Failed to create VSIX zip archive: ${tarErr?.message || tarErr}`);
+      }
+    }
+    if (!packed) {
+      throw new Error('Failed to create VSIX archive: neither tar --format zip nor zip command succeeded.');
+    }
   } finally {
     rmSync(stageDir, { recursive: true, force: true });
   }
