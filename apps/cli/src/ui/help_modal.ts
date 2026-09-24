@@ -15,6 +15,8 @@ export async function showHelpModal(
   const lines = [
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
     '  \x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
+    '  \x1b[1m/skill\x1b[0m      List installed user skills and reload them',
+    '  \x1b[1m/skills\x1b[0m     Alias for /skill',
     '  \x1b[1m/clear\x1b[0m       Reset conversation memory and context history',
     '  \x1b[1m/help\x1b[0m        Display this commands, shortcuts & version guide',
     '  \x1b[1m/exit\x1b[0m        Exit Moderado session cleanly',
