@@ -195,33 +195,33 @@ Commit the transport, command dispatch, and tests with a connected `feat(cli): a
 - `ApprovalQueue.requestApproval(request, signal)` returns a pending promise; `resolve(requestId, status)` accepts only one exact outstanding request; `close()` resolves all pending requests as `aborted`.
 - Test dependencies allow injecting `FakeProviderAdapter`, a temporary config home, a tool registry, and deterministic credential/skill sources.
 
-- [ ] **Step 1: Write runtime and approval tests first**
+- [x] **Step 1: Write runtime and approval tests first**
 
 Cover initialize session list output, corrupted stored sessions omitted while new sessions remain available, new and resume session round trips, workspace/session mismatch, two turns with one sidecar session ID and increasing sequences, prompt selection context injection as untrusted user context, explicit allow/deny, stale and duplicate approval decisions, cancel, panel/transport close while waiting for approval, provider credential-store failure without secret leakage or provider switching, and tool invocation constrained to the canonical workspace. Include a symlink escape case where the platform supports symlinks.
 
-- [ ] **Step 2: Run runtime tests and confirm failure**
+- [x] **Step 2: Run runtime tests and confirm failure**
 
 Run: `npm test -- apps/cli/tests/host_runtime.test.ts apps/cli/tests/host_approval.test.ts`
 Expected: FAIL because headless runtime and approval queue are not implemented.
 
-- [ ] **Step 3: Implement the approval queue**
+- [x] **Step 3: Implement the approval queue**
 
 Store pending resolvers by approval request ID; reject duplicate IDs; on response return the existing `ApprovalDecision` shape. Abort signal or `close()` settles outstanding promises as `aborted`; no failure path returns `approved`.
 
-- [ ] **Step 4: Implement runtime composition using current packages**
+- [x] **Step 4: Implement runtime composition using current packages**
 
 Resolve provider config/credentials using existing config APIs; canonicalize the workspace using `canonicalizeRoot`; build the existing tool registry and router/policy; load or create `StoredSession`; pass saved messages to `AgentLoop.run`; persist updated messages and usage after completion. Feed raw events into one session-level `HostEventStream` and notify the protocol server with its envelopes.
 
-- [ ] **Step 5: Route host protocol requests to runtime**
+- [x] **Step 5: Route host protocol requests to runtime**
 
 Implement the six method branches from `HostRequestSchema`; reject concurrent `chat.send` with `BUSY`; require matching session IDs for turn, cancel, and approval; list resumable sessions at initialize; close approvals and abort generation during runtime shutdown.
 
-- [ ] **Step 6: Run focused host tests and root typecheck**
+- [x] **Step 6: Run focused host tests and root typecheck**
 
 Run: `npm test -- apps/cli/tests/host_runtime.test.ts apps/cli/tests/host_approval.test.ts apps/cli/tests/host_transport.test.ts` and `npm run typecheck`.
 Expected: host interactions work offline, include stable event sequence behavior, and pass workspace jail, session corruption, credential, and approval cases.
 
-- [ ] **Step 7: Commit the host runtime**
+- [x] **Step 7: Commit the host runtime**
 
 Commit runtime, approval queue, protocol wiring, and tests with a connected `feat(cli): compose headless agent sessions` subject.
 

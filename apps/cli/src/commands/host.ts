@@ -1,5 +1,6 @@
 import type { CliParsedArgs } from '../args.js';
 import { serveHostProtocol, type HostSessionFactory } from '../host/protocol_server.js';
+import { createHostRuntime } from '../host/runtime.js';
 
 export async function handleHostCommand(
   args: CliParsedArgs,
@@ -18,22 +19,14 @@ export async function handleHostCommand(
     return 1;
   }
 
-  const factory: HostSessionFactory = sessionFactory ?? (async () => {
-    return {
-      async initialize() {
-        return {
-          protocolVersion: 1,
-          sessionId: 'session-default',
-          workspaceName: args.workspace,
-          resumableSessions: [],
-        };
-      },
-      async dispatch() {
-        return { accepted: true };
-      },
-      async close() {},
-    };
-  });
+  const factory: HostSessionFactory =
+    sessionFactory ??
+    (async (emit) => {
+      return createHostRuntime({
+        workspaceRoot: args.workspace,
+        emit,
+      });
+    });
 
   try {
     await serveHostProtocol(process.stdin, process.stdout, factory, signal);
