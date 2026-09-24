@@ -94,7 +94,7 @@ Public publication requires explicit maintainer confirmation through the manual 
      ```
   4. Creates the official GitHub Release with binaries, checksums, the verified manifest, and reviewable community manifests:
      ```bash
-     gh release create "${TAG}" --verify-tag "${TAG}" --title "Moderado ${TAG}" --generate-notes "artifacts/release/moderado-win-x64.exe#moderado-win-x64.exe" "artifacts/release/moderado-win-x64.exe.sha256" "artifacts/release/moderado-macos-arm64#moderado-macos-arm64" "artifacts/release/moderado-macos-arm64.sha256" "artifacts/release/moderado-linux-x64#moderado-linux-x64" "artifacts/release/moderado-linux-x64.sha256" "artifacts/release/manifest.json#manifest.json" "distribution/homebrew/moderado.rb#moderado.rb" "distribution/scoop/moderado.json#moderado.json" "distribution/winget/Moderado.yaml#Moderado.yaml" "distribution/aur/PKGBUILD#PKGBUILD"
+     gh release create "${TAG}" --verify-tag --title "Moderado ${TAG}" --generate-notes "artifacts/release/moderado-win-x64.exe#moderado-win-x64.exe" "artifacts/release/moderado-win-x64.exe.sha256" "artifacts/release/moderado-macos-arm64#moderado-macos-arm64" "artifacts/release/moderado-macos-arm64.sha256" "artifacts/release/moderado-linux-x64#moderado-linux-x64" "artifacts/release/moderado-linux-x64.sha256" "artifacts/release/manifest.json#manifest.json" "distribution/homebrew/moderado.rb#moderado.rb" "distribution/scoop/moderado.json#moderado.json" "distribution/winget/Moderado.yaml#Moderado.yaml" "distribution/aur/PKGBUILD#PKGBUILD"
      ```
 
 No long-lived credentials or API tokens are stored in the repository. Authentication is handled entirely via GitHub OIDC trusted publishing.
@@ -127,4 +127,3 @@ community-maintained packages stay in sync without hand-written hashes:
 Binaries are unsigned (`signed: false` in `manifest.json`); expect first-run
 prompts from Windows SmartScreen and macOS Gatekeeper. Chocolatey is
 deliberately out of scope.
-

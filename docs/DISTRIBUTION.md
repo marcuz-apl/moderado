@@ -85,8 +85,6 @@ refusal against a local fixture server).
   repos — the default `GITHUB_TOKEN` cannot leave the main repo. Say the word
   and it is one job: download `moderado-distribution`, commit each file to
   its repo. Until then, the manual copy + `diff` check above is the procedure.
-- `publish.yml` still needs `npm install -g npm@latest` before `npm publish`
-  (OIDC floor is npm 11.5.1; setup-node on Node 20 ships npm 10).
 - Unsigned binaries (`signed: false`): SmartScreen/Gatekeeper prompt on first
   run everywhere. A code-signing cert (~EUR 200+/yr) is the only fix; not
   worth it yet.

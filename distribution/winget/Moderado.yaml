@@ -1,0 +1,11 @@
+PackageIdentifier: MarcuzApl.Moderado
+PackageVersion: 0.3.4
+PackageName: Moderado
+Publisher: Marcuz Apl
+InstallerType: portable
+Installers:
+- Architecture: x64
+  InstallerUrl: https://github.com/marcuz-apl/moderado/releases/download/v0.3.4/moderado-win-x64.exe
+  InstallerSha256: b191187b1cc758f75a98aa6fd43d6d609743663fde08165179c0efeb34c53f0e
+ManifestType: singleton
+ManifestVersion: 1.6.0

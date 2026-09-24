@@ -33,6 +33,7 @@ describe('release workflow', () => {
     expect(yaml).toContain('node-version: 22');
     expect(yaml).toContain('npm@11.5.1');
     expect(yaml).toContain('gh release create');
+    expect(yaml).toMatch(/gh release create "\$\{\{ inputs\.tag \}\}" --verify-tag --title/);
     expect(yaml).toContain('id-token: write');
     expect(yaml).toContain('--commit "$GITHUB_SHA"');
     expect(yaml).not.toContain("--branch '${{ inputs.tag }}'");

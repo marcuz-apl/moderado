@@ -1,0 +1,12 @@
+pkgname=moderado-bin
+pkgver=0.3.4
+pkgrel=1
+pkgdesc='Free-first AI coding agent'
+arch=('x86_64')
+url='https://github.com/marcuz-apl/moderado'
+license=('MIT')
+source_x86_64=("https://github.com/marcuz-apl/moderado/releases/download/v0.3.4/moderado-linux-x64")
+sha256sums_x86_64=('18fe18b531e2d1dbdfd0714bd2cf2e7edf8bae97bb0af0082424491fffd2094e')
+package() {
+  install -Dm755 "$srcdir/moderado-linux-x64" "$pkgdir/usr/bin/moderado"
+}

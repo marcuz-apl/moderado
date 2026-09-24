@@ -96,20 +96,27 @@ save time, mismatches surface only at publish:
 
 | npm field | Value |
 |---|---|
-| Organization / User | the npm account that owns `moderado` |
+| Organization / User | `marcuz-apl` (the GitHub repository owner) |
 | Package | `moderado` |
 | Repository | `marcuz-apl/moderado` |
 | Workflow filename | `publish.yml` (exact, with extension) |
 | Environment | `release` (or blank; `publish.yml` declares `environment: release`) |
+| Allowed actions | Enable direct `npm publish` (the workflow does not use `npm stage publish`) |
+
+Trusted publisher entries created after 2026-09-03 allow staging by default;
+direct publishing must be enabled explicitly. An `E403 ... OIDC permission
+denied for this action` after provenance generation is consistent with a
+stage-only entry. In npmjs.com, open the package's Settings -> Trusted
+publishing and check the allowed actions and all fields above. npm does not
+permit editing an existing connection; replace an incorrect entry.
 
 Repo side is now correct: `publish.yml` has `id-token: write`,
 publishes with `--provenance`, and `apps/cli/package.json`
 `repository.url` is `https://github.com/marcuz-apl/moderado.git`
 (exact match required).
 
-One fix still owed before the next release: `publish.yml` sets up Node 20,
-whose bundled npm (10.x) is below the OIDC minimum (npm >= 11.5.1). Add an
-`npm install -g npm@latest` step immediately before `npm publish`.
+`publish.yml` now uses Node 22 and installs npm 11.5.1, meeting npm's OIDC
+minimum versions.
 
 ---
 
