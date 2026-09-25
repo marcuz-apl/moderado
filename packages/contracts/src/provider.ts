@@ -57,6 +57,19 @@ export class ProviderTimeoutError extends ProviderError {
   }
 }
 
+/**
+ * A failed inference is worth retrying when the same request could plausibly
+ * succeed moments later: throttling, capacity pressure, or a mid-stream reset.
+ * Authentication, malformed payloads, and empty responses are terminal.
+ */
+export function isRetryableProviderError(error: unknown): boolean {
+  if (error instanceof RateLimitError || error instanceof ModelUnavailableError || error instanceof ProviderTimeoutError) {
+    return true;
+  }
+  // A provider that injects a 5xx mid-stream only exposes it as a status code.
+  return error instanceof ProviderError && (error.statusCode ?? 0) >= 500;
+}
+
 // --- Streaming Contracts ---
 
 export const ChatUsageSchema = z.object({

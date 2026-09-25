@@ -1,4 +1,42 @@
-import { ChatCompletionChunk, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
+import { ChatCompletionChunk, AuthenticationError, MalformedResponseError, ModelUnavailableError, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
+
+const AUTH_PATTERN = /api[\s_-]?key|unauthor|forbidden|authentication|permission/i;
+const CAPACITY_PATTERN = /overload|capacity|server[\s_-]?error|unavailable|busy|try again|temporar/i;
+
+/**
+ * Providers inject a JSON error object into an otherwise healthy SSE stream. Classify it into the
+ * shared taxonomy so the agent loop can tell a recoverable hiccup from a terminal fault and decide
+ * whether to retry, fail over, or stop.
+ */
+export function classifyInjectedStreamError(raw: unknown): ProviderError {
+  const err = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
+  const code = err.code ?? err.status ?? err.type;
+  const message =
+    typeof err.message === 'string' && err.message
+      ? err.message
+      : typeof raw === 'string'
+        ? raw
+        : JSON.stringify(raw);
+  const status = typeof code === 'number' ? code : undefined;
+
+  if (code === 429 || /rate\s*limit|too many requests/i.test(message)) {
+    return new RateLimitError(`Provider rate limit exceeded: ${message}`, undefined, status);
+  }
+  if (status === 401 || status === 403 || AUTH_PATTERN.test(message)) {
+    return new AuthenticationError(`Provider authentication failed: ${message}`, status ?? 401);
+  }
+  if ((status !== undefined && status >= 500) || CAPACITY_PATTERN.test(message)) {
+    return new ModelUnavailableError(
+      `Provider service or model unavailable (${code ?? 'unknown'}): ${message}`,
+      status ?? 503
+    );
+  }
+  return new ProviderError(
+    `Provider stream error (${code ?? 'unknown'}): ${message}`,
+    'ERR_STREAM_ERROR',
+    status
+  );
+}
 
 export async function* parseSseStream(
   byteStream: AsyncIterable<Uint8Array>
@@ -29,22 +67,15 @@ export async function* parseSseStream(
         try {
           parsed = JSON.parse(dataStr);
         } catch {
-          // Ignore non-JSON data lines
-          continue;
+          // A truncated or proxied payload is a real fault, not a heartbeat: fail loudly
+          // so the agent can retry instead of silently yielding an empty response.
+          throw new MalformedResponseError(
+            `Provider sent an unparseable SSE data line: ${dataStr.slice(0, 200)}`
+          );
         }
 
         if (parsed && typeof parsed === 'object' && parsed.error) {
-          const err = parsed.error;
-          const errCode = err.code ?? err.status;
-          const errMsg = err.message || (typeof err === 'string' ? err : JSON.stringify(err));
-          if (errCode === 429 || /rate\s*limit/i.test(errMsg)) {
-            throw new RateLimitError(`Provider rate limit exceeded: ${errMsg}`);
-          }
-          throw new ProviderError(
-            `Provider stream error (${errCode ?? 'unknown'}): ${errMsg}`,
-            'ERR_STREAM_ERROR',
-            typeof errCode === 'number' ? errCode : undefined
-          );
+          throw classifyInjectedStreamError(parsed.error);
         }
 
         const choice = parsed.choices?.[0];

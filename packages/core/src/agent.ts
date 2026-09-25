@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { z } from 'zod';
 import {
   AgentEventListener,
@@ -12,9 +13,9 @@ import {
   EmptyResponseError,
   IApprovalHandler,
   IProviderAdapter,
+  isRetryableProviderError,
   IToolRegistry,
   ModelInventoryEntry,
-  ModelUnavailableError,
   ProviderToolDeclaration,
   RateLimitError,
   ToolCall,
@@ -49,6 +50,8 @@ export interface AgentRunOptions {
   maxOutputTokens?: number;
   /** Optional untrusted user skill context appended to the system prompt. */
   skillContext?: string;
+  /** Millisecond backoffs for transient mid-stream inference retries before model failover. */
+  retryDelaysMs?: number[];
 }
 
 export interface AgentRunResult {
@@ -244,6 +247,8 @@ export class AgentLoop {
 
     let step = 0;
     let finalAssistantText: string | null = null;
+    let attempt = 0;
+    const retryDelays = options.retryDelaysMs ?? [250, 750];
 
     while (policy.isStepWithinLimit(step)) {
       if (signal?.aborted) {
@@ -361,10 +366,30 @@ export class AgentLoop {
         }
       } catch (err: any) {
         // Handle transient errors & failover cascades in AUTO mode
-        const isTransient = err instanceof RateLimitError || err instanceof ModelUnavailableError;
+        if (isRetryableProviderError(err) && attempt < retryDelays.length) {
+          // Same model, fresh request: a throttled or capacity-limited stream usually succeeds
+          // moments later. Reset the per-step accumulators so the retry starts clean.
+          const delay = retryDelays[attempt];
+          emit({
+            type: 'progress',
+            step,
+            maxSteps: policy.maxSteps,
+            status: `Stream interrupted (${err.message}). Retrying ${currentModel.id} in ${delay}ms...`,
+            timestamp: Date.now(),
+          });
+          if (delay > 0) await sleep(delay);
+          if (signal?.aborted) {
+            emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
+            return { status: 'cancelled', totalSteps: step, finalMessage: finalAssistantText, selectedModel: currentModel, messages, usage: latestUsage };
+          }
+          attempt++;
+          step--;
+          continue;
+        }
+
         const isAutoMode = !options.routeOptions?.pinnedModelId;
 
-        if (isTransient && isAutoMode) {
+        if (isRetryableProviderError(err) && isAutoMode) {
           const fallback = router.getNextFallback(rankedCandidates, currentModel.id);
           if (fallback) {
             emit({
@@ -376,6 +401,7 @@ export class AgentLoop {
               timestamp: Date.now(),
             });
             currentModel = fallback;
+            attempt = 0; // Reset retry counter for the fresh fallback candidate
             step--; // Retry current step without consuming step limit
             continue;
           }
@@ -391,7 +417,7 @@ export class AgentLoop {
         return {
           status: 'failed',
           totalSteps: step,
-          finalMessage: null,
+          finalMessage: (assistantText ? cleanConversationalFiller(assistantText) : null) || finalAssistantText || null,
           selectedModel: currentModel,
           messages,
           usage: latestUsage,

@@ -7,7 +7,7 @@ import { PolicyManager } from '../src/policy.js';
 import { Router } from '../src/router.js';
 import { FakeProviderAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry } from '@moderado/tools';
-import { AgentEvent, HostEventEnvelope, IApprovalHandler } from '@moderado/contracts';
+import { AgentEvent, AuthenticationError, EmptyResponseError, HostEventEnvelope, IApprovalHandler, ProviderError, isRetryableProviderError, MalformedResponseError, ModelUnavailableError, ProviderTimeoutError, RateLimitError } from '@moderado/contracts';
 
 describe('AgentLoop (Core Execution Engine)', () => {
   let tempDir: string;
@@ -55,6 +55,18 @@ describe('AgentLoop (Core Execution Engine)', () => {
 
     const completionEvent = events.find((e) => e.type === 'completion');
     expect(completionEvent).toBeDefined();
+  });
+
+  it('retries a throttled or capacity-limited failure but not an auth or malformed failure', () => {
+    expect(isRetryableProviderError(new RateLimitError())).toBe(true);
+    expect(isRetryableProviderError(new ModelUnavailableError())).toBe(true);
+    expect(isRetryableProviderError(new ProviderTimeoutError())).toBe(true);
+    // A mid-stream injected 503 arrives as a plain ProviderError with a 5xx status.
+    expect(isRetryableProviderError(new ProviderError('stream blew up', 'ERR_STREAM_ERROR', 503))).toBe(true);
+    expect(isRetryableProviderError(new ProviderError('bad request', 'ERR_HTTP_ERROR', 400))).toBe(false);
+    expect(isRetryableProviderError(new AuthenticationError())).toBe(false);
+    expect(isRetryableProviderError(new MalformedResponseError())).toBe(false);
+    expect(isRetryableProviderError(new EmptyResponseError())).toBe(false);
   });
 
   it('advertises the core-owned subagent declaration to tool-capable models', async () => {
@@ -131,6 +143,95 @@ describe('AgentLoop (Core Execution Engine)', () => {
       completionTokens: 7,
       totalTokens: 18,
     });
+  });
+
+  it('retries the same model after a mid-stream injected error instead of failing the run', async () => {
+    // Provider injects a JSON error object into the SSE stream, then succeeds on retry.
+    provider.queueError(new ProviderError('Provider stream error (503): overloaded', 'ERR_STREAM_ERROR', 503));
+    provider.queueTextResponse('Recovered after the stream reset.');
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      retryDelaysMs: [0, 0],
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.finalMessage).toContain('Recovered after the stream reset');
+    expect(events.some((e) => e.type === 'error')).toBe(false);
+  });
+
+  it('recovers from a repeated injected error by falling back to the next model', async () => {
+    provider.models = [
+      { id: 'model-a', object: 'model', owned_by: 'test' },
+      { id: 'model-b', object: 'model', owned_by: 'test' },
+    ];
+    const router = new Router({
+      'model-a': { accessTier: 'free_trial', toolSupport: 'supported' },
+      'model-b': { accessTier: 'free_trial', toolSupport: 'supported' },
+    });
+    for (let i = 0; i < 3; i++) {
+      provider.queueError(new ProviderError('Provider stream error (503): overloaded', 'ERR_STREAM_ERROR', 503));
+    }
+    provider.queueTextResponse('The fallback model answered.');
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      router,
+      retryDelaysMs: [0, 0],
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.selectedModel.id).toBe('model-b');
+    expect(result.finalMessage).toContain('The fallback model answered');
+  });
+
+  it('does not retry a terminal failure and reports it as unrecoverable', async () => {
+    provider.queueError(new AuthenticationError('Invalid API key'));
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      retryDelaysMs: [0, 0],
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('failed');
+    expect(provider.recordedCalls).toHaveLength(1);
+    expect(events).toContainEqual(expect.objectContaining({
+      type: 'error',
+      code: 'ERR_PROVIDER_AUTHENTICATION',
+      recoverable: false,
+    }));
+  });
+
+  it('keeps partial assistant output when the stream dies unrecoverably', async () => {
+    provider.queueInterruptedResponse(
+      [{ contentDelta: 'Here is what I found so far' }],
+      new AuthenticationError('Invalid API key')
+    );
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      retryDelaysMs: [0, 0],
+      eventListener: (e) => events.push(e),
+    });
+
+    expect(result.status).toBe('failed');
+    // The user keeps the text that already streamed instead of losing it.
+    expect(result.finalMessage).toContain('Here is what I found so far');
   });
 
   it('fails visibly instead of completing when a model returns no content or tool calls', async () => {

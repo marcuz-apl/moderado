@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import http from 'node:http';
 import { AddressInfo } from 'node:net';
 import { NvidiaAdapter } from '../src/nvidia/nvidia_adapter.js';
-import { AuthenticationError, ModelUnavailableError, RateLimitError } from '@moderado/contracts';
+import { AuthenticationError, MalformedResponseError, ModelUnavailableError, RateLimitError } from '@moderado/contracts';
 
 describe('NvidiaAdapter (Offline Local Server)', () => {
   let server: http.Server;
@@ -327,6 +327,88 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
 
     expect(caughtError).toBeInstanceOf(RateLimitError);
     expect(caughtError.message).toContain('Rate limit exceeded on provider');
+  });
+
+  it('classifies a 503 error injected mid-stream as a retryable ModelUnavailableError', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        Connection: 'keep-alive',
+      });
+      res.write(`data: ${JSON.stringify({ error: { message: 'Service temporarily overloaded', code: 503 } })}\n\n`);
+      res.end();
+    };
+
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl });
+
+    let caughtError: any;
+    try {
+      for await (const _ of adapter.streamChat({
+        modelId: 'nvidia/some-model',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        // noop
+      }
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(ModelUnavailableError);
+    expect(caughtError.statusCode).toBe(503);
+    expect(caughtError.message).toContain('Service temporarily overloaded');
+  });
+
+  it('classifies an auth error injected mid-stream as an AuthenticationError', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.write(`data: ${JSON.stringify({ error: { message: 'Invalid API key provided', code: 'invalid_api_key' } })}\n\n`);
+      res.end();
+    };
+
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl });
+
+    let caughtError: any;
+    try {
+      for await (const _ of adapter.streamChat({
+        modelId: 'nvidia/some-model',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        // noop
+      }
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(AuthenticationError);
+  });
+
+  it('surfaces an unparseable data line as a diagnostic instead of silently discarding it', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      // A truncated payload from a proxy, not valid JSON and not a normal chunk.
+      res.write('data: {"choices":[{"delta":{"content":"unterminated\n\n');
+      res.end();
+    };
+
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl });
+
+    let caughtError: any;
+    let emitted = 0;
+    try {
+      for await (const _ of adapter.streamChat({
+        modelId: 'nvidia/some-model',
+        messages: [{ role: 'user', content: 'Hi' }],
+      })) {
+        emitted++;
+      }
+    } catch (err) {
+      caughtError = err;
+    }
+
+    expect(caughtError).toBeInstanceOf(MalformedResponseError);
+    expect(caughtError.message).toContain('unterminated');
+    expect(emitted).toBe(0);
   });
 
   it('suppresses mirrored contentDelta when reasoning_content is present in the chunk', async () => {

@@ -31,7 +31,7 @@ export class FakeProviderAdapter implements IProviderAdapter {
   ];
 
   public recordedCalls: ProviderChatOptions[] = [];
-  private responseQueue: (ChatCompletionChunk[] | Error)[] = [];
+  private responseQueue: (ChatCompletionChunk[] | Error | { chunks: ChatCompletionChunk[]; thenError: Error })[] = [];
 
   queueResponse(chunks: ChatCompletionChunk[]): void {
     this.responseQueue.push(chunks);
@@ -72,6 +72,11 @@ export class FakeProviderAdapter implements IProviderAdapter {
     this.responseQueue.push(error);
   }
 
+  /** Model a stream that starts streaming, then dies mid-flight (e.g. an injected SSE error). */
+  queueInterruptedResponse(chunks: ChatCompletionChunk[], thenError: Error): void {
+    this.responseQueue.push({ chunks, thenError });
+  }
+
   clear(): void {
     this.recordedCalls = [];
     this.responseQueue = [];
@@ -101,6 +106,16 @@ export class FakeProviderAdapter implements IProviderAdapter {
 
     if (next instanceof Error) {
       throw next;
+    }
+
+    if (!Array.isArray(next)) {
+      for (const chunk of next.chunks) {
+        if (options.signal?.aborted) {
+          throw new Error('Request was aborted');
+        }
+        yield chunk;
+      }
+      throw next.thenError;
     }
 
     for (const chunk of next) {
