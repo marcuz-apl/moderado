@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { SidecarClient, SidecarError } from './sidecar.js';
 import { ModeradoWebviewPanel } from './webview/panel.js';
+import type { ModelListResult, ProviderListResult } from './protocol.js';
 
 let activeSidecar: SidecarClient | null = null;
 let activeSessionId: string | null = null;
@@ -46,11 +47,49 @@ export async function getOrStartSidecar(
   });
 
   client.start();
-  const initResult = await client.initialize();
+  let initResult;
+  try {
+    initResult = await client.initialize();
+  } catch (err) {
+    // Leave the panel in a recoverable state instead of a dead composer.
+    const anyErr = err as { message?: string; code?: string };
+    if (anyErr?.code === 'NOT_FOUND' || anyErr?.code === 'PROTOCOL_MISMATCH') {
+      panel?.setSidecarUnavailable(anyErr.message ?? 'Moderado could not start.');
+    }
+    await client.close().catch(() => {});
+    throw err;
+  }
   activeSessionId = initResult.sessionId;
   activeSidecar = client;
+  panel?.setSidecarReady();
   panel?.setSessionId(initResult.sessionId);
+  void publishModelStatus(panel, client);
   return client;
+}
+
+/**
+ * Push the current provider/model to the composer's status line. Reports only
+ * ids and labels, so no credential can reach the webview through this path.
+ */
+async function publishModelStatus(
+  panel: ModeradoWebviewPanel | undefined,
+  client: SidecarClient,
+): Promise<void> {
+  if (!panel) return;
+  const config = vscode.workspace.getConfiguration('moderado');
+  const modelId = config.get<string>('model')?.trim() || undefined;
+  try {
+    const listing = await client.request<ProviderListResult>('provider.list', {});
+    const active = listing.providers.find((p) => p.isActive);
+    panel.postModelStatus({
+      providerId: listing.activeProviderId,
+      providerLabel: active?.label,
+      modelId,
+      needsApiKey: !!active?.requiresApiKey && !active.hasApiKey,
+    });
+  } catch {
+    // A status line is cosmetic; never fail a turn over it.
+  }
 }
 
 export function activate(context: vscode.ExtensionContext): void {
@@ -71,11 +110,27 @@ export function activate(context: vscode.ExtensionContext): void {
         event.affectsConfiguration('moderado.model') ||
         event.affectsConfiguration('moderado.executablePath')
       ) {
+        // Always drop the running sidecar so the next turn spawns with the new
+        // --provider/--model, whether or not one is currently running.
         if (activeSidecar && !activeSidecar.isClosed()) {
           const old = activeSidecar;
           activeSidecar = null;
-          await old.close();
-          vscode.window.showInformationMessage('Moderado settings changed; sidecar reloaded.');
+          await old.close().catch(() => {});
+        }
+        // The host owns provider activation, so ask it to re-activate the newly
+        // configured provider (no key needed when one is already stored).
+        if (panel && !panel.isUnavailable()) {
+          try {
+            const restarted = await getOrStartSidecar(
+              panel,
+              undefined,
+              undefined,
+              context.extensionPath,
+            );
+            void publishModelStatus(panel, restarted);
+          } catch {
+            // getOrStartSidecar already put the panel into its unavailable state.
+          }
         }
       }
     }),
@@ -83,73 +138,176 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('moderado.selectProvider', async () => {
-      const config = vscode.workspace.getConfiguration('moderado');
-      const current = config.get<string>('provider') || '(Default / CLI active)';
-      const options = [
-        { label: 'nvidia-nim', description: 'NVIDIA NIM (Nemotron, LLaMA, DeepSeek, Kimi)' },
-        { label: 'openrouter', description: 'OpenRouter (Qwen, DeepSeek, Mistral, LLaMA)' },
-        { label: 'agnes-ai', description: 'Agnes AI (Agnes Flash, Code)' },
-        { label: 'orcarouter', description: 'OrcaRouter' },
-        { label: '(Default / CLI active)', description: 'Use active connection from ~/.moderado/config.json' },
-        { label: 'Custom...', description: 'Enter a custom provider connection ID' },
-      ];
+      let client: SidecarClient;
+      try {
+        client = await getOrStartSidecar(panel, undefined, undefined, context.extensionPath);
+      } catch (err: any) {
+        vscode.window.showErrorMessage(err?.message ?? 'Could not start Moderado.');
+        return;
+      }
+
+      let listing: ProviderListResult;
+      try {
+        listing = await client.request<ProviderListResult>('provider.list', {});
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Could not list providers: ${err?.message ?? err}`);
+        return;
+      }
+
+      const options = listing.providers.map((provider) => {
+        const bits: string[] = [];
+        if (provider.isActive) bits.push('active');
+        if (provider.requiresApiKey && !provider.hasApiKey) bits.push('API key required');
+        else if (provider.requiresApiKey) bits.push('key saved');
+        return {
+          label: provider.id,
+          description: provider.description,
+          detail: bits.join(' · '),
+          providerId: provider.id,
+        };
+      });
+      options.push({
+        label: 'Custom...',
+        description: 'Enter a provider connection ID',
+        detail: '',
+        providerId: '',
+      });
 
       const picked = await vscode.window.showQuickPick(options, {
-        placeHolder: `Current provider: ${current}. Select provider to use:`,
+        placeHolder: listing.activeProviderId
+          ? `Current provider: ${listing.activeProviderId}. Select provider to use:`
+          : 'No provider connected yet. Select one to continue:',
+        matchOnDescription: true,
       });
 
       if (!picked) return;
 
-      let value = picked.label;
-      if (value === '(Default / CLI active)') {
-        value = '';
-      } else if (value === 'Custom...') {
+      let providerId = picked.providerId;
+      if (!providerId) {
         const input = await vscode.window.showInputBox({
           prompt: 'Enter provider connection ID',
           placeHolder: 'e.g. nvidia-nim, openrouter, custom-id',
         });
         if (input === undefined) return;
-        value = input.trim();
+        providerId = input.trim();
+      }
+      if (!providerId) return;
+
+      // Only prompt for a key the sidecar does not already hold. The key is sent
+      // straight to the host and never stored in webview state or logs.
+      const target = listing.providers.find((p) => p.id === providerId);
+      let apiKey: string | undefined;
+      if (target?.requiresApiKey && !target.hasApiKey) {
+        const entered = await vscode.window.showInputBox({
+          prompt: `API key for ${target.label}`,
+          placeHolder: 'Paste your API key',
+          password: true,
+          ignoreFocusOut: true,
+        });
+        if (entered === undefined) return;
+        if (!entered.trim()) {
+          vscode.window.showErrorMessage('An API key is required for this provider.');
+          return;
+        }
+        apiKey = entered.trim();
       }
 
-      await config.update('provider', value, vscode.ConfigurationTarget.Global);
-      vscode.window.showInformationMessage(`Moderado provider set to: ${value || 'Default (CLI active)'}`);
+      try {
+        await client.request('provider.connect', { providerId, apiKey });
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Could not connect to ${providerId}: ${err?.message ?? err}`);
+        return;
+      }
+
+      const cfg = vscode.workspace.getConfiguration('moderado');
+      await cfg.update('provider', providerId, vscode.ConfigurationTarget.Global);
+      await publishModelStatus(panel, client);
+      vscode.window.showInformationMessage(`Moderado provider set to: ${providerId}`);
     }),
   );
 
   context.subscriptions.push(
     vscode.commands.registerCommand('moderado.selectModel', async () => {
-      const config = vscode.workspace.getConfiguration('moderado');
-      const current = config.get<string>('model') || '(Auto: Free-First)';
-      const options = [
-        { label: '(Auto: Free-First)', description: 'Free-first automatic model routing' },
-        { label: 'z-ai/glm-5.3-flash', description: 'NVIDIA NIM free trial fast coding model' },
-        { label: 'qwen/qwen3.8-27b:free', description: 'OpenRouter free high-capability coding model' },
-        { label: 'meta/llama-3.1-8b-instruct', description: 'NVIDIA NIM free trial lightweight model' },
-        { label: 'nvidia/llama-3.1-nemotron-70b-instruct', description: 'NVIDIA NIM high-intelligence model' },
-        { label: 'Custom...', description: 'Enter a custom model ID' },
+      let client: SidecarClient;
+      try {
+        client = await getOrStartSidecar(panel, undefined, undefined, context.extensionPath);
+      } catch (err: any) {
+        vscode.window.showErrorMessage(err?.message ?? 'Could not start Moderado.');
+        return;
+      }
+
+      let catalog: ModelListResult;
+      try {
+        catalog = await client.request<ModelListResult>('model.list', {});
+      } catch (err: any) {
+        // The most common cause is no provider yet; point at the real fix.
+        vscode.window
+          .showErrorMessage(`Could not list models: ${err?.message ?? err}`, 'Manage Providers')
+          .then((choice: string | undefined) => {
+            if (choice === 'Manage Providers') {
+              vscode.commands.executeCommand('moderado.selectProvider');
+            }
+          });
+        return;
+      }
+
+      const options: Array<{
+        label: string;
+        description?: string;
+        detail?: string;
+        modelId: string;
+      }> = [
+        {
+          label: '(Auto: Free-First)',
+          description: 'Free-first automatic model routing',
+          detail: '',
+          modelId: '',
+        },
       ];
+      // The host already sorts free-tier models first.
+      for (const model of catalog.models) {
+        options.push({
+          label: model.id,
+          description: model.ownedBy,
+          detail: model.isFree ? 'free tier' : 'paid',
+          modelId: model.id,
+        });
+      }
+      // Always allow a custom model id; the catalog may be short or truncated.
+      options.push({
+        label: 'Custom...',
+        description: catalog.truncated
+          ? `Enter a model ID (list truncated at ${catalog.models.length} models)`
+          : 'Enter a model ID',
+        detail: '',
+        modelId: '',
+      });
 
       const picked = await vscode.window.showQuickPick(options, {
-        placeHolder: `Current model: ${current}. Select model to use:`,
+        placeHolder: `Models for ${catalog.providerId} — select to pin:`,
+        matchOnDescription: true,
+        matchOnDetail: true,
       });
 
       if (!picked) return;
 
-      let value = picked.label;
-      if (value === '(Auto: Free-First)') {
-        value = '';
-      } else if (value === 'Custom...') {
+      let modelId = picked.modelId;
+      if (!modelId) {
         const input = await vscode.window.showInputBox({
           prompt: 'Enter model identifier',
           placeHolder: 'e.g. z-ai/glm-5.3-flash, qwen/qwen3.8-27b:free',
         });
         if (input === undefined) return;
-        value = input.trim();
+        modelId = input.trim();
       }
 
-      await config.update('model', value, vscode.ConfigurationTarget.Global);
-      vscode.window.showInformationMessage(`Moderado model set to: ${value || 'Auto (Free-First)'}`);
+      await vscode.workspace
+        .getConfiguration('moderado')
+        .update('model', modelId, vscode.ConfigurationTarget.Global);
+      await publishModelStatus(panel, client);
+      vscode.window.showInformationMessage(
+        `Moderado model set to: ${modelId || 'Auto (Free-First)'}`,
+      );
     }),
   );
 

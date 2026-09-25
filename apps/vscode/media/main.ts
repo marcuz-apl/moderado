@@ -86,6 +86,12 @@ interface EditorSelectionContext {
   const contextChipContainer = document.getElementById('context-chip-container') as HTMLElement;
   const contextChipLabel = document.getElementById('context-chip-label') as HTMLElement;
   const contextChipRemove = document.getElementById('context-chip-remove') as HTMLElement;
+  const sidecarBanner = document.getElementById('sidecar-banner') as HTMLElement | null;
+  const sidecarBannerMessage = document.getElementById('sidecar-banner-message') as HTMLElement | null;
+  const sidecarRetryBtn = document.getElementById('sidecar-retry-btn') as HTMLElement | null;
+  const attachFileBtn = document.getElementById('attach-file-btn') as HTMLElement | null;
+  const statusProviderBtn = document.getElementById('status-provider-btn') as HTMLElement | null;
+  const statusModelBtn = document.getElementById('status-model-btn') as HTMLElement | null;
 
   function escapeHtml(str: string): string {
     const div = document.createElement('div');
@@ -172,6 +178,18 @@ interface EditorSelectionContext {
     const toolsHtml = turn.tools.map((t) => renderTool(t)).join('');
     const approvalsHtml = turn.approvals.map((a) => renderApprovalCard(a)).join('');
 
+    // Error turns must be visible, and provider failures are the common case,
+    // so offer the model manager directly instead of making the user hunt for it.
+    const errorHtml =
+      turn.status === 'error' && turn.errorMessage
+        ? `<div class="turn-error">
+             <div class="turn-error-message">${escapeHtml(turn.errorMessage)}</div>
+             <div class="turn-error-actions">
+               <button class="btn btn-secondary error-switch-model-btn">Switch model</button>
+             </div>
+           </div>`
+        : '';
+
     return `
       <div class="turn-block">
         ${userPromptHtml}
@@ -179,6 +197,7 @@ interface EditorSelectionContext {
         ${progressHtml}
         ${toolsHtml}
         ${approvalsHtml}
+        ${errorHtml}
       </div>
     `;
   }
@@ -226,8 +245,36 @@ interface EditorSelectionContext {
         });
       });
 
+      const switchModelButtons = transcriptContainer.querySelectorAll('.error-switch-model-btn');
+      switchModelButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          vscode.postMessage({ type: 'selectModel' });
+        });
+      });
+
       transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
     }
+  }
+
+  function showSidecarUnavailable(message: string): void {
+    if (!sidecarBanner) return;
+    if (sidecarBannerMessage) {
+      sidecarBannerMessage.textContent = message;
+    }
+    sidecarBanner.style.display = 'flex';
+    // The composer cannot do anything without a sidecar; disable it explicitly
+    // so the UI never implies a send would work.
+    sendBtn.disabled = true;
+    cancelBtn.disabled = true;
+    attachSelectionBtn.disabled = true;
+  }
+
+  function hideSidecarUnavailable(): void {
+    if (!sidecarBanner) return;
+    sidecarBanner.style.display = 'none';
+    sendBtn.disabled = false;
+    cancelBtn.disabled = false;
+    attachSelectionBtn.disabled = false;
   }
 
   function handleSend(): void {
@@ -284,6 +331,30 @@ interface EditorSelectionContext {
     }
   });
 
+  if (attachFileBtn) {
+    attachFileBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'attachFile' });
+    });
+  }
+
+  if (statusProviderBtn) {
+    statusProviderBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'selectProvider' });
+    });
+  }
+
+  if (statusModelBtn) {
+    statusModelBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'selectModel' });
+    });
+  }
+
+  if (sidecarRetryBtn) {
+    sidecarRetryBtn.addEventListener('click', () => {
+      vscode.postMessage({ type: 'retrySidecar' });
+    });
+  }
+
   window.addEventListener('message', (event) => {
     const message = event.data;
     if (!message || typeof message !== 'object') return;
@@ -298,6 +369,22 @@ interface EditorSelectionContext {
         contextChipContainer.style.display = 'inline-block';
       } else {
         contextChipContainer.style.display = 'none';
+      }
+    } else if (message.type === 'sidecarUnavailable') {
+      showSidecarUnavailable(message.message);
+    } else if (message.type === 'sidecarReady') {
+      hideSidecarUnavailable();
+    } else if (message.type === 'appendComposerText') {
+      composerInput.value += message.text;
+      composerInput.focus();
+    } else if (message.type === 'modelStatus') {
+      if (statusProviderBtn) {
+        statusProviderBtn.textContent = message.needsApiKey
+          ? `${message.providerId || 'No provider'} — needs API key`
+          : message.providerId || 'No provider connected';
+      }
+      if (statusModelBtn) {
+        statusModelBtn.textContent = message.modelId || 'Auto (Free-First)';
       }
     }
   });

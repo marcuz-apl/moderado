@@ -155,6 +155,15 @@ declare module 'vscode' {
     placeHolder?: string;
     value?: string;
     password?: boolean;
+    /** Keep the input open when focus leaves, e.g. while pasting a long key. */
+    ignoreFocusOut?: boolean;
+  }
+
+  export interface OpenDialogOptions {
+    canSelectMany?: boolean;
+    openLabel?: string;
+    canSelectFiles?: boolean;
+    canSelectFolders?: boolean;
   }
 
   export namespace commands {
@@ -174,6 +183,7 @@ declare module 'vscode' {
     export function showQuickPick<T extends string | QuickPickItem>(items: readonly T[] | Promise<readonly T[]>, options?: QuickPickOptions): Thenable<T | undefined>;
     export function showInputBox(options?: InputBoxOptions): Thenable<string | undefined>;
     export let activeTextEditor: TextEditor | undefined;
+    export function showOpenDialog(options?: OpenDialogOptions): Thenable<Uri[] | undefined>;
   }
 
   export namespace workspace {

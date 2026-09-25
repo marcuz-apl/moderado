@@ -19,6 +19,12 @@
   const contextChipContainer = document.getElementById("context-chip-container");
   const contextChipLabel = document.getElementById("context-chip-label");
   const contextChipRemove = document.getElementById("context-chip-remove");
+  const sidecarBanner = document.getElementById("sidecar-banner");
+  const sidecarBannerMessage = document.getElementById("sidecar-banner-message");
+  const sidecarRetryBtn = document.getElementById("sidecar-retry-btn");
+  const attachFileBtn = document.getElementById("attach-file-btn");
+  const statusProviderBtn = document.getElementById("status-provider-btn");
+  const statusModelBtn = document.getElementById("status-model-btn");
   function escapeHtml(str) {
     const div = document.createElement("div");
     div.textContent = str;
@@ -86,6 +92,12 @@
          </div>` : "";
     const toolsHtml = turn.tools.map((t) => renderTool(t)).join("");
     const approvalsHtml = turn.approvals.map((a) => renderApprovalCard(a)).join("");
+    const errorHtml = turn.status === "error" && turn.errorMessage ? `<div class="turn-error">
+             <div class="turn-error-message">${escapeHtml(turn.errorMessage)}</div>
+             <div class="turn-error-actions">
+               <button class="btn btn-secondary error-switch-model-btn">Switch model</button>
+             </div>
+           </div>` : "";
     return `
       <div class="turn-block">
         ${userPromptHtml}
@@ -93,6 +105,7 @@
         ${progressHtml}
         ${toolsHtml}
         ${approvalsHtml}
+        ${errorHtml}
       </div>
     `;
   }
@@ -134,8 +147,31 @@
           }
         });
       });
+      const switchModelButtons = transcriptContainer.querySelectorAll(".error-switch-model-btn");
+      switchModelButtons.forEach((btn) => {
+        btn.addEventListener("click", () => {
+          vscode.postMessage({ type: "selectModel" });
+        });
+      });
       transcriptContainer.scrollTop = transcriptContainer.scrollHeight;
     }
+  }
+  function showSidecarUnavailable(message) {
+    if (!sidecarBanner) return;
+    if (sidecarBannerMessage) {
+      sidecarBannerMessage.textContent = message;
+    }
+    sidecarBanner.style.display = "flex";
+    sendBtn.disabled = true;
+    cancelBtn.disabled = true;
+    attachSelectionBtn.disabled = true;
+  }
+  function hideSidecarUnavailable() {
+    if (!sidecarBanner) return;
+    sidecarBanner.style.display = "none";
+    sendBtn.disabled = false;
+    cancelBtn.disabled = false;
+    attachSelectionBtn.disabled = false;
   }
   function handleSend() {
     const text = composerInput.value.trim();
@@ -179,6 +215,26 @@
       handleSend();
     }
   });
+  if (attachFileBtn) {
+    attachFileBtn.addEventListener("click", () => {
+      vscode.postMessage({ type: "attachFile" });
+    });
+  }
+  if (statusProviderBtn) {
+    statusProviderBtn.addEventListener("click", () => {
+      vscode.postMessage({ type: "selectProvider" });
+    });
+  }
+  if (statusModelBtn) {
+    statusModelBtn.addEventListener("click", () => {
+      vscode.postMessage({ type: "selectModel" });
+    });
+  }
+  if (sidecarRetryBtn) {
+    sidecarRetryBtn.addEventListener("click", () => {
+      vscode.postMessage({ type: "retrySidecar" });
+    });
+  }
   window.addEventListener("message", (event) => {
     const message = event.data;
     if (!message || typeof message !== "object") return;
@@ -192,6 +248,20 @@
         contextChipContainer.style.display = "inline-block";
       } else {
         contextChipContainer.style.display = "none";
+      }
+    } else if (message.type === "sidecarUnavailable") {
+      showSidecarUnavailable(message.message);
+    } else if (message.type === "sidecarReady") {
+      hideSidecarUnavailable();
+    } else if (message.type === "appendComposerText") {
+      composerInput.value += message.text;
+      composerInput.focus();
+    } else if (message.type === "modelStatus") {
+      if (statusProviderBtn) {
+        statusProviderBtn.textContent = message.needsApiKey ? `${message.providerId || "No provider"} \u2014 needs API key` : message.providerId || "No provider connected";
+      }
+      if (statusModelBtn) {
+        statusModelBtn.textContent = message.modelId || "Auto (Free-First)";
       }
     }
   });

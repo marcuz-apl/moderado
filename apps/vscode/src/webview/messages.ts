@@ -47,6 +47,14 @@ export const WebviewSelectProviderMsgSchema = z.object({
   type: z.literal('selectProvider'),
 });
 
+export const WebviewRetrySidecarMsgSchema = z.object({
+  type: z.literal('retrySidecar'),
+});
+
+export const WebviewAttachFileMsgSchema = z.object({
+  type: z.literal('attachFile'),
+});
+
 export const WebviewToHostMessageSchema = z.discriminatedUnion('type', [
   WebviewSendMsgSchema,
   WebviewCancelMsgSchema,
@@ -55,8 +63,10 @@ export const WebviewToHostMessageSchema = z.discriminatedUnion('type', [
   WebviewApproveMsgSchema,
   WebviewRejectMsgSchema,
   WebviewAttachSelectionMsgSchema,
+  WebviewAttachFileMsgSchema,
   WebviewSelectModelMsgSchema,
   WebviewSelectProviderMsgSchema,
+  WebviewRetrySidecarMsgSchema,
 ]);
 export type WebviewToHostMessage = z.infer<typeof WebviewToHostMessageSchema>;
 
@@ -81,10 +91,49 @@ export const HostErrorMsgSchema = z.object({
   code: z.string().optional(),
 });
 
+/**
+ * The sidecar could not be started at all (missing CLI and no bundled copy).
+ * Carries no credential or environment detail, only what the user must act on.
+ */
+export const HostSidecarUnavailableMsgSchema = z.object({
+  type: z.literal('sidecarUnavailable'),
+  message: z.string().max(2000),
+  /** The command that was attempted, so the message is actionable. */
+  attemptedExecutable: z.string().max(512).optional(),
+  canRetry: z.boolean().optional(),
+});
+
+export const HostSidecarReadyMsgSchema = z.object({
+  type: z.literal('sidecarReady'),
+});
+
+/**
+ * Current provider/model for the composer status line. Carries ids and labels
+ * only; never an API key or any credential material.
+ */
+export const HostModelStatusMsgSchema = z.object({
+  type: z.literal('modelStatus'),
+  providerId: z.string().max(64).optional(),
+  providerLabel: z.string().max(120).optional(),
+  modelId: z.string().max(300).optional(),
+  /** True when the provider still needs an API key before any turn can run. */
+  needsApiKey: z.boolean().optional(),
+});
+
+/** Append text to the composer, used by the attach-file flow. */
+export const HostAppendComposerTextMsgSchema = z.object({
+  type: z.literal('appendComposerText'),
+  text: z.string().max(4096),
+});
+
 export const HostToWebviewMessageSchema = z.discriminatedUnion('type', [
   HostStateMsgSchema,
   HostEventMsgSchema,
   HostActiveEditorContextMsgSchema,
   HostErrorMsgSchema,
+  HostSidecarUnavailableMsgSchema,
+  HostSidecarReadyMsgSchema,
+  HostModelStatusMsgSchema,
+  HostAppendComposerTextMsgSchema,
 ]);
 export type HostToWebviewMessage = z.infer<typeof HostToWebviewMessageSchema>;

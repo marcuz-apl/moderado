@@ -88,7 +88,7 @@
   },
   "scripts": {
     "icons": "node ./scripts/generate_icon.mjs",
-    "build": "node ./scripts/generate_icon.mjs && tsc && node ./scripts/build_extension.mjs && node ./scripts/verify_sidecar_build.mjs",
+    "build": "node ./scripts/generate_icon.mjs && tsc && node ./scripts/build_webview.mjs && node ./scripts/build_extension.mjs && node ./scripts/verify_sidecar_build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "package": "node ./scripts/package_vsix.mjs"

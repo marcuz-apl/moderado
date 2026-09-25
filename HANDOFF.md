@@ -2,8 +2,51 @@
 
 Updated: 2026-09-25 UTC
 Branch: `feature/vscode-extension` (working line); `master` deliberately left at `9bbd641`
-Last implementation commit: `86f0e42` (`v0.4.0+2609251`) on `feature/vscode-extension`, pushed; this session adds the CI gate + branch policy on the same branch
-Status: extension icon shipped on the branch (safe-area revision pending commit); CI gate added; master stays at 9bbd641 until you declare v0.4.0 done - no merge reminders
+Last pushed commit: `eb2cf67` (`v0.4.0+2609256`); steps 4-6 of the provider/model work are **uncommitted** on top
+Status: provider/model manager, bundled sidecar, and panel UI implemented and green; **no manual VS Code visual pass yet**
+
+## Summary (current session)
+
+Built the in-panel provider/model manager end to end and removed the CLI install requirement.
+
+- **Host (`apps/cli/src/host/runtime.ts`)**: provider resolution is now lazy, so the sidecar boots with no API key. Added `provider.list`, `provider.connect`, and `model.list`. `chat.send` expands `@file` mentions through the workspace jail and emits an `error` event for non-abort failures so busy state is released. `chat.cancel.targetRequestId` is optional.
+- **Contract (`packages/contracts/src/host_protocol.ts`)**: added the three request/result schemas; API keys are never returned to the webview (only `hasApiKey: boolean`).
+- **Bundled sidecar**: `apps/vscode/scripts/package_vsix.mjs` now stages the compiled CLI **plus** `zod` and the four `@moderado/*` packages into `dist/sidecar/`. Copying `apps/cli/dist` alone yields `ERR_MODULE_NOT_FOUND`; that was proven empirically, not assumed.
+- **Resolution order** (`apps/vscode/src/sidecar.ts`): explicit `executablePath` > bundled > global npm > monorepo > `PATH`. An explicit override deliberately still wins over the bundle.
+- **UI**: persistent "unavailable" banner with Retry, a clickable provider/model status line, an attach-file button, and a **Switch model** action on failed turns.
+
+## Completed
+
+- Steps 1-8 of the plan are all implemented. Prior entries below are retained for history.
+
+## In progress
+
+- **Not visually verified.** The error card, status chips, file dialog, and `password: true` API-key prompt have only been typechecked and contract-tested. Install the VSIX and click through them.
+- Bundle-first means a globally installed `moderado` (0.3.4 on this machine) is **ignored** unless `moderado.executablePath` is set.
+
+## Working tree
+
+- Steps 4-6 uncommitted: `apps/vscode/{src,media,scripts,tests,package.json}`, `apps/vscode/README.md`, root `package.json`.
+- Untracked new tests: `apps/vscode/tests/{sidecar_bundle,sidecar_unavailable,provider_manager,composer_controls,webview_build}.test.ts`; new scripts `build_webview.mjs`, `verify_sidecar_build.mjs`.
+
+## Checks
+
+- `npm run typecheck` and `npm run typecheck:vscode` — clean.
+- `npm test` — **PASS: 64 files, 521 tests, 0 failures**.
+- `npm run build:vscode` and `npm run package:vscode` — green; VSIX 130 KB → 1.56 MB.
+- End-to-end probe against the **extracted VSIX sidecar**, isolated with a temp `HOME`/`USERPROFILE`: initialize ok, `provider.list` returns 6 with `nvidia-nim.hasApiKey=false`, `model.list` fails `INVALID_REQUEST` with "Connect a provider first", keyless `provider.connect` rejected, unknown provider rejected, loopback `ollama` connect ok, `activeProviderId=ollama`, and no secret present in any listing.
+
+## Next
+
+1. Install `apps/vscode/moderado-vscode-0.4.0.vsix` and visually verify the panel UI.
+2. Commit steps 4-6 as one `v0.4.0+2609257` commit and push.
+
+## Notes for the next agent
+
+- The Alfazen hook stamps the version **before** validating the subject text. Commit with a `PLACEHOLDER` subject, then `git -c core.hooksPath=/dev/null commit --amend --no-edit --message "<version> <text>"`.
+- PowerShell output from `npm test` is easily truncated; use `npx vitest run --reporter=json --outputFile=...` to read exact counts.
+- `apps/vscode/src/types/vscode.d.ts` is a hand-written stub and was missing real API members (`ignoreFocusOut`, `showOpenDialog`); it will drift again for any new API used.
+
 
 ## Summary
 

@@ -16,6 +16,7 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
   public static readonly viewType = 'moderado.chatView';
   private view?: vscode.WebviewView;
   private state: TranscriptState;
+  private sidecarUnavailable = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -70,6 +71,41 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
     return this.state;
   }
 
+  /**
+   * Show the persistent "CLI missing" state. Used instead of a transient toast so
+   * a user with no sidecar sees a way forward rather than a dead composer.
+   */
+  public setSidecarUnavailable(message: string, attemptedExecutable?: string): void {
+    this.sidecarUnavailable = true;
+    this.postMessageToWebview({
+      type: 'sidecarUnavailable',
+      message,
+      attemptedExecutable,
+      canRetry: true,
+    });
+  }
+
+  public setSidecarReady(): void {
+    if (!this.sidecarUnavailable) return;
+    this.sidecarUnavailable = false;
+    this.postMessageToWebview({ type: 'sidecarReady' });
+  }
+
+  /** True while the panel is showing the "Moderado unavailable" state. */
+  public isUnavailable(): boolean {
+    return this.sidecarUnavailable;
+  }
+
+  /** Update the composer's provider/model status line. Ids and labels only. */
+  public postModelStatus(status: {
+    providerId?: string;
+    providerLabel?: string;
+    modelId?: string;
+    needsApiKey?: boolean;
+  }): void {
+    this.postMessageToWebview({ type: 'modelStatus', ...status });
+  }
+
   private async handleWebviewMessage(raw: unknown): Promise<void> {
     const validated = WebviewToHostMessageSchema.safeParse(raw);
     if (!validated.success) {
@@ -81,6 +117,19 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
     }
 
     const msg: WebviewToHostMessage = validated.data;
+
+    // Retry must not await the sidecar first: acquiring it is exactly what failed.
+    if (msg.type === 'retrySidecar') {
+      try {
+        const retried = await this.getSidecar();
+        await retried.initialize().catch(() => undefined);
+        this.setSidecarReady();
+        this.postMessageToWebview({ type: 'state', state: this.state });
+      } catch (err: any) {
+        this.setSidecarUnavailable(err?.message || String(err));
+      }
+      return;
+    }
 
     try {
       const sidecar = await this.getSidecar();
@@ -181,6 +230,27 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
           break;
         }
 
+        case 'attachFile': {
+          // A file picked here is passed as an @mention so the host expands it
+          // through the same jail-checked path as typed mentions.
+          const picked = await vscode.window.showOpenDialog({
+            canSelectMany: false,
+            openLabel: 'Attach to Moderado',
+          });
+          const uri = picked?.[0];
+          if (!uri) break;
+          const relPath = vscode.workspace.asRelativePath(uri, false);
+          if (!relPath || relPath.startsWith('/') || relPath.startsWith('\\') || relPath.includes('..')) {
+            this.postMessageToWebview({
+              type: 'error',
+              message: 'Only files inside the workspace can be attached.',
+            });
+            break;
+          }
+          this.postMessageToWebview({ type: 'appendComposerText', text: `@${relPath.replace(/\\/g, '/')} ` });
+          break;
+        }
+
         case 'selectModel': {
           await vscode.commands.executeCommand('moderado.selectModel');
           break;
@@ -192,6 +262,11 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
         }
       }
     } catch (err: any) {
+      // A missing sidecar is a persistent condition, not a transient message.
+      if (err?.code === 'NOT_FOUND' || err?.code === 'ENOENT') {
+        this.setSidecarUnavailable(err?.message || String(err));
+        return;
+      }
       this.postMessageToWebview({
         type: 'error',
         message: err?.message || String(err),
@@ -263,7 +338,25 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
     </div>
   </main>
 
+  <div class="sidecar-banner" id="sidecar-banner" style="display: none;" role="alert">
+    <div class="sidecar-banner-body">
+      <p class="sidecar-banner-title">Moderado is unavailable</p>
+      <p class="sidecar-banner-message" id="sidecar-banner-message"></p>
+      <p class="sidecar-banner-hint">
+        Install the CLI, or set <code>moderado.executablePath</code> in Settings.
+      </p>
+    </div>
+    <div class="sidecar-banner-actions">
+      <button class="btn btn-secondary" id="sidecar-retry-btn">Retry</button>
+    </div>
+  </div>
+
   <footer class="composer-section" id="composer-section">
+    <div class="composer-status" id="composer-status">
+      <button class="composer-status-item" id="status-provider-btn" title="Change provider">No provider connected</button>
+      <button class="composer-status-item" id="status-model-btn" title="Change model">Auto (Free-First)</button>
+    </div>
+
     <div id="context-chip-container" style="display: none;">
       <span class="context-chip" id="context-chip">
         <span id="context-chip-label">src/index.ts:1-10</span>
@@ -281,6 +374,7 @@ export class ModeradoWebviewPanel implements vscode.WebviewViewProvider {
       ></textarea>
       <div class="composer-footer">
         <div class="composer-tools">
+          <button class="icon-btn" id="attach-file-btn" title="Attach Workspace File" aria-label="Attach File">📄</button>
           <button class="icon-btn" id="attach-selection-btn" title="Attach Active Editor Selection" aria-label="Attach Selection">📎</button>
         </div>
         <div class="composer-actions">

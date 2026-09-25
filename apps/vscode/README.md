@@ -9,9 +9,9 @@ A task-oriented VS Code interface for Moderado, providing supervised agentic cod
 Before installing the extension, ensure your system meets the following requirements:
 
 1. **VS Code**: Version `1.85.0` or later.
-2. **Node.js**: Version `>= 20.0.0` LTS.
-3. **Moderado CLI**: The `moderado` command must either be discoverable in your system `PATH`, or configured explicitly in VS Code settings.
-4. **Provider Configuration**: Providers (e.g., NVIDIA NIM, OpenRouter) should be configured using `moderado config set provider <id>` or through environment variables.
+2. **Node.js**: Version `>= 20.0.0` LTS. (VS Code ships its own runtime; this applies only when running the CLI directly.)
+3. **Moderado CLI**: *Optional.* The extension bundles its own sidecar, so no separate CLI install is required. Set `moderado.executablePath` to force a specific external CLI instead.
+4. **Provider Configuration**: Connect a provider from the panel's ⚙️ button, or with `moderado selectProvider`. API keys are stored by the host (Windows Credential Manager on Windows) and are never sent to the webview.
 
 ---
 
@@ -74,7 +74,9 @@ node scripts/generate_icon.mjs --check  # fails when media/icon.png is out of da
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `moderado.executablePath` | `string` | `""` | Absolute path to the `moderado` executable. If empty, the extension resolves `moderado` from the system `PATH`. |
+| `moderado.executablePath` | `string` | `""` | Absolute path to an external `moderado` executable. If empty, the extension uses its bundled sidecar, then a globally installed CLI, then `PATH`. |
+| `moderado.provider` | `string` | `""` | Provider connection id (e.g. `nvidia-nim`, `openrouter`, `agnes-ai`). Normally set by the panel's provider picker. |
+| `moderado.model` | `string` | `""` | Model id to pin. If empty, free-first auto-routing is used. |
 
 ---
 

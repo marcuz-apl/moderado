@@ -29,6 +29,9 @@ export const window = {
   showInformationMessage: async () => undefined,
   showWarningMessage: async () => undefined,
   showErrorMessage: async () => undefined,
+  showInputBox: async () => undefined,
+  showOpenDialog: async () => undefined,
+  showQuickPick: async () => undefined,
   activeTextEditor: undefined,
 };
 
