@@ -49,6 +49,27 @@ Alternatively, inside VS Code:
 
 ---
 
+## Branding assets
+
+| Asset | Role |
+|---|---|
+| `media/icon.png` | 128x128 RGBA brand icon declared as `icon` in `package.json`; shown in the Extensions view and required by the Marketplace. |
+| `media/icon.svg` | Monochrome Activity Bar glyph. VS Code requires `currentColor` with no hard-coded colors, masks, or filters. |
+
+Both assets carry the same shield-and-code mark, so the panel glyph and the extension tile read as one product while staying visually distinct from VS Code's own branding (the raster icon uses Moderado's indigo/violet palette, not VS Code blue).
+
+Regenerate and verify the raster icon after changing its geometry or palette:
+
+```bash
+cd apps/vscode
+npm run icons                           # writes media/icon.png
+node scripts/generate_icon.mjs --check  # fails when media/icon.png is out of date
+```
+
+`npm run build` and `npm run package` regenerate the icon automatically, and VSIX packaging fails closed when the declared icon is missing or is not a PNG.
+
+---
+
 ## Configuration
 
 | Setting | Type | Default | Description |

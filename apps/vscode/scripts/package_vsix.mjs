@@ -8,7 +8,17 @@ import { buildExtension } from './build_extension.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const vscodeRoot = path.resolve(__dirname, '..');
 
-function buildManifest(pkg) {
+const BASE_MEDIA_FILES = ['index.html', 'styles.css', 'main.js', 'icon.svg'];
+
+export function buildManifest(pkg) {
+  const assets = [
+    '    <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />',
+  ];
+  if (pkg.icon) {
+    assets.push(
+      `    <Asset Type="Microsoft.VisualStudio.Services.Icons.Default" Path="extension/${pkg.icon}" Addressable="true" />`,
+    );
+  }
   return `<?xml version="1.0" encoding="utf-8"?>
 <PackageManifest Version="2.0.0" xmlns="http://schemas.microsoft.com/developer/vsx-schema/2011" xmlns:d="http://schemas.microsoft.com/developer/vsx-schema-design/2011">
   <Metadata>
@@ -21,13 +31,13 @@ function buildManifest(pkg) {
   </Installation>
   <Dependencies />
   <Assets>
-    <Asset Type="Microsoft.VisualStudio.Code.Manifest" Path="extension/package.json" Addressable="true" />
+${assets.join('\n')}
   </Assets>
 </PackageManifest>
 `;
 }
 
-function buildContentTypes() {
+export function buildContentTypes() {
   return `<?xml version="1.0" encoding="utf-8"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="vsixmanifest" ContentType="text/xml" />
@@ -36,9 +46,28 @@ function buildContentTypes() {
   <Default Extension="css" ContentType="text/css" />
   <Default Extension="html" ContentType="text/html" />
   <Default Extension="md" ContentType="text/markdown" />
+  <Default Extension="png" ContentType="image/png" />
   <Default Extension="svg" ContentType="image/svg+xml" />
 </Types>
 `;
+}
+
+export function collectMediaFiles(pkg, targetDir = vscodeRoot) {
+  const mediaFiles = [...BASE_MEDIA_FILES];
+  if (!pkg.icon) {
+    return mediaFiles;
+  }
+  if (path.extname(pkg.icon) !== '.png') {
+    throw new Error(`extension icon '${pkg.icon}' must be a PNG file`);
+  }
+  const iconFile = pkg.icon.startsWith('media/') ? pkg.icon.slice('media/'.length) : pkg.icon;
+  if (!existsSync(path.join(targetDir, ...pkg.icon.split('/')))) {
+    throw new Error(`extension icon '${pkg.icon}' is missing; run 'node scripts/generate_icon.mjs' to create it`);
+  }
+  if (!mediaFiles.includes(iconFile)) {
+    mediaFiles.push(iconFile);
+  }
+  return mediaFiles;
 }
 
 export function packageVsix(targetDir = vscodeRoot) {
@@ -74,12 +103,11 @@ export function packageVsix(targetDir = vscodeRoot) {
   }
   cpSync(distDir, path.join(extensionDir, 'dist'), { recursive: true });
 
-  // 4. Webview media assets
+  // 4. Webview media assets, including the branded extension icon
   const mediaDir = path.join(targetDir, 'media');
   if (existsSync(mediaDir)) {
     mkdirSync(path.join(extensionDir, 'media'), { recursive: true });
-    // Copy only production media assets (.html, .css, .js, .svg)
-    const mediaFiles = ['index.html', 'styles.css', 'main.js', 'icon.svg'];
+    const mediaFiles = collectMediaFiles(pkg, targetDir);
     for (const f of mediaFiles) {
       const src = path.join(mediaDir, f);
       if (existsSync(src)) {

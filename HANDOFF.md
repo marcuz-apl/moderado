@@ -1,52 +1,55 @@
 # Project Handoff
 
-Updated: 2026-09-24 UTC
+Updated: 2026-09-25 UTC
 Branch: master
-Last implementation commit: `b5a7b5e` (`v0.3.4+260924j`)
-Status: release published; corrected history, tag, and workflow pushed
+Last implementation commit: `9bbd641` (`v0.4.0+260924D`)
+Status: uncommitted extension branding fix in the working tree; local VSIX repackaged
 
 ## Summary
 
-`moderado@0.3.4` is published on npm and GitHub Release `v0.3.4` is live with all 11 assets. The Publish workflow failed after the npm step because `--verify-tag` was mistakenly passed a second tag argument; the workflow and release runbook are corrected and pushed.
+The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json` declared no top-level `icon`, VSIX packaging never staged an image asset, and the only asset (`media/icon.svg`) is the monochrome Activity Bar glyph. The extension now ships a dedicated 128x128 branded PNG icon that is centered, correctly sized, and covered by tests.
 
 ## Completed
 
-- Confirmed `.github/workflows/publish.yml` uses GitHub-hosted Ubuntu, `id-token: write`, environment `release`, Node 22, npm 11.5.1, and direct `npm publish`.
-- Confirmed failed run `36028254282` reaches npm's publish request after generating provenance.
-- Updated `docs/FIRST_PUBLISH.md` with the GitHub owner and npm Allowed actions requirement; removed a stale npm-version gap from `docs/DISTRIBUTION.md`.
-- Downloaded the successful verification run's binary artifacts, verified their manifest and checksums, generated distribution manifests, and created the GitHub Release directly with the corrected `gh release create` invocation.
-- Added a workflow regression test for the `--verify-tag` syntax and corrected `.github/workflows/publish.yml` and `docs/RELEASING.md`.
-- Rewrote the last six commit subjects with consecutive `v0.3.4+260924d` through `...i` prefixes and force-pushed `master` and `v0.3.4` with leases. The original tip is retained locally at `refs/backup/pre-rewrite-v0.3.4`.
-- Committed workflow, test, runbook, and distribution manifest fixes as `b5a7b5e` (`v0.3.4+260924j`).
+- Added `apps/vscode/scripts/generate_icon.mjs`: dependency-free deterministic PNG generator (Node built-ins only) with `--check` (fails when the committed PNG drifts from the code) and `--preview` (ASCII proof). It is the single source of truth for the mark geometry and palette.
+- Added `apps/vscode/media/icon.png` (128x128 RGBA, 3075 bytes): full-bleed indigo/violet rounded badge with a white shield carrying cut-out `< / >` code marks. Mark bounding box 70x87 px centered at (63.5, 64).
+- Corrected the mark mapping to account for the viewBox origin; the first revision displaced the shield +15.2 px right and +9.5 px down, which rendered as a mark stuck in the lower-right corner.
+- `apps/vscode/package.json`: added `"icon": "media/icon.png"`, added the `icons` script, and made `build` regenerate the icon.
+- `apps/vscode/scripts/package_vsix.mjs`: exported `buildManifest`/`buildContentTypes`/`collectMediaFiles`; the VSIX now declares `Microsoft.VisualStudio.Services.Icons.Default`, adds `png` to `[Content_Types].xml`, and fails closed when the declared icon is missing or is not a PNG.
+- `apps/vscode/tests/branding.test.ts`: 9 tests covering icon/glyph separation, PNG structure, brand-color and glyph pixels, centering plus minimum size, generator sync (`--check`), monochrome-safety of the Activity Bar SVG, and VSIX icon staging.
+- `apps/vscode/README.md`: "Branding assets" section documenting both assets and the regeneration/verification commands.
 
 ## In progress
 
-- Monitor the verification workflow triggered by the moved `v0.3.4` tag.
+- Local visual confirmation: the freshly packaged `apps/vscode/moderado-vscode-0.4.0.vsix` still needs reinstalling; the version is unchanged, so use `--force` or uninstall first.
 
 ## Working tree
 
-- All release fixes and generated distribution manifests are committed; this handoff is the only remaining edit at the time of writing.
+- Modified: `apps/vscode/README.md`, `apps/vscode/package.json`, `apps/vscode/scripts/package_vsix.mjs`, plus this handoff.
+- Untracked: `apps/vscode/media/icon.png`, `apps/vscode/scripts/generate_icon.mjs`, `apps/vscode/tests/branding.test.ts`.
+- Generated and gitignored: `apps/vscode/moderado-vscode-0.4.0.vsix`, `apps/vscode/dist/`.
 
 ## Checks
 
-- `npx vitest run apps/cli/tests/release_workflow.test.ts` — PASS (3 tests) after a confirmed red regression.
-- `npm run verify:binaries -- --directory artifacts/release` — PASS.
-- `gh release view v0.3.4 --json ...` — PASS; published, 11 assets.
-- `npm view moderado version --json` — PASS; `0.3.4`.
-- `git diff --check` — PASS.
+- Centering regression — confirmed red first (mark 14.5 px off-center horizontally) before the mapping fix.
+- `npx vitest run apps/vscode/tests` — PASS (6 files, 36 tests; 9 in `branding.test.ts`).
+- `npm test` — PASS (62 files, 0 failures).
 - `npm run typecheck` — PASS.
-- `npm test` — PASS (51 files, 359 tests).
+- `git diff --check` — clean.
+- `node apps/vscode/scripts/package_vsix.mjs` — PASS; archive contains `extension/media/icon.png` (3075 bytes) with the `Icons.Default` asset, and `[Content_Types].xml` maps `png` to `image/png`.
 
 ## Decisions and context
 
-- npm trusted publisher connections created after 2026-09-03 allow staged publishing by default. Direct `npm publish` requires an explicit allowed action; this was resolved externally before run `36029087162`.
-- Never rerun the full Publish workflow for `v0.3.4`; npm rejects republishing an existing version. The GitHub Release was completed directly.
-- Moving the tag changes its commit ID from `5ac5aef` to `b506e2a`; npm's existing provenance still refers to the original source commit.
+- The extension icon is a raster PNG because VS Code and the Marketplace require one; the Activity Bar glyph stays a monochrome `currentColor` SVG because VS Code requires monochrome container icons. Both keep the same shield-and-code mark.
+- The palette is Moderado indigo/violet, deliberately not VS Code blue, so the extension no longer reads as VS Code branding.
+- `VERSION` is untouched: the Alfazen git hooks compute the next connected identifier at commit time from the commit subject.
+- No new runtime dependency was introduced; the generator uses only Node built-ins.
 
 ## Blockers
 
-- None for `v0.3.4` publication.
+- None.
 
 ## Next action
 
-1. Check the verification workflow started by the moved `v0.3.4` tag. Do not rerun the Publish workflow for the already published npm version.
+1. Commit the branding fix with a hook-compatible subject, e.g. `fix(vscode): ship a branded centered extension icon`.
+2. Reinstall the VSIX (`code --uninstall-extension marcuz-apl.moderado-vscode` then `code --install-extension apps/vscode/moderado-vscode-0.4.0.vsix`) and confirm the icon renders centered in the Extensions view.
