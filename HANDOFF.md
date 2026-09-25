@@ -2,8 +2,8 @@
 
 Updated: 2026-09-25 UTC
 Branch: `feature/vscode-extension` (working line); `master` deliberately left at `9bbd641`
-Last implementation commit: `86f0e42` (`v0.4.0+2609251`) on `feature/vscode-extension`, pushed
-Status: extension icon shipped on the branch; master untouched until the milestone increment is accepted
+Last implementation commit: `86f0e42` (`v0.4.0+2609251`) on `feature/vscode-extension`, pushed; this session adds the CI gate + branch policy on the same branch
+Status: extension icon shipped on the branch; CI gate gating PRs and master pushes added; master untouched until the milestone increment is accepted
 
 ## Summary
 
@@ -18,6 +18,8 @@ The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json
 - `apps/vscode/scripts/package_vsix.mjs`: exported `buildManifest`/`buildContentTypes`/`collectMediaFiles`; the VSIX now declares `Microsoft.VisualStudio.Services.Icons.Default`, adds `png` to `[Content_Types].xml`, and fails closed when the declared icon is missing or is not a PNG.
 - `apps/vscode/tests/branding.test.ts`: 9 tests covering icon/glyph separation, PNG structure, brand-color and glyph pixels, centering plus minimum size, generator sync (`--check`), monochrome-safety of the Activity Bar SVG, and VSIX icon staging.
 - `apps/vscode/README.md`: "Branding assets" section documenting both assets and the regeneration/verification commands.
+- Added `.github/workflows/ci.yml`: gates every pull request and every push to `master` on `npm ci` → `npm run build` → `npm run typecheck` → `npm test`; `contents: read`, no publishing path (TDD: `tests/ci_workflow.test.ts` written red first, then the workflow).
+- `AGENTS.md` section 6.3 (new Branching, Merge and Publishing Policy): `master` is the append-only integration line (fast-forward or PR only, never reset/force-push), feature work on `feature/*`, releases stay manual, no pre-emptive `release/0.3.x` branch (tag `v0.3.4` is the fork point).
 
 ## In progress
 
@@ -57,5 +59,5 @@ The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json
 
 1. Reinstall the VSIX (`code --uninstall-extension marcuz-apl.moderado-vscode` then `code --install-extension apps/vscode/moderado-vscode-0.4.0.vsix`) and confirm the icon renders centered in the Extensions view.
 2. Integrate to `master` only when the extension increment is green: `git switch master && git merge --ff-only feature/vscode-extension && git push origin master`.
-3. Add `.github/workflows/ci.yml` (`pull_request` + `push: [master]` running `npm ci && npm test && npm run typecheck`) and document the branch/merge policy in `AGENTS.md`, including "published refs are append-only".
-4. Optional cleanup: the `agents/who-are-you` worktree/branch and the ~25 `refs/cline|agents/.../checkpoints/*` refs.
+3. DONE this session (commit pending): CI gate plus branch policy on the branch; then enable branch protection on master requiring the new CI check.
+4. Cleanup done: who-are-you worktree and branch removed; 28 orphaned tooling refs deleted (restore list kept at .worktrees/superpowers-archive/orphan-refs-2026-09-25.txt).

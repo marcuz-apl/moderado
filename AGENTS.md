@@ -130,6 +130,14 @@ If a change introduces breaking public API shifts or fundamental architectural r
 2. Formally advise the project owner with rationale, proposed version transition, and impact.
 3. **Wait for explicit written approval**. Without approval, stage the changes under a Minor (`n`) increment.
 
+### 6.3 Branching, Merge & Publishing Policy
+- `master` is the integration line. It moves only by merging accepted, green increments (`npm test`, `npm run typecheck`).
+- Feature work lands on short-lived `feature/*` branches and integrates via fast-forward (`git merge --ff-only`) or pull request; delete the branch after it lands.
+- Published refs are append-only: never `reset` or force-push `master`, tags, or published release commits. Fix published history with `revert` or a follow-up commit.
+- `.github/workflows/ci.yml` gates every pull request and every push to `master` (`npm ci`, `npm run build`, `npm run typecheck`, `npm test`). It is read-only and never publishes.
+- Releases stay manual: `release.yml` verifies artifacts on `v*` tags and `workflow_dispatch`; `publish.yml` publishes only on `workflow_dispatch` with `confirm: PUBLISH` against an existing tag, behind the `release` environment.
+- Do not create a `release/0.3.x`-style branch pre-emptively. Tag `v0.3.4` is the fork point; create `hotfix/0.3.x` from the tag only when a patch to the shipped CLI is actually required, then forward-port the fix to `master`.
+
 ---
 
 ## 7. Session Continuity & Handoff Protocol
