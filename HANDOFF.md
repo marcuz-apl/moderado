@@ -1,9 +1,9 @@
 # Project Handoff
 
 Updated: 2026-09-25 UTC
-Branch: master
-Last implementation commit: `9bbd641` (`v0.4.0+260924D`)
-Status: uncommitted extension branding fix in the working tree; local VSIX repackaged
+Branch: `feature/vscode-extension` (working line); `master` deliberately left at `9bbd641`
+Last implementation commit: `86f0e42` (`v0.4.0+2609251`) on `feature/vscode-extension`, pushed
+Status: extension icon shipped on the branch; master untouched until the milestone increment is accepted
 
 ## Summary
 
@@ -21,12 +21,13 @@ The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json
 
 ## In progress
 
-- Local visual confirmation: the freshly packaged `apps/vscode/moderado-vscode-0.4.0.vsix` still needs reinstalling; the version is unchanged, so use `--force` or uninstall first.
+- Local visual confirmation: `apps/vscode/moderado-vscode-0.4.0.vsix` needs reinstalling to view the icon; the extension version is unchanged, so uninstall first or pass `--force`.
+- Integration to `master` once this increment is accepted (`git switch master && git merge --ff-only feature/vscode-extension`).
 
 ## Working tree
 
-- Modified: `apps/vscode/README.md`, `apps/vscode/package.json`, `apps/vscode/scripts/package_vsix.mjs`, plus this handoff.
-- Untracked: `apps/vscode/media/icon.png`, `apps/vscode/scripts/generate_icon.mjs`, `apps/vscode/tests/branding.test.ts`.
+- Clean on `feature/vscode-extension`; the icon work is committed as `86f0e42` and pushed.
+- The stale worktree `.worktrees/vscode-extension` was removed; its SDD ledger is archived (git-ignored) at `.worktrees/superpowers-archive/sdd/2026-09-24-vscode-extension/`.
 - Generated and gitignored: `apps/vscode/moderado-vscode-0.4.0.vsix`, `apps/vscode/dist/`.
 
 ## Checks
@@ -44,6 +45,9 @@ The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json
 - The palette is Moderado indigo/violet, deliberately not VS Code blue, so the extension no longer reads as VS Code branding.
 - `VERSION` is untouched: the Alfazen git hooks compute the next connected identifier at commit time from the commit subject.
 - No new runtime dependency was introduced; the generator uses only Node built-ins.
+- Branch model in force: `master` is the integration line and only moves via `merge --ff-only` from `feature/vscode-extension`; extension work is committed on the branch. `0.4.0` stays untagged and unpublished until the milestone acceptance criteria pass.
+- No `release/0.3.x` branch is created pre-emptively: tag `v0.3.4` is the fork point, and a `hotfix/0.3.x` branch is created from it only if a patch to the shipped CLI is actually required.
+- Published refs are append-only: `master` must not be reset or force-pushed again.
 
 ## Blockers
 
@@ -51,5 +55,7 @@ The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json
 
 ## Next action
 
-1. Commit the branding fix with a hook-compatible subject, e.g. `fix(vscode): ship a branded centered extension icon`.
-2. Reinstall the VSIX (`code --uninstall-extension marcuz-apl.moderado-vscode` then `code --install-extension apps/vscode/moderado-vscode-0.4.0.vsix`) and confirm the icon renders centered in the Extensions view.
+1. Reinstall the VSIX (`code --uninstall-extension marcuz-apl.moderado-vscode` then `code --install-extension apps/vscode/moderado-vscode-0.4.0.vsix`) and confirm the icon renders centered in the Extensions view.
+2. Integrate to `master` only when the extension increment is green: `git switch master && git merge --ff-only feature/vscode-extension && git push origin master`.
+3. Add `.github/workflows/ci.yml` (`pull_request` + `push: [master]` running `npm ci && npm test && npm run typecheck`) and document the branch/merge policy in `AGENTS.md`, including "published refs are append-only".
+4. Optional cleanup: the `agents/who-are-you` worktree/branch and the ~25 `refs/cline|agents/.../checkpoints/*` refs.
