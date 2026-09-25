@@ -124,7 +124,7 @@ describe('Moderado extension icon branding', () => {
     expect(glyph).toBeGreaterThan(1000);
   });
 
-  it('centers the shield mark in the badge and fills the icon area', () => {
+  it('centers the shield mark in the badge and keeps a symmetric safe area', () => {
     const icon = readPng(packageJson.icon);
     const isMark = (red: number, green: number, blue: number, alpha: number) =>
       alpha > 250 && red > 240 && green > 240 && blue > 240;
@@ -132,11 +132,16 @@ describe('Moderado extension icon branding', () => {
     const center = icon.width / 2;
     expect(Math.abs((mark.minX + mark.maxX) / 2 - center)).toBeLessThanOrEqual(2);
     expect(Math.abs((mark.minY + mark.maxY) / 2 - center)).toBeLessThanOrEqual(2);
-    expect(mark.maxX - mark.minX + 1).toBeGreaterThanOrEqual(68);
-    expect(mark.maxY - mark.minY + 1).toBeGreaterThanOrEqual(86);
+    expect(mark.maxX - mark.minX + 1).toBeGreaterThanOrEqual(60);
+    expect(mark.maxY - mark.minY + 1).toBeGreaterThanOrEqual(74);
 
+    // The badge must not touch the tile edges: symmetric transparent margins
+    // on all four sides, so UI rounding/cropping reads as centered, not shifted.
     const badge = pixelBounds(icon.pixels, icon.width, (_, __, ___, alpha) => alpha > 200);
-    expect(badge).toEqual({ minX: 0, minY: 0, maxX: icon.width - 1, maxY: icon.height - 1 });
+    expect(badge.minX).toBeGreaterThanOrEqual(4);
+    expect(badge.minX).toBe(badge.minY);
+    expect(badge.maxX).toBe(icon.width - 1 - badge.minX);
+    expect(badge.maxY).toBe(icon.height - 1 - badge.minY);
   });
 
   it('keeps the committed icon in sync with scripts/generate_icon.mjs', () => {

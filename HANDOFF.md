@@ -3,11 +3,11 @@
 Updated: 2026-09-25 UTC
 Branch: `feature/vscode-extension` (working line); `master` deliberately left at `9bbd641`
 Last implementation commit: `86f0e42` (`v0.4.0+2609251`) on `feature/vscode-extension`, pushed; this session adds the CI gate + branch policy on the same branch
-Status: extension icon shipped on the branch; CI gate gating PRs and master pushes added; master untouched until the milestone increment is accepted
+Status: extension icon shipped on the branch (safe-area revision pending commit); CI gate added; master stays at 9bbd641 until you declare v0.4.0 done - no merge reminders
 
 ## Summary
 
-The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json` declared no top-level `icon`, VSIX packaging never staged an image asset, and the only asset (`media/icon.svg`) is the monochrome Activity Bar glyph. The extension now ships a dedicated 128x128 branded PNG icon that is centered, correctly sized, and covered by tests.
+The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json` declared no top-level `icon`, VSIX packaging never staged an image asset, and the only asset (`media/icon.svg`) is the monochrome Activity Bar glyph. The extension now ships a dedicated 128x128 branded PNG icon that is centered, correctly sized, and covered by tests. Revision: 8px transparent safe-area inset around the badge (full-bleed badge touched tile edges, so UI rounding/cropping read as off-center); shield scale 4.4 to 4.0; badge bbox 8-119 (center 63.5/63.5), glyph bbox 32-95 x 25-103 (center 63.5/64.0).
 
 ## Completed
 
@@ -18,13 +18,14 @@ The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json
 - `apps/vscode/scripts/package_vsix.mjs`: exported `buildManifest`/`buildContentTypes`/`collectMediaFiles`; the VSIX now declares `Microsoft.VisualStudio.Services.Icons.Default`, adds `png` to `[Content_Types].xml`, and fails closed when the declared icon is missing or is not a PNG.
 - `apps/vscode/tests/branding.test.ts`: 9 tests covering icon/glyph separation, PNG structure, brand-color and glyph pixels, centering plus minimum size, generator sync (`--check`), monochrome-safety of the Activity Bar SVG, and VSIX icon staging.
 - `apps/vscode/README.md`: "Branding assets" section documenting both assets and the regeneration/verification commands.
+- Icon safe-area revision (pending commit): `BADGE_INSET = 8`, shield scale 4.0; branding test now asserts symmetric transparent margins instead of full-bleed.
 - Added `.github/workflows/ci.yml`: gates every pull request and every push to `master` on `npm ci` → `npm run build` → `npm run typecheck` → `npm test`; `contents: read`, no publishing path (TDD: `tests/ci_workflow.test.ts` written red first, then the workflow).
 - `AGENTS.md` section 6.3 (new Branching, Merge and Publishing Policy): `master` is the append-only integration line (fast-forward or PR only, never reset/force-push), feature work on `feature/*`, releases stay manual, no pre-emptive `release/0.3.x` branch (tag `v0.3.4` is the fork point).
 
 ## In progress
 
-- Local visual confirmation: `apps/vscode/moderado-vscode-0.4.0.vsix` needs reinstalling to view the icon; the extension version is unchanged, so uninstall first or pass `--force`.
-- Integration to `master` once this increment is accepted (`git switch master && git merge --ff-only feature/vscode-extension`).
+- Cache-proof reinstall to view the fixed icon (VS Code caches extension icons aggressively): uninstall, close ALL windows, delete the installed dir + CachedExtensionVSIXs, reinstall the VSIX.
+- Local visual confirmation (old note): `apps/vscode/moderado-vscode-0.4.0.vsix` needs reinstalling to view the icon; the extension version is unchanged, so uninstall first or pass `--force`.
 
 ## Working tree
 
@@ -58,6 +59,6 @@ The Moderado VS Code extension had no icon of its own: `apps/vscode/package.json
 ## Next action
 
 1. Reinstall the VSIX (`code --uninstall-extension marcuz-apl.moderado-vscode` then `code --install-extension apps/vscode/moderado-vscode-0.4.0.vsix`) and confirm the icon renders centered in the Extensions view.
-2. Integrate to `master` only when the extension increment is green: `git switch master && git merge --ff-only feature/vscode-extension && git push origin master`.
+2. REMOVED - master stays at 9bbd641 until you declare v0.4.0 done (was: integrate to `master` only when green): `git switch master && git merge --ff-only feature/vscode-extension && git push origin master`.
 3. DONE this session (commit pending): CI gate plus branch policy on the branch; then enable branch protection on master requiring the new CI check.
 4. Cleanup done: who-are-you worktree and branch removed; 28 orphaned tooling refs deleted (restore list kept at .worktrees/superpowers-archive/orphan-refs-2026-09-25.txt).

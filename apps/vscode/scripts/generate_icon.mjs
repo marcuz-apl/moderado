@@ -17,7 +17,11 @@ const BYTES_PER_PIXEL = 4;
 // Moderado brand palette (indigo -> violet). Deliberately not VS Code blue (#007ACC).
 const BADGE_TOP = [0x3b, 0x2a, 0xc9];
 const BADGE_BOTTOM = [0x8b, 0x5c, 0xf6];
-const BADGE_CORNER_RADIUS = 26;
+// Transparent safe-area around the badge. A full-bleed badge touches the tile
+// edges, so any UI rounding/cropping reads as an off-center shift. The inset
+// keeps symmetric transparent margins on all four sides.
+const BADGE_INSET = 8;
+const BADGE_CORNER_RADIUS = 24;
 const GLYPH_COLOR = [0xff, 0xff, 0xff];
 
 // Shield and code glyph geometry, expressed in the 24x24 viewBox shared with media/icon.svg.
@@ -49,7 +53,7 @@ const SHIELD_MIN_X = SHIELD_CENTER_X - SHIELD_HALF_WIDTH;
 const SHIELD_MIN_Y = SHIELD_TOP_Y;
 const SHIELD_WIDTH = SHIELD_HALF_WIDTH * 2;
 const SHIELD_HEIGHT = SHIELD_TIP_Y - SHIELD_TOP_Y;
-const SHIELD_SCALE = 4.4;
+const SHIELD_SCALE = 4.0;
 const SHIELD_OFFSET_X = (ICON_SIZE - SHIELD_WIDTH * SHIELD_SCALE) / 2 - SHIELD_MIN_X * SHIELD_SCALE;
 const SHIELD_OFFSET_Y = (ICON_SIZE - SHIELD_HEIGHT * SHIELD_SCALE) / 2 - SHIELD_MIN_Y * SHIELD_SCALE;
 
@@ -136,8 +140,10 @@ function expectSignature(file) {
 }
 
 function insideRoundedBadge(x, y) {
-  const clampedX = Math.min(Math.max(x, BADGE_CORNER_RADIUS), ICON_SIZE - BADGE_CORNER_RADIUS);
-  const clampedY = Math.min(Math.max(y, BADGE_CORNER_RADIUS), ICON_SIZE - BADGE_CORNER_RADIUS);
+  const min = BADGE_INSET + BADGE_CORNER_RADIUS;
+  const max = ICON_SIZE - BADGE_INSET - BADGE_CORNER_RADIUS;
+  const clampedX = Math.min(Math.max(x, min), max);
+  const clampedY = Math.min(Math.max(y, min), max);
   const dx = x - clampedX;
   const dy = y - clampedY;
   return dx * dx + dy * dy <= BADGE_CORNER_RADIUS * BADGE_CORNER_RADIUS;
