@@ -87,6 +87,42 @@ export function filterMentionCandidates(candidates: string[], token: string, lim
 }
 
 /**
+ * Render one resolved workspace file as the fenced mention block used in
+ * prompts. Shared by the TUI composer (`expandMentions`) and the host runtime
+ * (`chat.send` context files) so both embed identical content. Throws when the
+ * file cannot be read; callers decide how to report the failure.
+ */
+export async function renderFileContent(
+  target: string,
+  workspace: WorkspaceFileSource,
+  options: { maxExcerptLines?: number } = {}
+): Promise<string> {
+  const maxLines = options.maxExcerptLines ?? 200;
+
+  if (isImagePath(target)) {
+    const mime = getImageMimeType(target) ?? 'application/octet-stream';
+    if (workspace.readImage) {
+      const buffer = await workspace.readImage(target);
+      if (buffer.byteLength > 1024 * 1024) {
+        return `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes - exceeded 1MB inline limit)]\n--- end @${target} ---`;
+      }
+      const base64 = buffer.toString('base64');
+      return `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes)]\ndata:${mime};base64,${base64}\n--- end @${target} ---`;
+    }
+    try {
+      const content = await workspace.readFile(target);
+      return `\n--- @${target} ---\n${content}\n--- end @${target} ---`;
+    } catch {
+      return `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime})]\n--- end @${target} ---`;
+    }
+  }
+
+  const content = await workspace.readFile(target);
+  const lines = content.split(/\r?\n/).slice(0, maxLines);
+  return `\n--- @${target} ---\n${lines.join('\n')}\n--- end @${target} ---`;
+}
+
+/**
  * Expand every `@token` mention into a fenced block with the file path and a
  * capped excerpt (first 200 lines) or attached image payload. Unresolvable
  * tokens are left verbatim and reported, so nothing silently disappears from
@@ -109,39 +145,8 @@ export async function expandMentions(
     try {
       const files = await workspace.listFiles(token);
       const target = files.length === 1 ? files[0] : files[0] ?? token;
-
-      if (isImagePath(target)) {
-        const mime = getImageMimeType(target) ?? 'application/octet-stream';
-        if (workspace.readImage) {
-          const buffer = await workspace.readImage(target);
-          if (buffer.byteLength > 1024 * 1024) {
-            text = text.replace(
-              full,
-              `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes - exceeded 1MB inline limit)]\n--- end @${target} ---`
-            );
-          } else {
-            const base64 = buffer.toString('base64');
-            text = text.replace(
-              full,
-              `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes)]\ndata:${mime};base64,${base64}\n--- end @${target} ---`
-            );
-          }
-        } else {
-          try {
-            const content = await workspace.readFile(target);
-            text = text.replace(full, `\n--- @${target} ---\n${content}\n--- end @${target} ---`);
-          } catch {
-            text = text.replace(
-              full,
-              `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime})]\n--- end @${target} ---`
-            );
-          }
-        }
-      } else {
-        const content = await workspace.readFile(target);
-        const lines = content.split(/\r?\n/).slice(0, maxLines);
-        text = text.replace(full, `\n--- @${target} ---\n${lines.join('\n')}\n--- end @${target} ---`);
-      }
+      const block = await renderFileContent(target, workspace, { maxExcerptLines: maxLines });
+      text = text.replace(full, block);
     } catch {
       unresolved.push(full);
     }

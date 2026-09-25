@@ -43,6 +43,91 @@ export interface ConnectProvidersConfig {
 
 export type ProviderConnectionKind = 'nvidia-nim' | 'openai-compatible';
 
+/**
+ * Pure metadata for the built-in provider presets. Lives here (not in the TUI
+ * layer) so the host runtime can answer `provider.list` without importing any
+ * presentation code.
+ */
+export interface ProviderPresetMeta {
+  id: ConnectProviderPresetId;
+  label: string;
+  description: string;
+  kind: ProviderConnectionKind;
+  baseUrl: string;
+  defaultModel?: string;
+  /** Local-only runtimes (Ollama, LM Studio) never require a key. */
+  requiresApiKey: boolean;
+}
+
+export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
+  {
+    id: 'nvidia-nim',
+    label: 'NVIDIA NIM',
+    description: 'Free-first routing across Nemotron, LLaMA, DeepSeek and Kimi.',
+    kind: 'nvidia-nim',
+    baseUrl: 'https://integrate.api.nvidia.com/v1',
+    requiresApiKey: true,
+  },
+  {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    description: 'One key for Qwen, DeepSeek, Mistral and free-tier models.',
+    kind: 'openai-compatible',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    requiresApiKey: true,
+  },
+  {
+    id: 'agnes-ai',
+    label: 'Agnes AI',
+    description: 'Agnes Flash and Code endpoints.',
+    kind: 'openai-compatible',
+    baseUrl: 'https://apihub.agnes-ai.com/v1',
+    requiresApiKey: true,
+  },
+  {
+    id: 'orcarouter',
+    label: 'OrcaRouter',
+    description: 'Adaptive model routing.',
+    kind: 'openai-compatible',
+    baseUrl: 'https://api.orcarouter.ai/v1',
+    defaultModel: 'orcarouter/free',
+    requiresApiKey: true,
+  },
+  {
+    id: 'ollama',
+    label: 'Ollama',
+    description: 'Models served locally by Ollama.',
+    kind: 'openai-compatible',
+    baseUrl: 'http://127.0.0.1:11434/v1',
+    requiresApiKey: false,
+  },
+  {
+    id: 'lm-studio',
+    label: 'LM Studio',
+    description: 'Models served by the LM Studio local server.',
+    kind: 'openai-compatible',
+    baseUrl: 'http://127.0.0.1:1234/v1',
+    requiresApiKey: false,
+  },
+];
+
+/** True for loopback endpoints, which authenticate without an API key. */
+export function isLoopbackBaseUrl(baseUrl: string): boolean {
+  try {
+    const url = new URL(baseUrl);
+    return (
+      url.protocol === 'http:' &&
+      ['127.0.0.1', 'localhost', '[::1]', '::1'].includes(url.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function findProviderPreset(id: string): ProviderPresetMeta | undefined {
+  return CONNECT_PROVIDER_PRESET_META.find((preset) => preset.id === id);
+}
+
 export interface ProviderConnection {
   id: string;
   displayName: string;

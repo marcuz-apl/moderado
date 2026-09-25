@@ -76,7 +76,7 @@
         "moderado.provider": {
           "type": "string",
           "default": "",
-          "description": "Provider connection ID to use (e.g. 'nvidia-nim', 'openrouter', 'agnes', 'orcarouter'). If empty, uses the active connection from Moderado CLI."
+          "description": "Provider connection ID to use (e.g. 'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio'). If empty, uses the active connection from Moderado CLI."
         },
         "moderado.model": {
           "type": "string",
@@ -88,7 +88,7 @@
   },
   "scripts": {
     "icons": "node ./scripts/generate_icon.mjs",
-    "build": "node ./scripts/generate_icon.mjs && tsc && node ./scripts/build_extension.mjs",
+    "build": "node ./scripts/generate_icon.mjs && tsc && node ./scripts/build_extension.mjs && node ./scripts/verify_sidecar_build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "package": "node ./scripts/package_vsix.mjs"

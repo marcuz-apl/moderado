@@ -1,6 +1,9 @@
-import { describe, it, expect, vi } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import type { ChildProcess } from 'node:child_process';
 import { SidecarClient } from '../src/sidecar.js';
 import {
@@ -310,5 +313,88 @@ describe('SidecarClient', () => {
     // Verify all pending approvals are aborted (no pending approval remains unresolved or approved)
     expect(client.getPendingApprovals()).toHaveLength(0);
     expect(client.isClosed()).toBe(true);
+  });
+});
+
+describe('SidecarClient executable resolution precedence', () => {
+  let tempDir: string;
+  let workspaceRoot: string;
+  let extensionRoot: string;
+  let bundledCli: string;
+  let monorepoCli: string;
+
+  const write = (file: string) => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, '// stub');
+  };
+
+  const resolve = (options: Record<string, unknown> = {}) =>
+    new SidecarClient({ workspaceRoot, ...options }).resolveLaunch();
+
+  beforeEach(() => {
+    tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'sidecar-resolve-'));
+    workspaceRoot = path.join(tempDir, 'workspace');
+    extensionRoot = path.join(tempDir, 'extension');
+    bundledCli = path.join(extensionRoot, 'dist', 'sidecar', 'index.js');
+    monorepoCli = path.join(workspaceRoot, 'apps', 'cli', 'dist', 'index.js');
+    fs.mkdirSync(workspaceRoot, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('prefers the bundled sidecar so the IDE needs no separate CLI install', () => {
+    write(bundledCli);
+    write(monorepoCli);
+
+    const { executable, args } = resolve({ extensionPath: extensionRoot });
+    expect(executable).toBe('node');
+    expect(args[0]).toBe(bundledCli);
+  });
+
+  it('falls back to the monorepo build when nothing is bundled', () => {
+    write(monorepoCli);
+    const previousAppData = process.env.APPDATA;
+    process.env.APPDATA = path.join(tempDir, 'empty-appdata');
+    try {
+      const { executable, args } = resolve({ extensionPath: extensionRoot });
+      expect(executable).toBe('node');
+      expect(args[0]).toBe(monorepoCli);
+    } finally {
+      if (previousAppData === undefined) delete process.env.APPDATA;
+      else process.env.APPDATA = previousAppData;
+    }
+  });
+
+  it('falls back to PATH resolution when no sidecar file exists', () => {
+    // Isolate APPDATA so a globally installed CLI on the developer machine
+    // cannot satisfy the probe and make this test machine-dependent.
+    const previousAppData = process.env.APPDATA;
+    process.env.APPDATA = path.join(tempDir, 'empty-appdata');
+    try {
+      const { executable, args } = resolve({ extensionPath: extensionRoot });
+      expect(executable).toBe('moderado');
+      expect(args[0]).toBe('host');
+    } finally {
+      if (previousAppData === undefined) delete process.env.APPDATA;
+      else process.env.APPDATA = previousAppData;
+    }
+  });
+
+  it('spawns a configured .js entry through node without a shell', () => {
+    const { executable, args } = resolve({ executablePath: '/opt/custom/moderado.js' });
+    expect(executable).toBe('node');
+    expect(args[0]).toBe('/opt/custom/moderado.js');
+  });
+
+  it('passes provider and model to the resolved sidecar', () => {
+    write(bundledCli);
+
+    const { args } = resolve({ extensionPath: extensionRoot, provider: 'nvidia-nim', model: 'z-ai/glm-5.3-flash' });
+    expect(args).toContain('--provider');
+    expect(args).toContain('nvidia-nim');
+    expect(args).toContain('--model');
+    expect(args).toContain('z-ai/glm-5.3-flash');
   });
 });

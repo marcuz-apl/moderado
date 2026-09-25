@@ -10,6 +10,11 @@ import {
   HostResponseSchema,
   HostSuccessResponseSchema,
   InitializeRequestSchema,
+  ModelListRequestSchema,
+  ModelListResultSchema,
+  ProviderConnectRequestSchema,
+  ProviderListRequestSchema,
+  ProviderListResultSchema,
   SessionNewRequestSchema,
   SessionResumeRequestSchema,
 } from '../src/index.js';
@@ -98,6 +103,27 @@ describe('Host protocol v1 contracts', () => {
         },
       });
       expect(parsed.success).toBe(false);
+    });
+
+    it('validates chat.cancel without a target request id (cancel active generation)', () => {
+      expect(ChatCancelRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-cancel',
+        method: 'chat.cancel',
+        params: { sessionId: 'session-1' },
+      }).success).toBe(true);
+      expect(ChatCancelRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-cancel2',
+        method: 'chat.cancel',
+        params: { sessionId: 'session-1', targetRequestId: 'req-send-1' },
+      }).success).toBe(true);
+      expect(ChatCancelRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-cancel3',
+        method: 'chat.cancel',
+        params: { sessionId: 'session-1', targetRequestId: '' },
+      }).success).toBe(false);
     });
 
     it('rejects chat.send with selection text exceeding 20,000 characters', () => {
@@ -311,6 +337,106 @@ describe('Host protocol v1 contracts', () => {
     });
   });
 
+  describe('Model manager requests', () => {
+    it('validates provider.list with empty params', () => {
+      const parsed = HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-pl',
+        method: 'provider.list',
+        params: {},
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('validates provider.connect with an API key', () => {
+      const parsed = HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-pc',
+        method: 'provider.connect',
+        params: { providerId: 'openrouter', apiKey: 'sk-or-test' },
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('validates provider.connect without an API key for re-activation', () => {
+      const parsed = HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-pc2',
+        method: 'provider.connect',
+        params: { providerId: 'nvidia-nim' },
+      });
+      expect(parsed.success).toBe(true);
+    });
+
+    it('rejects provider.connect with an empty api key or unsafe provider id', () => {
+      expect(HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'r1',
+        method: 'provider.connect',
+        params: { providerId: 'openrouter', apiKey: '' },
+      }).success).toBe(false);
+      expect(HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'r2',
+        method: 'provider.connect',
+        params: { providerId: '../evil' },
+      }).success).toBe(false);
+      expect(HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'r3',
+        method: 'provider.connect',
+        params: { providerId: 'openrouter', apiKey: 'k'.repeat(4097) },
+      }).success).toBe(false);
+    });
+
+    it('validates model.list with and without an explicit providerId', () => {
+      expect(HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-ml',
+        method: 'model.list',
+        params: {},
+      }).success).toBe(true);
+      expect(HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-ml2',
+        method: 'model.list',
+        params: { providerId: 'openrouter' },
+      }).success).toBe(true);
+      expect(HostRequestSchema.safeParse({
+        type: 'request',
+        id: 'req-ml3',
+        method: 'model.list',
+        params: { providerId: '' },
+      }).success).toBe(false);
+    });
+
+    it('parses result schemas for providers and models', () => {
+      const providers = ProviderListResultSchema.safeParse({
+        providers: [{
+          id: 'openrouter',
+          label: 'OpenRouter',
+          requiresApiKey: true,
+          hasApiKey: true,
+          isActive: true,
+        }],
+        activeProviderId: 'openrouter',
+      });
+      expect(providers.success).toBe(true);
+
+      const models = ModelListResultSchema.safeParse({
+        providerId: 'openrouter',
+        models: [{ id: 'qwen/qwen3.8-27b:free', isFree: true, ownedBy: 'qwen' }],
+        truncated: false,
+      });
+      expect(models.success).toBe(true);
+
+      expect(ModelListResultSchema.safeParse({
+        providerId: 'openrouter',
+        models: [{ id: '', isFree: true }],
+      }).success).toBe(false);
+    });
+  });
+
   describe('Individual request schemas', () => {
     it('exports strongly-typed schemas for each method', () => {
       expect(InitializeRequestSchema).toBeDefined();
@@ -319,6 +445,9 @@ describe('Host protocol v1 contracts', () => {
       expect(ApprovalRespondRequestSchema).toBeDefined();
       expect(SessionNewRequestSchema).toBeDefined();
       expect(SessionResumeRequestSchema).toBeDefined();
+      expect(ProviderListRequestSchema).toBeDefined();
+      expect(ProviderConnectRequestSchema).toBeDefined();
+      expect(ModelListRequestSchema).toBeDefined();
     });
   });
 

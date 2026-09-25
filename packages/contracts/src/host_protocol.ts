@@ -69,7 +69,8 @@ export type ChatSendRequest = z.infer<typeof ChatSendRequestSchema>;
 
 export const ChatCancelParamsSchema = z.object({
   sessionId: z.string().min(1),
-  targetRequestId: z.string().min(1),
+  /** Omit to abort whichever generation is currently in flight. */
+  targetRequestId: z.string().min(1).optional(),
 });
 export type ChatCancelParams = z.infer<typeof ChatCancelParamsSchema>;
 
@@ -123,6 +124,91 @@ export const SessionResumeRequestSchema = z.object({
 });
 export type SessionResumeRequest = z.infer<typeof SessionResumeRequestSchema>;
 
+/** Safe identifier shape shared by provider ids entering the host boundary. */
+export const ProviderIdSchema = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[A-Za-z0-9][A-Za-z0-9._-]*$/, 'providerId must be a connection identifier');
+
+export const ProviderListParamsSchema = z.object({});
+export type ProviderListParams = z.infer<typeof ProviderListParamsSchema>;
+
+export const ProviderListRequestSchema = z.object({
+  type: z.literal('request'),
+  id: z.string().min(1),
+  method: z.literal('provider.list'),
+  params: ProviderListParamsSchema,
+});
+export type ProviderListRequest = z.infer<typeof ProviderListRequestSchema>;
+
+/** A provider the sidecar can route to, with connection state (never secrets). */
+export const ProviderInfoSchema = z.object({
+  id: ProviderIdSchema,
+  label: z.string().min(1).max(120),
+  description: z.string().max(300).optional(),
+  /** Local-only providers (Ollama, LM Studio) work without any API key. */
+  requiresApiKey: z.boolean(),
+  hasApiKey: z.boolean(),
+  isActive: z.boolean(),
+});
+export type ProviderInfo = z.infer<typeof ProviderInfoSchema>;
+
+export const ProviderListResultSchema = z.object({
+  providers: z.array(ProviderInfoSchema),
+  activeProviderId: ProviderIdSchema.optional(),
+});
+export type ProviderListResult = z.infer<typeof ProviderListResultSchema>;
+
+export const ProviderConnectParamsSchema = z.object({
+  providerId: ProviderIdSchema,
+  /** Absent means "activate a provider whose key is already stored". */
+  apiKey: z.string().min(1).max(4096).optional(),
+});
+export type ProviderConnectParams = z.infer<typeof ProviderConnectParamsSchema>;
+
+export const ProviderConnectRequestSchema = z.object({
+  type: z.literal('request'),
+  id: z.string().min(1),
+  method: z.literal('provider.connect'),
+  params: ProviderConnectParamsSchema,
+});
+export type ProviderConnectRequest = z.infer<typeof ProviderConnectRequestSchema>;
+
+export const ProviderConnectResultSchema = z.object({
+  providerId: ProviderIdSchema,
+  connected: z.literal(true),
+});
+export type ProviderConnectResult = z.infer<typeof ProviderConnectResultSchema>;
+
+export const ModelListParamsSchema = z.object({
+  providerId: ProviderIdSchema.optional(),
+});
+export type ModelListParams = z.infer<typeof ModelListParamsSchema>;
+
+export const ModelListRequestSchema = z.object({
+  type: z.literal('request'),
+  id: z.string().min(1),
+  method: z.literal('model.list'),
+  params: ModelListParamsSchema,
+});
+export type ModelListRequest = z.infer<typeof ModelListRequestSchema>;
+
+export const ModelOptionSchema = z.object({
+  id: z.string().min(1).max(300),
+  isFree: z.boolean(),
+  ownedBy: z.string().max(120).optional(),
+});
+export type ModelOption = z.infer<typeof ModelOptionSchema>;
+
+export const ModelListResultSchema = z.object({
+  providerId: ProviderIdSchema,
+  models: z.array(ModelOptionSchema),
+  /** True when the catalog exceeded the response cap and was cut. */
+  truncated: z.boolean().optional(),
+});
+export type ModelListResult = z.infer<typeof ModelListResultSchema>;
+
 export const HostRequestSchema = z.discriminatedUnion('method', [
   InitializeRequestSchema,
   ChatSendRequestSchema,
@@ -130,6 +216,9 @@ export const HostRequestSchema = z.discriminatedUnion('method', [
   ApprovalRespondRequestSchema,
   SessionNewRequestSchema,
   SessionResumeRequestSchema,
+  ProviderListRequestSchema,
+  ProviderConnectRequestSchema,
+  ModelListRequestSchema,
 ]);
 export type HostRequest = z.infer<typeof HostRequestSchema>;
 

@@ -6,19 +6,28 @@ import type {
   InitializeResult,
   IProviderAdapter,
   IToolRegistry,
+  ModelOption,
+  ProviderInfo,
 } from '@moderado/contracts';
 import { AgentLoop, HostEventStream, PolicyManager, Router } from '@moderado/core';
 import { canonicalizeRoot, createDefaultToolRegistry, resolveInJail } from '@moderado/tools';
-import { NvidiaAdapter } from '@moderado/providers';
+import { NvidiaAdapter, isFreeModelEntry } from '@moderado/providers';
 import {
+  CONNECT_PROVIDER_PRESET_META,
+  findProviderPreset,
   getActiveConnection,
+  isLoopbackBaseUrl,
   loadConfig,
+  type ProviderConnection,
   resolveApiKey,
   resolveConnectionCredential,
+  saveConnection,
+  storeConnectionCredential,
 } from '../config.js';
 import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { createSession, SessionStore, type StoredSession } from '../sessions.js';
+import { createWorkspaceFileSource, expandMentions } from '../ui/file_mentions.js';
 import { ApprovalQueue } from './approval_queue.js';
 
 export interface HostRuntimeDependencies {
@@ -92,9 +101,70 @@ export async function createHostRuntime(options: CreateHostRuntimeOptions): Prom
 
   const customHome = dependencies?.customHome;
   const sessionStore = dependencies?.sessionStore ?? new SessionStore(customHome);
-  const credentialStore = dependencies?.credentialStore;
-  const provider =
-    dependencies?.provider ?? (await resolveDefaultProvider(customHome, credentialStore, options.providerId));
+  const credentialStore =
+    dependencies?.credentialStore ??
+    (process.platform === 'win32' ? new WindowsCredentialStore() : new MemoryCredentialStore());
+
+  // Provider resolution is lazy: the sidecar must start (and the model manager
+  // must be reachable) before any API key exists. DI providers win permanently;
+  // resolved adapters are invalidated by provider.connect so a switch takes
+  // effect without a sidecar restart.
+  let providerAdapter: IProviderAdapter | undefined = dependencies?.provider;
+  let providerPromise: Promise<IProviderAdapter> | undefined;
+  const getProvider = async (): Promise<IProviderAdapter> => {
+    if (providerAdapter) return providerAdapter;
+    if (!providerPromise) {
+      providerPromise = resolveDefaultProvider(customHome, credentialStore, options.providerId).then(
+        (resolved) => {
+          providerAdapter = resolved;
+          providerPromise = undefined;
+          return resolved;
+        },
+        (err) => {
+          providerPromise = undefined;
+          throw err;
+        },
+      );
+    }
+    return providerPromise;
+  };
+  const invalidateProvider = (): void => {
+    if (dependencies?.provider) return;
+    providerAdapter = undefined;
+    providerPromise = undefined;
+  };
+
+  // Builds a throwaway adapter for a provider that is not the active one
+  // (used when the model manager browses models for a different provider).
+  const buildAdapterForProvider = async (providerId: string): Promise<IProviderAdapter> => {
+    const preset = findProviderPreset(providerId);
+    const saved = loadConfig(customHome).connections?.[providerId];
+    if (!preset && !saved) {
+      throw new Error(`Unknown provider "${providerId}".`);
+    }
+    const connection: ProviderConnection = saved ?? {
+      id: preset!.id,
+      displayName: preset!.label,
+      kind: preset!.kind,
+      baseUrl: preset!.baseUrl,
+      defaultModel: preset!.defaultModel,
+    };
+    const resolved = await resolveConnectionCredential(connection, credentialStore);
+    const apiKey = resolved.apiKey?.trim() || undefined;
+    const requiresApiKey = preset
+      ? preset.requiresApiKey
+      : !isLoopbackBaseUrl(connection.baseUrl);
+    if (requiresApiKey && !apiKey) {
+      throw new Error(`An API key is required to use ${connection.displayName || providerId}.`);
+    }
+    return new NvidiaAdapter({
+      apiKey,
+      baseUrl: connection.baseUrl,
+      providerId: connection.id,
+      providerName: connection.displayName,
+    });
+  };
+
   const tools = dependencies?.tools ?? createDefaultToolRegistry();
   const loop = dependencies?.agentLoop ?? new AgentLoop();
   const router = new Router();
@@ -203,13 +273,151 @@ export async function createHostRuntime(options: CreateHostRuntimeOptions): Prom
 
         if (
           activeGeneration &&
-          activeGeneration.requestId === request.params.targetRequestId
+          (!request.params.targetRequestId ||
+            activeGeneration.requestId === request.params.targetRequestId)
         ) {
           activeGeneration.abortController.abort();
           activeGeneration = null;
         }
 
         return { cancelled: true };
+      }
+
+      case 'provider.list': {
+        const config = loadConfig(customHome);
+        const activeId = options.providerId ?? getActiveConnection(config)?.id;
+        const providers: ProviderInfo[] = [];
+
+        for (const preset of CONNECT_PROVIDER_PRESET_META) {
+          const saved = config.connections?.[preset.id];
+          const virtualConnection: ProviderConnection = saved ?? {
+            id: preset.id,
+            displayName: preset.label,
+            kind: preset.kind,
+            baseUrl: preset.baseUrl,
+            defaultModel: preset.defaultModel,
+          };
+          const resolved = await resolveConnectionCredential(virtualConnection, credentialStore);
+          const legacyNvidiaKey = preset.id === 'nvidia-nim' ? config.apiKey?.trim() : undefined;
+          const hasApiKey = preset.requiresApiKey
+            ? !!resolved.apiKey?.trim() || !!legacyNvidiaKey
+            : true;
+          providers.push({
+            id: preset.id,
+            label: preset.label,
+            description: preset.description,
+            requiresApiKey: preset.requiresApiKey,
+            hasApiKey,
+            isActive: preset.id === activeId,
+          });
+        }
+
+        // Saved custom connections that are not built-in presets.
+        for (const connection of Object.values(config.connections ?? {})) {
+          if (CONNECT_PROVIDER_PRESET_META.some((preset) => preset.id === connection.id)) continue;
+          const resolved = await resolveConnectionCredential(connection, credentialStore);
+          const loopback = isLoopbackBaseUrl(connection.baseUrl);
+          providers.push({
+            id: connection.id,
+            label: connection.displayName,
+            description: connection.baseUrl,
+            requiresApiKey: !loopback,
+            hasApiKey: loopback || !!resolved.apiKey?.trim(),
+            isActive: connection.id === activeId,
+          });
+        }
+
+        return { providers, activeProviderId: activeId };
+      }
+
+      case 'provider.connect': {
+        const { providerId, apiKey } = request.params;
+        const preset = findProviderPreset(providerId);
+        const saved = loadConfig(customHome).connections?.[providerId];
+
+        if (!preset && !saved) {
+          const err = new Error(`Unknown provider "${providerId}".`);
+          (err as any).code = 'INVALID_REQUEST';
+          throw err;
+        }
+
+        const requiresApiKey = preset ? preset.requiresApiKey : !isLoopbackBaseUrl(saved!.baseUrl);
+        const base: ProviderConnection = saved ?? {
+          id: preset!.id,
+          displayName: preset!.label,
+          kind: preset!.kind,
+          baseUrl: preset!.baseUrl,
+          defaultModel: preset!.defaultModel,
+        };
+
+        let connection: ProviderConnection = apiKey ? { ...base, apiKey } : base;
+        if (!apiKey && requiresApiKey) {
+          const resolved = await resolveConnectionCredential(base, credentialStore);
+          if (!resolved.apiKey?.trim()) {
+            const err = new Error(`An API key is required to connect to ${base.displayName || providerId}.`);
+            (err as any).code = 'INVALID_REQUEST';
+            throw err;
+          }
+        }
+
+        // Mirror the CLI /connect flow: Windows Credential Manager on win32,
+        // plaintext config (mode 0600) elsewhere.
+        const persisted =
+          process.platform === 'win32' && connection.apiKey?.trim()
+            ? await storeConnectionCredential(connection, credentialStore)
+            : connection;
+        saveConnection(persisted, customHome);
+
+        options.providerId = providerId;
+        invalidateProvider();
+
+        return { providerId, connected: true as const };
+      }
+
+      case 'model.list': {
+        const explicitId = request.params.providerId;
+        const config = loadConfig(customHome);
+        const activeId = options.providerId ?? getActiveConnection(config)?.id;
+        const injected = dependencies?.provider;
+
+        let providerId: string | undefined;
+        let adapter: IProviderAdapter;
+        if (injected && (!explicitId || explicitId === injected.id)) {
+          providerId = explicitId ?? injected.id;
+          adapter = injected;
+        } else {
+          const target = explicitId ?? activeId;
+          if (!target) {
+            const err = new Error('No provider configured. Connect a provider first.');
+            (err as any).code = 'INVALID_REQUEST';
+            throw err;
+          }
+          providerId = target;
+          adapter =
+            target === activeId ? await getProvider() : await buildAdapterForProvider(target);
+        }
+
+        const MAX_MODELS = 400;
+        const entries = await adapter.discoverModels();
+        const models: ModelOption[] = entries
+          .filter((entry) => entry.id.length > 0 && entry.id.length <= 300)
+          .map((entry) => ({
+            id: entry.id,
+            isFree:
+              isFreeModelEntry(entry) ||
+              ['free_trial', 'local'].includes(router.classifyModel(entry.id).accessTier),
+            ownedBy: entry.owned_by && entry.owned_by.length <= 120 ? entry.owned_by : undefined,
+          }))
+          .sort((a, b) =>
+            a.isFree === b.isFree ? a.id.localeCompare(b.id) : a.isFree ? -1 : 1,
+          );
+        const truncated = models.length > MAX_MODELS;
+
+        return {
+          providerId,
+          models: truncated ? models.slice(0, MAX_MODELS) : models,
+          truncated,
+        };
       }
 
       case 'chat.send': {
@@ -236,7 +444,9 @@ export async function createHostRuntime(options: CreateHostRuntimeOptions): Prom
           }
         }
 
-        let turnPrompt = request.params.text;
+        const workspaceSource = createWorkspaceFileSource(canonicalRoot);
+        const expansion = await expandMentions(request.params.text, workspaceSource);
+        let turnPrompt = expansion.text;
         if (request.params.context?.selection) {
           const sel = request.params.context.selection;
           turnPrompt = `Active selection in workspace file "${sel.relativePath}" (lines ${sel.startLine}-${sel.endLine}):\n\`\`\`\n${sel.text ?? ''}\n\`\`\`\n\n${turnPrompt}`;
@@ -246,6 +456,8 @@ export async function createHostRuntime(options: CreateHostRuntimeOptions): Prom
 
         const generationPromise = (async () => {
           try {
+            // Resolved lazily so a keyless first run can start and use the manager.
+            const provider = await getProvider();
             const result = await loop.run(turnPrompt, {
               workspaceRoot: canonicalRoot,
               provider,
@@ -276,6 +488,16 @@ export async function createHostRuntime(options: CreateHostRuntimeOptions): Prom
               hostStream.emit({
                 type: 'cancellation',
                 reason: 'Aborted by user',
+                timestamp: Date.now(),
+              });
+            } else {
+              // Surface provider/config failures so the UI can offer the model
+              // manager instead of leaving the composer stuck in a busy state.
+              hostStream.emit({
+                type: 'error',
+                code: err?.code ?? 'TURN_FAILED',
+                message: err?.message ?? String(err),
+                recoverable: false,
                 timestamp: Date.now(),
               });
             }

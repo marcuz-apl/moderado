@@ -9,6 +9,7 @@ export async function getOrStartSidecar(
   panel?: ModeradoWebviewPanel,
   workspaceRoot?: string,
   executablePathOverride?: string,
+  extensionPath?: string,
 ): Promise<SidecarClient> {
   if (activeSidecar && !activeSidecar.isClosed()) {
     return activeSidecar;
@@ -27,6 +28,7 @@ export async function getOrStartSidecar(
 
   const client = new SidecarClient({
     workspaceRoot: root,
+    extensionPath,
     executablePath: executablePath || undefined,
     provider: provider || undefined,
     model: model || undefined,
@@ -53,7 +55,9 @@ export async function getOrStartSidecar(
 
 export function activate(context: vscode.ExtensionContext): void {
   let panel: ModeradoWebviewPanel | undefined;
-  panel = new ModeradoWebviewPanel(context.extensionUri, () => getOrStartSidecar(panel));
+  panel = new ModeradoWebviewPanel(context.extensionUri, () =>
+    getOrStartSidecar(panel, undefined, undefined, context.extensionPath),
+  );
 
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(ModeradoWebviewPanel.viewType, panel),
@@ -84,7 +88,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const options = [
         { label: 'nvidia-nim', description: 'NVIDIA NIM (Nemotron, LLaMA, DeepSeek, Kimi)' },
         { label: 'openrouter', description: 'OpenRouter (Qwen, DeepSeek, Mistral, LLaMA)' },
-        { label: 'agnes', description: 'Agnes AI (Agnes Flash, Code)' },
+        { label: 'agnes-ai', description: 'Agnes AI (Agnes Flash, Code)' },
         { label: 'orcarouter', description: 'OrcaRouter' },
         { label: '(Default / CLI active)', description: 'Use active connection from ~/.moderado/config.json' },
         { label: 'Custom...', description: 'Enter a custom provider connection ID' },
@@ -158,7 +162,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('moderado.newSession', async () => {
       try {
-        const sidecar = await getOrStartSidecar(panel);
+        const sidecar = await getOrStartSidecar(panel, undefined, undefined, context.extensionPath);
         const result = await sidecar.request<{ sessionId: string }>('session.new', {});
         activeSessionId = result.sessionId;
         vscode.window.showInformationMessage(`Started new Moderado session: ${result.sessionId.slice(0, 8)}`);
@@ -171,7 +175,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('moderado.resumeSession', async (targetSessionId?: string) => {
       try {
-        const sidecar = await getOrStartSidecar(panel);
+        const sidecar = await getOrStartSidecar(panel, undefined, undefined, context.extensionPath);
         if (!targetSessionId) {
           vscode.window.showInformationMessage('No session ID specified to resume.');
           return;

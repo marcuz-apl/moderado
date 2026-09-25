@@ -21,6 +21,8 @@ export type PendingApproval = ApprovalRequest;
 
 export interface SidecarClientOptions {
   workspaceRoot: string;
+  /** Absolute path to the installed extension, used to find the bundled sidecar. */
+  extensionPath?: string;
   executablePath?: string;
   provider?: string;
   model?: string;
@@ -63,37 +65,76 @@ export class SidecarClient {
     this.options = options;
   }
 
+  /** The sidecar shipped inside the VSIX, preferred so no CLI install is required. */
+  private bundledSidecarPath(): string | undefined {
+    if (!this.options.extensionPath) return undefined;
+    return path.join(this.options.extensionPath, 'dist', 'sidecar', 'index.js');
+  }
+
+  /** A globally installed CLI, used when the extension bundles none. */
+  private globalCliPath(): string | undefined {
+    if (process.platform !== 'win32' || !process.env.APPDATA) return undefined;
+    return path.join(process.env.APPDATA, 'npm', 'node_modules', 'moderado', 'dist', 'index.js');
+  }
+
+  /** The monorepo build, so running the extension from source keeps working. */
+  private monorepoCliPath(): string {
+    return path.join(this.options.workspaceRoot, 'apps', 'cli', 'dist', 'index.js');
+  }
+
+  /**
+   * Decide what to launch, in precedence order:
+   *   1. an explicit `executablePath` (a deliberate user override, so it wins);
+   *   2. the sidecar bundled inside the extension, so the IDE works with no CLI install;
+   *   3. a globally installed CLI;
+   *   4. the monorepo build, for running the extension from source;
+   *   5. bare `moderado` on PATH.
+   * Any `.js` entry is prefixed with `node` and never handed to a shell.
+   *
+   * `probeFilesystem` is false for injected test spawns, which assert the spawn
+   * contract itself and must not depend on what happens to exist on disk.
+   */
+  public resolveLaunch(probeFilesystem = true): { executable: string; args: string[] } {
+    const configured = this.options.executablePath?.trim();
+
+    let executable = configured || 'moderado';
+    let args = ['host', '--workspace', this.options.workspaceRoot, '--protocol', String(HOST_PROTOCOL_VERSION)];
+
+    if (executable.startsWith('node ') || executable.startsWith('node.exe ')) {
+      const parts = executable.split(/\s+/);
+      executable = parts[0];
+      args = [...parts.slice(1), ...args];
+    } else if (executable.endsWith('.js') || executable.endsWith('.mjs') || executable.endsWith('.cjs')) {
+      args = [executable, ...args];
+      executable = 'node';
+    } else if (!configured && probeFilesystem) {
+      const candidates = [this.bundledSidecarPath(), this.globalCliPath(), this.monorepoCliPath()].filter(
+        (candidate): candidate is string => !!candidate,
+      );
+      const resolved = candidates.find((candidate) => existsSync(candidate));
+      if (resolved) {
+        args = [resolved, ...args];
+        executable = 'node';
+      }
+    }
+
+    if (this.options.provider?.trim()) {
+      args.push('--provider', this.options.provider.trim());
+    }
+    if (this.options.model?.trim()) {
+      args.push('--model', this.options.model.trim());
+    }
+
+    return { executable, args };
+  }
+
   public start(): void {
     if (this.child) {
       throw new Error('Sidecar client has already been started');
     }
 
-    let executable = this.options.executablePath?.trim() || 'moderado';
-    let args = ['host', '--workspace', this.options.workspaceRoot, '--protocol', String(HOST_PROTOCOL_VERSION)];
     const spawnFn = this.options.spawnFn || spawn;
-
-    if (!this.options.spawnFn) {
-      if (executable.startsWith('node ') || executable.startsWith('node.exe ')) {
-        const parts = executable.split(/\s+/);
-        executable = parts[0];
-        args = [...parts.slice(1), ...args];
-      } else if (executable.endsWith('.js') || executable.endsWith('.mjs') || executable.endsWith('.cjs')) {
-        args = [executable, ...args];
-        executable = 'node';
-      } else if (process.platform === 'win32' && executable === 'moderado') {
-        const localCli = path.join(this.options.workspaceRoot, 'apps', 'cli', 'dist', 'index.js');
-        const globalCli = process.env.APPDATA
-          ? path.join(process.env.APPDATA, 'npm', 'node_modules', 'moderado', 'dist', 'index.js')
-          : '';
-        if (existsSync(localCli)) {
-          args = [localCli, ...args];
-          executable = 'node';
-        } else if (globalCli && existsSync(globalCli)) {
-          args = [globalCli, ...args];
-          executable = 'node';
-        }
-      }
-    }
+    const { executable, args } = this.resolveLaunch(!this.options.spawnFn);
 
     if (this.options.provider?.trim()) {
       args.push('--provider', this.options.provider.trim());

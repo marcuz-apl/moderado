@@ -7,8 +7,81 @@ import { buildExtension } from './build_extension.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const vscodeRoot = path.resolve(__dirname, '..');
+const repoRoot = path.resolve(vscodeRoot, '..', '..');
 
 const BASE_MEDIA_FILES = ['index.html', 'styles.css', 'main.js', 'icon.svg'];
+
+/**
+ * The CLI dist is not self-contained: it imports `@moderado/*` and `zod` as bare
+ * specifiers, so shipping `apps/cli/dist` alone yields ERR_MODULE_NOT_FOUND.
+ * Stage the runtime modules it actually needs alongside it.
+ */
+export const SIDECAR_RUNTIME_PACKAGES = [
+  { name: 'zod', from: () => path.join(repoRoot, 'node_modules', 'zod'), to: ['node_modules', 'zod'] },
+  ...['contracts', 'core', 'providers', 'tools'].map((pkg) => ({
+    name: `@moderado/${pkg}`,
+    from: () => path.join(repoRoot, 'packages', pkg, 'dist'),
+    to: ['node_modules', '@moderado', pkg, 'dist'],
+    manifest: () => path.join(repoRoot, 'packages', pkg, 'package.json'),
+  })),
+];
+
+function assertBuilt(relativePath, hint) {
+  const target = path.join(repoRoot, relativePath);
+  if (!existsSync(target)) {
+    throw new Error(
+      `Required build output missing: ${relativePath}. ${hint}`,
+    );
+  }
+  return target;
+}
+
+/**
+ * Copy the compiled CLI and its runtime dependencies into `targetDir`, producing
+ * a self-contained sidecar that runs without the monorepo installed.
+ */
+export function stageSidecar(targetDir, { strict = true } = {}) {
+  const cliDist = assertBuilt('apps/cli/dist', "Run 'npm run build' first.");
+  if (!existsSync(path.join(cliDist, 'index.js'))) {
+    throw new Error("apps/cli/dist/index.js is missing. Run 'npm run build' first.");
+  }
+
+  const sidecarDir = path.join(targetDir, 'dist', 'sidecar');
+  rmSync(sidecarDir, { recursive: true, force: true });
+  cpSync(cliDist, sidecarDir, { recursive: true });
+
+  // The CLI is ESM. Without this marker Node emits MODULE_TYPELESS_PACKAGE_JSON
+  // and reparses every file on first import.
+  writeFileSync(
+    path.join(sidecarDir, 'package.json'),
+    JSON.stringify({ name: 'moderado-sidecar', private: true, type: 'module' }, null, 2),
+    'utf8',
+  );
+
+  for (const pkg of SIDECAR_RUNTIME_PACKAGES) {
+    const source = pkg.from();
+    const destination = path.join(targetDir, ...pkg.to);
+    if (!existsSync(source)) {
+      if (strict) {
+        throw new Error(
+          `Sidecar dependency missing: ${pkg.name} (expected at ${source}). Run 'npm install' and 'npm run build' first.`,
+        );
+      }
+      continue;
+    }
+    mkdirSync(path.dirname(destination), { recursive: true });
+    cpSync(source, destination, { recursive: true });
+    if (pkg.manifest) {
+      // @moderado/* resolve through "exports", so the manifest must travel with the code.
+      const manifest = pkg.manifest();
+      if (existsSync(manifest)) {
+        cpSync(manifest, path.join(path.dirname(destination), 'package.json'));
+      }
+    }
+  }
+
+  return sidecarDir;
+}
 
 export function buildManifest(pkg) {
   const assets = [
@@ -102,6 +175,9 @@ export function packageVsix(targetDir = vscodeRoot) {
     throw new Error(`dist directory not found at ${distDir}. Run 'npm run build:vscode' first.`);
   }
   cpSync(distDir, path.join(extensionDir, 'dist'), { recursive: true });
+
+  // 3b. The bundled sidecar, so the IDE works without a separate CLI install
+  stageSidecar(extensionDir);
 
   // 4. Webview media assets, including the branded extension icon
   const mediaDir = path.join(targetDir, 'media');
