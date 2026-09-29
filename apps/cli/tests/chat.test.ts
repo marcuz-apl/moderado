@@ -27,6 +27,7 @@ import {
   TurnCommandQueue,
   findSlashCommandAdvice,
   formatTurnFailureAnswer,
+  formatSessionExitSummary,
   levenshteinDistance,
   resolveTurnAssistantAnswer,
   isLocalTokenQuery,
@@ -36,6 +37,34 @@ import {
 import { CliParsedArgs } from '../src/args.js';
 import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
 import { ApprovalRequest, ChatMessage } from '@moderado/contracts';
+import { createSession } from '../src/sessions.js';
+
+describe('session exit summary', () => {
+  it('shows saved usage and a resume hint', () => {
+    const session = createSession('workspace', { modelId: 'old-model' });
+    session.usage = { promptTokens: 1200, completionTokens: 300, totalTokens: 1500, available: true, costKnown: true, costUsd: 0.02 };
+    const summary = formatSessionExitSummary(session, 'current-model');
+    expect(summary).toContain(session.id);
+    expect(summary).toContain('current-model');
+    expect(summary).toContain('Input 1,200 | Output 300 | Total 1,500');
+    expect(summary).toContain('$0.0200');
+    expect(summary).toContain('/session resume');
+  });
+
+  it('labels estimated usage and unknown cost', () => {
+    const session = createSession('workspace');
+    session.usage = { promptTokens: 10, completionTokens: 5, totalTokens: 15, available: true, estimated: true, costKnown: false };
+    const summary = formatSessionExitSummary(session);
+    expect(summary).toContain('Input 10 | Output 5 | Total 15 (estimated)');
+    expect(summary).toContain('Cost unknown');
+  });
+
+  it('does not claim zero tokens for an unused session', () => {
+    const summary = formatSessionExitSummary(createSession('workspace'));
+    expect(summary).toContain('Usage unavailable');
+    expect(summary).toContain('No model selected');
+  });
+});
 
 describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   let tempDir: string;

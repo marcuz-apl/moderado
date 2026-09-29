@@ -25,6 +25,21 @@ import { buildWorkspaceMap } from '../repo_map.js';
 import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
 import { discoverSkills, formatSkillContext, UserSkill } from '../skills.js';
 
+export function formatSessionExitSummary(session: StoredSession, modelId?: string): string {
+  const usage = session.usage;
+  const tokens = usage.available
+    ? `Input ${usage.promptTokens.toLocaleString('en-US')} | Output ${usage.completionTokens.toLocaleString('en-US')} | Total ${usage.totalTokens.toLocaleString('en-US')}${usage.estimated ? ' (estimated)' : ''}`
+    : 'Usage unavailable';
+  return [
+    '\x1b[1;38;5;25mSession Summary\x1b[0m',
+    `ID: ${session.id}`,
+    `Model: ${modelId ?? session.modelId ?? 'No model selected'}`,
+    `Tokens: ${tokens}`,
+    `Cost: ${formatSessionCost(usage)}`,
+    'Resume: /session resume',
+  ].join('\n');
+}
+
 function mutationPaths(toolName: string, parameters: unknown): string[] {
   const value = parameters as { path?: unknown; edits?: { path?: unknown }[] };
   if (toolName === 'apply_patch' && Array.isArray(value.edits)) {
@@ -861,6 +876,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let lastTokenUsage: UsageEvent | undefined;
   let activePlan: string | undefined;
   const costLabel = (): string => formatSessionCost(activeSession.usage);
+  const exitMessage = (): string => `\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m\n\n${formatSessionExitSummary(activeSession, currentModel)}`;
   const commandQueue = new TurnCommandQueue();
   const btwHistory: Array<{ question: string; answer: string; timestamp: number }> = [];
 
@@ -875,6 +891,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
+        onExit: exitMessage,
         questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
@@ -1234,7 +1251,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
 
     if (trimmed === '/exit' || trimmed === '/quit') {
-      exitCleanly('\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
+      exitCleanly(exitMessage());
     }
 
     if (trimmed === '/help') {

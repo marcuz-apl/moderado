@@ -2,7 +2,7 @@
 
 Updated: 2026-09-29
 Branch: feature/cli-baseline-0.3.4
-Status: CLI v0.3.7 feature branch pushed; package metadata aligned in a follow-up commit. No release tag or merge.
+Status: CLI v0.3.7 feature branch includes session exit summary. No release tag or merge.
 
 ## Completed
 
@@ -11,12 +11,13 @@ Status: CLI v0.3.7 feature branch pushed; package metadata aligned in a follow-u
 - v0.3.7 adds /review (read-only), /map, /budget (best-effort token ceiling), concise thinking, navy task headings, and default interactive auto-approval with a working off toggle.
 - Esc stops active generation on the first press, including with a follow-up draft. Model discovery aborts return cancelled and partial answers show a stopped message.
 - Matched apps/cli/package.json and package-lock.json to VERSION's base SemVer 0.3.7.
+- /exit and /quit now print a session summary with ID, active model, input/output/total tokens, cost status, and /session resume hint; unavailable and estimated usage are labeled.
 
 ## Checks
 
 - npm.cmd run build ? PASS.
 - npm.cmd run typecheck ? PASS.
-- npm.cmd test ? PASS: 59 files / 423 tests, offline; installer fixtures run with approved temp access.
+- npm.cmd test ? PASS: 59 files / 426 tests, offline; installer fixtures run with approved temp access.
 - No live provider account tested.
 
 ## Decisions
@@ -31,7 +32,7 @@ Status: CLI v0.3.7 feature branch pushed; package metadata aligned in a follow-u
 
 ## Next action
 
-1. Review and integrate the green feature branch into master before creating the v0.3.7 release tag.
+1. Integrate the green feature branch into master before creating the v0.3.7 release tag.
 
 ---
 

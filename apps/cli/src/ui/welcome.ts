@@ -534,6 +534,7 @@ export interface PromptInteractiveTurnOptions {
   onConnect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
+  onExit?: () => string;
   onMcp?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onQueue?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
@@ -1020,7 +1021,7 @@ export async function promptInteractiveTurn(
             (input.trim() === '/exit' || input.trim() === '/quit')) {
           cleanup();
           if (options.signal) options.signal.removeEventListener('abort', onAbort);
-          exitCleanly('\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
+          exitCleanly(options.onExit?.() ?? '\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
         }
 
         // ── Normal keys ───────────────────────────────────────────────────────
