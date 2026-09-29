@@ -2,6 +2,19 @@ import { z } from 'zod';
 import { AccessTierSchema } from './models.js';
 import { DiagnosticSchema, ToolResultSchema } from './tools.js';
 import { ApprovalRequestSchema, ApprovalStatusSchema } from './approvals.js';
+import { ChatUsageSchema } from './provider.js';
+
+/** Cumulative task usage; estimates are never provider-reported billing counts. */
+export const UsageEventSchema = z.object({
+  type: z.literal('usage'),
+  usage: ChatUsageSchema,
+  estimated: z.boolean(),
+  outputTokensPerSecond: z.number().finite().nonnegative(),
+  generationMs: z.number().finite().nonnegative(),
+  final: z.boolean(),
+  timestamp: z.number().int().nonnegative(),
+});
+export type UsageEvent = z.infer<typeof UsageEventSchema>;
 
 export const ProgressEventSchema = z.object({
   type: z.literal('progress'),
@@ -99,6 +112,7 @@ export const CancellationEventSchema = z.object({
 export type CancellationEvent = z.infer<typeof CancellationEventSchema>;
 
 export const AgentEventSchema = z.discriminatedUnion('type', [
+  UsageEventSchema,
   ProgressEventSchema,
   ModelChangeEventSchema,
   AssistantDeltaEventSchema,

@@ -150,6 +150,24 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(chunks[1].finishReason).toBe('stop');
   });
 
+  it('requests streamed token usage from the shared transport', async () => {
+    let payload: Record<string, unknown> | undefined;
+    nextHandler = (req, res) => {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk.toString(); });
+      req.on('end', () => {
+        payload = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      });
+    };
+    const adapter = new NvidiaAdapter({ baseUrl: serverUrl });
+    for await (const _chunk of adapter.streamChat({ modelId: 'model', messages: [{ role: 'user', content: 'Hi' }] })) {
+      // The mock ends without completion chunks.
+    }
+    expect(payload?.stream_options).toEqual({ include_usage: true });
+  });
+
   it('streams reasoning_content deltas via SSE for reasoning models', async () => {
     nextHandler = (req, res) => {
       expect(req.method).toBe('POST');

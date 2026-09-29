@@ -1,4 +1,5 @@
-import { AgentEvent } from '@moderado/contracts';
+import { formatTokenUsage } from './welcome.js';
+import { AgentEvent, UsageEvent } from '@moderado/contracts';
 
 export interface TerminalRendererOptions {
   stdout?: NodeJS.WritableStream;
@@ -12,6 +13,9 @@ export class TerminalRenderer {
   private readonly isChatMode: boolean;
   private isStreamingAssistant = false;
   private hasTransientProgress = false;
+  private latestUsage?: UsageEvent;
+  private hasUsageTitle = false;
+  private lastUsageTimestamp = -Infinity;
 
   constructor(options: TerminalRendererOptions = {}) {
     this.stdout = options.stdout ?? process.stdout;
@@ -26,6 +30,22 @@ export class TerminalRenderer {
     if (this.isChatMode) return;
 
     switch (event.type) {
+      case 'usage': {
+        this.latestUsage = event;
+        const terminal = this.stdout as NodeJS.WriteStream;
+        if (!terminal.isTTY || (!event.final && event.timestamp - this.lastUsageTimestamp < 400)) break;
+        this.lastUsageTimestamp = event.timestamp;
+        const text = formatTokenUsage(event).slice(0, Math.max(0, (terminal.columns || 80) - 1));
+        if (this.isStreamingAssistant) {
+          // Title updates cannot erase a partially written answer at the terminal bottom.
+          this.stdout.write(`\x1b]0;Moderado | ${text}\x07`);
+          this.hasUsageTitle = true;
+        } else {
+          this.stdout.write(`\r\x1b[K\x1b[38;5;244m${text}\x1b[0m`);
+          this.hasTransientProgress = true;
+        }
+        break;
+      }
       case 'model_change': {
         this.finishAssistantStream();
         this.clearTransientProgress();
@@ -115,6 +135,7 @@ export class TerminalRenderer {
       }
 
       case 'completion': {
+        this.printUsageSummary();
         this.finishAssistantStream();
         this.clearTransientProgress();
 
@@ -135,6 +156,7 @@ export class TerminalRenderer {
       }
 
       case 'error': {
+        this.printUsageSummary();
         this.finishAssistantStream();
         this.clearTransientProgress();
         this.stdout.write(`\n\x1b[1;31m✖ [Error ${event.code}]\x1b[0m ${event.message}\n`);
@@ -142,6 +164,7 @@ export class TerminalRenderer {
       }
 
       case 'cancellation': {
+        this.printUsageSummary();
         this.finishAssistantStream();
         this.clearTransientProgress();
         this.stdout.write(`\n\x1b[1;33m⚠ [Cancelled]\x1b[0m ${event.reason}\n`);
@@ -151,6 +174,17 @@ export class TerminalRenderer {
       default:
         break;
     }
+  }
+
+  private printUsageSummary(): void {
+    if (this.hasUsageTitle) {
+      this.stdout.write('\x1b]0;Moderado\x07');
+      this.hasUsageTitle = false;
+    }
+    if (!this.latestUsage) return;
+    this.finishAssistantStream();
+    this.stdout.write(`${formatTokenUsage(this.latestUsage)}\n`);
+    this.latestUsage = undefined;
   }
 
   private finishAssistantStream(): void {

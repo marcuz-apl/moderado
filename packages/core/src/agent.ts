@@ -19,6 +19,7 @@ import {
   RateLimitError,
   ToolCall,
   ToolResult,
+  UsageEvent,
 } from '@moderado/contracts';
 import { Router, RouteSelectionOptions } from './router.js';
 import { PolicyManager } from './policy.js';
@@ -145,16 +146,31 @@ export class AgentLoop {
     const policy = options.policy ?? new PolicyManager();
     const router = options.router ?? new Router();
     const signal = options.signal;
+    let childUsage: UsageEvent | undefined;
     const delegator = new SubagentDelegator(
       options.workspaceRoot,
       options.tools,
       options.approvalHandler,
-      (event) => emit(event),
+      (event) => {
+        if (event.type !== 'usage') { emit(event); return; }
+        childUsage = event;
+        const usage = {
+          promptTokens: taskUsage.promptTokens + event.usage.promptTokens,
+          completionTokens: taskUsage.completionTokens + event.usage.completionTokens,
+          totalTokens: taskUsage.totalTokens + event.usage.totalTokens,
+        };
+        const generationMs = taskGenerationMs + event.generationMs;
+        emit({ ...event, usage, estimated: hasEstimatedUsage || event.estimated, generationMs,
+          outputTokensPerSecond: generationMs > 0 ? usage.completionTokens / (generationMs / 1000) : 0 });
+      },
       policy,
       options.onMutationApproved,
       options.onMutationCompleted,
     );
     let latestUsage: ChatUsage | undefined;
+    const taskUsage: ChatUsage = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
+    let hasEstimatedUsage = false;
+    let taskGenerationMs = 0;
 
     if (signal?.aborted) {
       emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
@@ -270,6 +286,33 @@ export class AgentLoop {
       // 3. Inference with Streaming
       let assistantText = '';
       const toolCallDeltas: Map<number, { id?: string; name?: string; args: string }> = new Map();
+      const estimatedInput = Math.ceil(JSON.stringify(messages).length / 4);
+      let outputCharacters = 0;
+      let requestUsage: ChatUsage | undefined;
+      let generationStart: number | undefined;
+      let generationLastAt: number | undefined;
+      const publishUsage = (final: boolean): void => {
+        const now = Date.now();
+        const generationEnd = final ? generationLastAt : now;
+        const generationMs = taskGenerationMs + (generationStart === undefined || generationEnd === undefined ? 0 : Math.max(0, generationEnd - generationStart));
+        const completionTokens = Math.ceil(outputCharacters / 4);
+        const current = requestUsage ?? { promptTokens: estimatedInput, completionTokens, totalTokens: estimatedInput + completionTokens };
+        const usage = {
+          promptTokens: taskUsage.promptTokens + current.promptTokens,
+          completionTokens: taskUsage.completionTokens + current.completionTokens,
+          totalTokens: taskUsage.totalTokens + current.totalTokens,
+        };
+        const estimated = hasEstimatedUsage || requestUsage === undefined;
+        emit({ type: 'usage', usage, estimated, generationMs,
+          outputTokensPerSecond: generationMs > 0 ? usage.completionTokens / (generationMs / 1000) : 0,
+          final, timestamp: now });
+        if (final) {
+          Object.assign(taskUsage, usage);
+          taskGenerationMs = generationMs;
+          hasEstimatedUsage = estimated;
+          latestUsage = estimated ? undefined : { ...usage };
+        }
+      };
 
       try {
         const stream = options.provider.streamChat({
@@ -289,6 +332,7 @@ export class AgentLoop {
         const thinkFilter = new ThinkTagStreamFilter();
         for await (const chunk of stream) {
           if (signal?.aborted) {
+            publishUsage(true);
             emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
             return {
               status: 'cancelled',
@@ -298,6 +342,14 @@ export class AgentLoop {
               messages,
               usage: latestUsage,
             };
+          }
+
+          const toolCharacters = (chunk.toolCallChunks ?? []).reduce((count, delta) => count + (delta.argumentsDelta?.length ?? 0) + (delta.name?.length ?? 0), 0);
+          const generatedCharacters = (chunk.contentDelta?.length ?? 0) + (chunk.reasoningDelta?.length ?? 0) + toolCharacters;
+          if (generatedCharacters > 0) {
+            generationLastAt = Date.now();
+            generationStart ??= generationLastAt;
+            outputCharacters += generatedCharacters;
           }
 
           if (chunk.reasoningDelta) {
@@ -329,7 +381,7 @@ export class AgentLoop {
           }
 
           if (chunk.usage) {
-            latestUsage = chunk.usage;
+            requestUsage = chunk.usage;
           }
 
           if (chunk.toolCallChunks) {
@@ -341,6 +393,7 @@ export class AgentLoop {
               toolCallDeltas.set(delta.index, current);
             }
           }
+          if (generatedCharacters > 0 || chunk.usage) publishUsage(false);
         }
 
         for (const item of thinkFilter.flush()) {
@@ -360,6 +413,7 @@ export class AgentLoop {
           }
         }
       } catch (err: any) {
+        publishUsage(true);
         // Handle transient errors & failover cascades in AUTO mode
         const isTransient = err instanceof RateLimitError || err instanceof ModelUnavailableError;
         const isAutoMode = !options.routeOptions?.pinnedModelId;
@@ -397,6 +451,7 @@ export class AgentLoop {
           usage: latestUsage,
         };
       }
+      publishUsage(true);
 
       finalAssistantText = cleanConversationalFiller(assistantText) || null;
 
@@ -550,7 +605,18 @@ export class AgentLoop {
           if (isSubagentCall && subagentTask) {
             const task = subagentTask;
             emit({ type: 'progress', step: -1, status: `Delegating sub-task: ${task.slice(0, 80)}...`, timestamp: Date.now() });
+            childUsage = undefined;
             const subagentResult = await delegator.delegate(task, options.provider, { maxSteps: 5, signal });
+            if (childUsage) {
+              // Child snapshots are cumulative: add only the last snapshot once.
+              const snapshot = childUsage as UsageEvent;
+              taskUsage.promptTokens += snapshot.usage.promptTokens;
+              taskUsage.completionTokens += snapshot.usage.completionTokens;
+              taskUsage.totalTokens += snapshot.usage.totalTokens;
+              taskGenerationMs += snapshot.generationMs;
+              hasEstimatedUsage ||= snapshot.estimated;
+              latestUsage = hasEstimatedUsage ? undefined : { ...taskUsage };
+            }
             const subResultText = subagentResult.finalMessage ?? subagentResult.status;
             emit({
               type: 'assistant_delta',

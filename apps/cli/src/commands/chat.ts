@@ -4,7 +4,7 @@ import { AgentLoop, PolicyManager, Router, cleanConversationalFiller, DEFAULT_MA
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, resolveInJail, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
-import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult } from '@moderado/contracts';
+import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult, type UsageEvent } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { getActiveConnection, loadConfig, ModeradoConfig, ProviderConnection, removeMcpServer, resolveApiKey, resolveConnectionCredential, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
 import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
@@ -15,8 +15,8 @@ import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKey
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
-import { calculateOutputTokenRate, calculateSessionCost, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
+import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
+import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
 import { findModelPricing } from '../model_pricing.js';
@@ -842,6 +842,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let lastAnswer = '';
   let lastThoughtTime = 0;
   let lastOutputTokenRate: number | undefined;
+  let lastTokenUsage: UsageEvent | undefined;
   let activePlan: string | undefined;
   const costLabel = (): string => formatSessionCost(activeSession.usage);
   const commandQueue = new TurnCommandQueue();
@@ -856,7 +857,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     } else {
       const turn = await promptInteractiveTurn({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
-        usageAvailable: activeSession.usage.available, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
         questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
       onModelSelect: async (drawFrame) => {
@@ -901,7 +902,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       },
       onClear: () => {
         commandQueue.clear();
-        conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
+        conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined; lastTokenUsage = undefined;
         activeSession.messages = [];
         sessionStore.save(activeSession);
       },
@@ -1013,7 +1014,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
         if (action === 'new') {
           activeSession = createSession(canonicalWorkspace, { providerId: activeConnection?.id, providerName: activeConnection?.displayName, modelId: currentModel, mode: activeMode });
-          conversationHistory = []; sessionTokens = 0; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
+          conversationHistory = []; sessionTokens = 0; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined; lastTokenUsage = undefined;
           sessionStore.save(activeSession);
           return;
         }
@@ -1109,7 +1110,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const args = trimmed.slice('/queue'.length).trim();
       lastQuestion = trimmed;
       lastThoughtTime = 0.001;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       if (!args || args === 'list') {
         lastAnswer = commandQueue.length === 0
           ? 'Command queue is empty. Use `/queue <command>` to add commands.'
@@ -1129,7 +1130,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
         queuedCommands: commandQueue.items,
@@ -1139,7 +1140,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
     if (trimmed === '/clear') {
       commandQueue.clear();
-      conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined;
+      conversationHistory = []; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       activeSession.messages = [];
       sessionStore.save(activeSession);
       continue;
@@ -1148,7 +1149,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastQuestion = trimmed;
       lastAnswer = 'To leave Moderado, type /exit.';
       lastThoughtTime = 0;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       continue;
     }
 
@@ -1158,11 +1159,11 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastQuestion = trimmed;
       lastAnswer = slashAdvice.advice!;
       lastThoughtTime = 0.001;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
         queuedCommands: commandQueue.items,
@@ -1178,9 +1179,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         ? 'User skills loaded:\n' + skills.map((skill) => `  ${skill.name} — ${skill.description}`).join('\n')
         : 'No valid user skills found in ~/.moderado/skills.';
       lastThoughtTime = 0.001;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({ model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
+      process.stdout.write(renderFullWelcomeScreen({ model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
       process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
       continue;
     }
@@ -1204,11 +1205,11 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         '  /help      - Display commands, shortcuts & version\n' +
         '  /exit      - Exit Moderado';
       lastThoughtTime = 0.001;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
         queuedCommands: commandQueue.items,
@@ -1234,14 +1235,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastQuestion = trimmed;
       lastAnswer = localMetaAnswer;
       lastThoughtTime = 0.001;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: localMetaAnswer }];
       activeSession.messages = conversationHistory;
       sessionStore.save(activeSession);
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
         queuedCommands: commandQueue.items,
@@ -1254,14 +1255,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     if (lastQuestion && trimmed.toLowerCase() === lastQuestion.toLowerCase() && lastAnswer && lastAnswer.trim().length > 0) {
       lastQuestion = trimmed;
       lastThoughtTime = 0.001;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: lastAnswer }];
       activeSession.messages = conversationHistory;
       sessionStore.save(activeSession);
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
         queuedCommands: commandQueue.items,
@@ -1278,11 +1279,11 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastQuestion = trimmed;
       lastAnswer = 'Searching the web...';
       lastThoughtTime = 0;
-      lastOutputTokenRate = undefined;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
         model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
       }, process.stdout.rows));
       process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
@@ -1307,7 +1308,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen({
           model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
-          usageAvailable: activeSession.usage.available, workspace: canonicalWorkspace, mode: activeMode,
+          usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
           autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
           chatThoughtTime: lastThoughtTime,
         }, process.stdout.rows));
@@ -1328,6 +1329,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     const startedAt = Date.now();
     let thinkingTimer: ReturnType<typeof setInterval> | undefined;
     let removeGenerationListener: (() => void) | undefined;
+    let turnUsage: UsageEvent | undefined;
+    let usageRecorded = false;
+    lastTokenUsage = undefined;
+    const recordTurnUsage = (pricing?: Record<string, string>): void => {
+      if (!turnUsage || usageRecorded) return;
+      activeSession.usage = accumulateSessionUsage(activeSession.usage, turnUsage.usage, turnUsage.estimated, pricing);
+      sessionTokens = activeSession.usage.totalTokens;
+      usageRecorded = true;
+    };
     try {
       const requestAbort = new AbortController();
       const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
@@ -1335,6 +1345,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = '';
       let firstAssistantDeltaAt: number | undefined;
       let outputTokenRate: number | undefined;
+      let lastUsagePaint = 0;
+      const usedModels = new Set<string>();
       let answerPosition = { row: 15, column: 1 };
       let lastErrorEvent: { code?: string; message: string } | undefined;
       const redrawChatFrame = (): void => {
@@ -1345,7 +1357,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           model: currentModel ?? 'No model connected — use /connect',
           tokens: Math.round(sessionTokens),
           cost: costLabel(),
-          usageAvailable: activeSession.usage.available,
+          usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
           workspace: canonicalWorkspace,
           mode: activeMode,
           autoApprove: activeAutoApprove,
@@ -1353,6 +1365,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           chatAnswer: displayAnswer,
           chatThoughtTime: thoughtTime,
           outputTokenRate,
+          tokenUsage: turnUsage,
           input: commandQueue.currentDraft,
           queuedCommands: commandQueue.items,
         }, process.stdout.rows));
@@ -1395,7 +1408,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
                     model: currentModel ?? 'No model connected',
                     tokens: Math.round(sessionTokens),
                     cost: costLabel(),
-                    usageAvailable: activeSession.usage.available,
+                    usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
                     workspace: canonicalWorkspace,
                     mode: activeMode,
                     autoApprove: activeAutoApprove,
@@ -1458,7 +1471,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       // Move to the chat layout before the provider can emit its first event.
       redrawChatFrame();
       thinkingTimer = setInterval(() => {
-        if (!firstAssistantDeltaAt) {
+        if (!firstAssistantDeltaAt && !turnUsage) {
           process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000));
         }
       }, 400);
@@ -1469,6 +1482,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         skillContext: skillContext(),
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
+          if (event.type === 'model_change') usedModels.add(event.newModelId);
+          if (event.type === 'usage') {
+            turnUsage = event;
+            lastTokenUsage = event;
+            outputTokenRate = event.generationMs > 0 ? event.outputTokensPerSecond : undefined;
+            if (event.final || event.timestamp - lastUsagePaint >= 400) {
+              process.stdout.write(renderChatUsageUpdate(event, process.stdout.columns || 80));
+              lastUsagePaint = event.timestamp;
+            }
+          }
           if (event.type === 'assistant_delta') {
             if (!firstAssistantDeltaAt && event.delta.trim().length > 0) {
               firstAssistantDeltaAt = Date.now();
@@ -1502,21 +1525,25 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         process.stdout.write(`\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
         const replacement = await replaceProviderKeyInteractive(activeConnection, { signal });
         if (!replacement) throw error;
+        recordTurnUsage();
+        turnUsage = undefined;
+        usageRecorded = false;
         const secured = process.platform === 'win32' ? await storeConnectionCredential(replacement, credentialStore) : replacement;
         saveConnection(secured); config = loadConfig(); activateConnection(secured);
         result = await runAgent();
       }
-      if (result.usage) {
+      if (turnUsage && !turnUsage.estimated) {
         let pricing: Record<string, string> | undefined;
         try {
-          pricing = findModelPricing(await provider!.discoverModels(signal), result.selectedModel.id);
+          if (usedModels.size <= 1) pricing = findModelPricing(await provider!.discoverModels(signal), result.selectedModel.id);
         } catch {
           // A valid answer remains usable when the provider catalog is unavailable.
         }
-        activeSession.usage = { ...result.usage, ...calculateSessionCost(result.usage, pricing), available: true };
-        sessionTokens = result.usage.totalTokens;
-        if (firstAssistantDeltaAt) outputTokenRate = calculateOutputTokenRate(result.usage.completionTokens, Date.now() - firstAssistantDeltaAt);
+        recordTurnUsage(pricing);
       }
+      recordTurnUsage();
+      // Failed/cancelled tasks can still consume tokens, even without a saved answer.
+      if (turnUsage) sessionStore.save(activeSession);
       const otherConnections = Object.keys(config.connections ?? {}).filter((id) => id !== activeConnection?.id);
       const resolution = resolveTurnAssistantAnswer(
         result,
@@ -1548,6 +1575,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     } catch (err: any) {
       if (thinkingTimer) clearInterval(thinkingTimer);
       removeGenerationListener?.();
+      recordTurnUsage();
+      if (turnUsage) sessionStore.save(activeSession);
       const otherConnections = Object.keys(config.connections ?? {}).filter((id) => id !== activeConnection?.id);
       const altSuggestion = otherConnections.length > 0
         ? ` (other configured providers: ${otherConnections.join(', ')})`
@@ -1565,13 +1594,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         model: currentModel ?? 'No model connected — use /connect',
         tokens: Math.round(sessionTokens),
         cost: costLabel(),
-        usageAvailable: activeSession.usage.available,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
         workspace: canonicalWorkspace,
         mode: activeMode,
         autoApprove: activeAutoApprove,
         chatQuestion: lastQuestion,
         chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
+        tokenUsage: turnUsage,
         queuedCommands: commandQueue.items,
       }, process.stdout.rows));
       process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));

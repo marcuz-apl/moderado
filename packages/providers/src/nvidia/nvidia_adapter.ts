@@ -140,6 +140,7 @@ export class NvidiaAdapter implements IProviderAdapter {
       model: options.modelId,
       messages: wireMessages,
       stream: true,
+      stream_options: { include_usage: true },
     };
 
     if (options.tools && options.tools.length > 0) {

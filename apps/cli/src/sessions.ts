@@ -5,7 +5,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { ChatMessageSchema, type ChatMessage, type ChatUsage } from '@moderado/contracts';
 
-const UsageSchema = z.object({ promptTokens: z.number().int().nonnegative(), completionTokens: z.number().int().nonnegative(), totalTokens: z.number().int().nonnegative(), costUsd: z.number().nonnegative().optional(), costKnown: z.boolean(), available: z.boolean().default(false) });
+const UsageSchema = z.object({ promptTokens: z.number().int().nonnegative(), completionTokens: z.number().int().nonnegative(), totalTokens: z.number().int().nonnegative(), estimated: z.boolean().optional(), costUsd: z.number().nonnegative().optional(), costKnown: z.boolean(), available: z.boolean().default(false) });
 export const StoredSessionSchema = z.object({ schemaVersion: z.literal(1), id: z.string().uuid(), workspaceRoot: z.string().min(1), createdAt: z.string().datetime(), updatedAt: z.string().datetime(), providerId: z.string().optional(), providerName: z.string().optional(), modelId: z.string().optional(), mode: z.enum(['Plan', 'Execute']), messages: z.array(ChatMessageSchema), usage: UsageSchema });
 export type StoredSession = z.infer<typeof StoredSessionSchema>;
 
@@ -41,6 +41,22 @@ export function calculateSessionCost(usage: ChatUsage | undefined, pricing?: Rec
   const prompt = Number(pricing?.prompt); const completion = Number(pricing?.completion);
   if (!usage || !Number.isFinite(prompt) || !Number.isFinite(completion) || prompt < 0 || completion < 0) return { costKnown: false };
   return { costKnown: true, costUsd: usage.promptTokens * prompt + usage.completionTokens * completion };
+}
+
+/** Add one task snapshot once; estimates never produce a billing claim. */
+export function accumulateSessionUsage(previous: StoredSession['usage'], usage: ChatUsage, estimated: boolean, pricing?: Record<string, string>): StoredSession['usage'] {
+  const isEstimated = Boolean(previous.estimated || estimated);
+  const cost = isEstimated ? { costKnown: false } : calculateSessionCost(usage, pricing);
+  const costKnown = cost.costKnown && (previous.totalTokens === 0 || previous.costKnown);
+  return {
+    promptTokens: previous.promptTokens + usage.promptTokens,
+    completionTokens: previous.completionTokens + usage.completionTokens,
+    totalTokens: previous.totalTokens + usage.totalTokens,
+    estimated: isEstimated,
+    available: true,
+    costKnown,
+    costUsd: costKnown ? (previous.costUsd ?? 0) + (cost.costUsd ?? 0) : undefined,
+  };
 }
 
 /** Output speed uses only generated tokens, never prompt/context processing time. */

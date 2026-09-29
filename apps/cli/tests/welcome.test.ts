@@ -835,3 +835,32 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(stripAnsi(box.join('\n'))).toContain('(+1 more - type /queue to inspect)');
   });
 });
+
+const usageSnapshot = { type: 'usage' as const, usage: { promptTokens: 100, completionTokens: 20, totalTokens: 120 }, estimated: true, outputTokensPerSecond: 10, generationMs: 2000, final: false, timestamp: 0 };
+describe('token usage display', () => {
+  it('labels estimates and clips fixed row updates without moving the cursor', async () => {
+    const { formatTokenUsage, renderChatUsageUpdate } = await import('../src/ui/welcome.js');
+    expect(formatTokenUsage(usageSnapshot)).toBe('Input ~100 | Output ~20 | Total ~120 | ~10 tok/s');
+    expect(formatTokenUsage({ ...usageSnapshot, estimated: false, generationMs: 0 })).toBe('Input 100 | Output 20 | Total 120');
+    const update = renderChatUsageUpdate(usageSnapshot, 20);
+    expect(update.startsWith('\x1b7\x1b[11;1H\r\x1b[K')).toBe(true);
+    expect(update.endsWith('\x1b8')).toBe(true);
+    expect(update).toContain('Input ~100 | Output');
+    expect(update).not.toContain('\n');
+  });
+  it('replaces the thought row in the full screen', () => {
+    const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 0, cost: '$0', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
+    expect(screen).toContain('Input ~100');
+    expect(screen).not.toContain('Thought for');
+  });
+});
+it('marks cumulative estimated usage in the composer', () => {
+  expect(stripAnsi(renderWelcomeCard({ model: 'test', tokens: 120, cost: 'unavailable', workspace: '.', mode: 'Plan', autoApprove: false, usageEstimated: true }))).toContain('~120 tokens');
+});
+
+it('targets the exact usage row in the chat frame', async () => {
+  const { renderChatUsageUpdate } = await import('../src/ui/welcome.js');
+  const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 0, cost: '$0', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
+  const row = screen.split('\n').findIndex(line => line.includes('Input ~100')) + 1;
+  expect(renderChatUsageUpdate(usageSnapshot, 80)).toContain(`\x1b[${row};1H`);
+});

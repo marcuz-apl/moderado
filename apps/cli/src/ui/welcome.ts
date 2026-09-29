@@ -1,3 +1,4 @@
+import type { UsageEvent } from '@moderado/contracts';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
 
@@ -6,6 +7,7 @@ export interface WelcomeLayoutOptions {
   tokens: number;
   cost: string;
   usageAvailable?: boolean;
+  usageEstimated?: boolean;
   workspace: string;
   mode: 'Plan' | 'Execute';
   autoApprove: boolean;
@@ -17,6 +19,7 @@ export interface WelcomeLayoutOptions {
   chatThoughtTime?: number;
   /** Generated completion tokens per second for the preceding response. */
   outputTokenRate?: number;
+  tokenUsage?: UsageEvent;
   mentionFiles?: string[];
   mentionSelection?: number;
   commandSelection?: number;
@@ -109,8 +112,8 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   };
 
   // Line 4: model & tokens / cost (left) ... Plan / Execute (Tab) (right)
-  const outputRate = options.outputTokenRate === undefined ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
-  const usageLabel = options.usageAvailable === false ? 'Usage unavailable' : `${options.tokens} tokens`;
+  const outputRate = options.outputTokenRate === undefined || options.tokenUsage ? '' : ` · ${Math.round(options.outputTokenRate)} tok/s`;
+  const usageLabel = options.usageAvailable === false ? 'Usage unavailable' : `${options.usageEstimated ? "~" : ""}${options.tokens} tokens`;
   const left4Raw = `${options.model}  ${usageLabel} / ${options.cost}${outputRate}`;
   const left4 = `\x1b[38;5;180m${options.model}\x1b[0m  \x1b[38;5;244m${usageLabel} / ${options.cost}${outputRate}\x1b[0m`;
   
@@ -298,7 +301,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   lines.push(String.fromCharCode(27) + '[48;5;236m' + questionText + ' '.repeat(Math.max(0, width - visibleLen(questionText))) + String.fromCharCode(27) + '[0m');
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  lines.push(options.chatAnswer?.trim() ? `\x1b[38;5;244mThought for ${thoughtTimeLabel}\x1b[0m` : '');
+  lines.push(options.tokenUsage ? `\x1b[38;5;244m${formatTokenUsage(options.tokenUsage).slice(0, Math.max(0, terminalWidth - 1))}\x1b[0m` : options.chatAnswer?.trim() ? `\x1b[38;5;244mThought for ${thoughtTimeLabel}\x1b[0m` : '');
 
   // Answer section: multi-line model answer
   if (options.chatAnswer && options.chatAnswer.trim().length > 0) {
@@ -494,6 +497,7 @@ export interface PromptInteractiveTurnOptions {
   tokens: number;
   cost: string;
   usageAvailable?: boolean;
+  usageEstimated?: boolean;
   workspace: string;
   version?: string;
   initialMode?: 'Plan' | 'Execute';
@@ -505,6 +509,7 @@ export interface PromptInteractiveTurnOptions {
   chatAnswer?: string;
   chatThoughtTime?: number;
   outputTokenRate?: number;
+  tokenUsage?: UsageEvent;
   questionHistory?: string[];
   /**
    * Called when user selects a model via /model. Receives a `drawFrame`
@@ -600,6 +605,7 @@ export async function promptInteractiveTurn(
     tokens: options.tokens,
     cost: options.cost,
     usageAvailable: options.usageAvailable,
+    usageEstimated: options.usageEstimated,
     workspace: options.workspace,
     mode: currentMode,
     autoApprove: currentAutoApprove,
@@ -608,6 +614,7 @@ export async function promptInteractiveTurn(
     chatAnswer: options.chatAnswer,
     chatThoughtTime: options.chatThoughtTime,
     outputTokenRate: options.outputTokenRate,
+    tokenUsage: options.tokenUsage,
     queuedCommands: options.queuedCommands,
     isTurnSettled: true,
   });
@@ -1161,3 +1168,19 @@ export async function promptInteractiveTurn(
 }
 
 
+
+/** A cumulative task snapshot; a request ending does not mean the task ended. */
+export function formatTokenUsage(event: UsageEvent): string {
+  const marker = event.estimated ? '~' : '';
+  const { promptTokens, completionTokens, totalTokens } = event.usage;
+  const rate = event.generationMs > 0 && Number.isFinite(event.outputTokensPerSecond)
+    ? ` | ${marker}${Math.round(event.outputTokensPerSecond)} tok/s` : '';
+  return `Input ${marker}${promptTokens} | Output ${marker}${completionTokens} | Total ${marker}${totalTokens}${rate}`;
+}
+
+/** Update only the chat status row, preserving the answer/composer cursor. */
+export function renderChatUsageUpdate(event: UsageEvent, width = process.stdout.columns || 80): string {
+  const text = formatTokenUsage(event).slice(0, Math.max(0, width - 1));
+  const row = renderModeradoHeader().split("\n").length + 3;
+  return `\x1b7\x1b[${row};1H\r\x1b[K\x1b[38;5;244m${text}\x1b[0m\x1b8`;
+}

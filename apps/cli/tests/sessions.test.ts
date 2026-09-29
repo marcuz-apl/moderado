@@ -6,6 +6,7 @@ import {
   SessionStore,
   calculateOutputTokenRate,
   calculateSessionCost,
+  accumulateSessionUsage,
   formatSessionCost,
   compactSessionMessages,
   createSession,
@@ -63,6 +64,24 @@ describe('SessionStore', () => {
     expect(calculateOutputTokenRate(84, 2_000)).toBe(42);
     expect(calculateOutputTokenRate(0, 2_000)).toBeUndefined();
     expect(calculateOutputTokenRate(84, 0)).toBeUndefined();
+  });
+
+  it('adds turn usage and costs instead of replacing preceding session counts', () => {
+    const prior = { promptTokens: 100, completionTokens: 10, totalTokens: 110, available: true, costKnown: true, costUsd: 0.12 };
+    expect(accumulateSessionUsage(prior, { promptTokens: 200, completionTokens: 20, totalTokens: 220 }, false,
+      { prompt: '0.001', completion: '0.002' })).toMatchObject({
+      promptTokens: 300, completionTokens: 30, totalTokens: 330, available: true, estimated: false, costKnown: true, costUsd: 0.36,
+    });
+  });
+
+  it('preserves estimate labeling and unknown cost across later reported turns', () => {
+    const first = accumulateSessionUsage(createSession('C:/repo').usage,
+      { promptTokens: 40, completionTokens: 10, totalTokens: 50 }, true);
+    const next = accumulateSessionUsage(first, { promptTokens: 100, completionTokens: 20, totalTokens: 120 }, false,
+      { prompt: '0', completion: '0' });
+    expect(next).toMatchObject({ totalTokens: 170, estimated: true, available: true, costKnown: false });
+    expect(next.costUsd).toBeUndefined();
+    expect(formatSessionCost(next)).toBe('Cost unknown');
   });
 
   it('exports redacted Markdown and compacts older messages deterministically', () => {

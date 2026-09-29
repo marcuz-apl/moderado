@@ -1,4 +1,4 @@
-import { ChatCompletionChunk, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
+import { ChatCompletionChunk, ChatUsageSchema, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
 
 export async function* parseSseStream(
   byteStream: AsyncIterable<Uint8Array>
@@ -77,12 +77,18 @@ export async function* parseSseStream(
           if (finishReason !== undefined) {
             completionChunk.finishReason = finishReason;
           }
-          if (parsed.usage) {
-            completionChunk.usage = {
-              promptTokens: parsed.usage.prompt_tokens ?? 0,
-              completionTokens: parsed.usage.completion_tokens ?? 0,
-              totalTokens: parsed.usage.total_tokens ?? 0,
-            };
+          if (parsed.usage !== undefined && parsed.usage !== null) {
+            const usage = ChatUsageSchema.safeParse({
+              promptTokens: parsed.usage.prompt_tokens,
+              completionTokens: parsed.usage.completion_tokens,
+              totalTokens: parsed.usage.total_tokens === undefined
+                ? parsed.usage.prompt_tokens + parsed.usage.completion_tokens
+                : parsed.usage.total_tokens,
+            });
+            if (!usage.success) {
+              throw new ProviderError('Invalid provider token usage: expected nonnegative integer prompt, completion, and total token counts', 'ERR_MALFORMED_RESPONSE');
+            }
+            completionChunk.usage = usage.data;
           }
 
           if (
