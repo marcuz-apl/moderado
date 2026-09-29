@@ -91,6 +91,21 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(createAgentTask('Add a command', 'Execute')).toBe('Add a command');
   });
 
+  it('recognizes /review and asks for findings without modifying the workspace', () => {
+    expect(findSlashCommandAdvice('/review')).toMatchObject({ isSlashCommand: true, isValid: true });
+    const task = chatCommands.createReviewTask([' M src/app.ts', '?? src/new.ts']);
+    expect(task).toContain('staged and unstaged');
+    expect(task).toContain('untracked');
+    expect(task).toContain('src/app.ts');
+    expect(task).toContain('src/new.ts');
+    expect(task).toContain('Do not modify files');
+    const tools = chatCommands.createReviewToolRegistry();
+    expect(tools.get('git_diff')).toBeDefined();
+    expect(tools.get('read_file')).toBeDefined();
+    expect(tools.get('write_file')).toBeUndefined();
+    expect(tools.get('run_command')).toBeUndefined();
+  });
+
   it('requires a workspace-contained output path for session sharing', () => {
     const canonicalRoot = fs.realpathSync(tempDir);
     expect(resolveSessionSharePath(tempDir, 'exports/session.md')).toBe(path.join(canonicalRoot, 'exports', 'session.md'));
@@ -227,6 +242,14 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(isGenerationCancelKey({ name: 'return' })).toBe(false);
   });
 
+  it('shows a stopped message after an Escape-cancelled task', () => {
+    const resolution = resolveTurnAssistantAnswer(
+      { status: 'cancelled', messages: [], selectedModel: { id: 'test-model' } },
+      0, undefined, 'Partial answer', 'test-model'
+    );
+    expect(resolution).toEqual({ answer: 'Partial answer\n\nTask stopped.', isError: true });
+  });
+
   it('requires an explicit reply to the model before enabling network commands', () => {
     expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as any)).toBe(true);
     expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['git', 'status'] } } as any)).toBe(false);
@@ -334,7 +357,7 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       reason: 'Network access requires an explicit Yes reply to the model first.',
     });
   });
-  it('automatically approves workspace file writes and terminal commands without prompting', async () => {
+  it('prompts for workspace file writes and terminal commands after auto-approve is disabled', async () => {
     const tools = ['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'];
     for (const toolName of tools) {
       let prompted = false;
@@ -346,8 +369,8 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
           requestInteractiveApproval: async () => { prompted = true; return { requestId: 'req-' + toolName, status: 'denied' }; },
         }
       );
-      expect(decision.status).toBe('approved');
-      expect(prompted).toBe(false);
+      expect(decision.status).toBe('denied');
+      expect(prompted).toBe(true);
     }
   });
 
@@ -476,12 +499,12 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(queue.currentDraft).toBe('als');
     expect(draftChanges).toBe(5);
 
-    // 3. Escape with non-empty draft clears draft without aborting
+    // 3. Escape stops generation even when a follow-up draft exists
     handleGenerationKeypress('', { name: 'escape' }, queue, actions);
-    expect(queue.currentDraft).toBe('');
-    expect(aborted).toBe(false);
+    expect(aborted).toBe(true);
 
-    // 4. Escape with empty draft aborts generation
+    // 4. Escape with empty draft also aborts generation
+    aborted = false;
     handleGenerationKeypress('', { name: 'escape' }, queue, actions);
     expect(aborted).toBe(true);
 
@@ -713,11 +736,10 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(queue.length).toBe(1);
     expect(queuedItems).toEqual(['tes']);
 
-    // Escape via raw ESC '\x1b'
+    // Escape via raw ESC '\x1b' stops generation with a draft
     queue.setDraft('discard me');
     handleGenerationKeypress('\x1b', undefined, queue, actions);
-    expect(queue.currentDraft).toBe('');
-    expect(aborted).toBe(false);
+    expect(aborted).toBe(true);
   });
 
   it('handleGenerationKeypress routes /btw directly to onBtw action instead of queue', () => {

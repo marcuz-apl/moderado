@@ -547,6 +547,8 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(systemMessage?.content).toContain('CRITICAL DIRECTIVE — EXTREME BREVITY');
     expect(systemMessage?.content).toContain('Zero conversational filler');
     expect(systemMessage?.content).toContain('Answer in 1 to 2 short sentences or under 35 words');
+    expect(systemMessage?.content).toContain('Keep thinking concise by default');
+    expect(systemMessage?.content).toContain('unless the user asks for more detail');
   });
 
   it('bounds output tokens via maxTokens (Layer 3) with default or custom cap', async () => {

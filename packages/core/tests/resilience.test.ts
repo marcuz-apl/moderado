@@ -59,6 +59,19 @@ it('returns cancelled when an aborted stream throws', async () => {
   expect(events.filter(event => event.type === 'error')).toHaveLength(0);
 });
 
+it('returns cancelled when Escape aborts model discovery', async () => {
+  const provider = new FakeProviderAdapter();
+  const controller = new AbortController();
+  provider.discoverModels = async () => { controller.abort(); throw new Error('discovery aborted'); };
+  const events: AgentEvent[] = [];
+  const result = await new AgentLoop().run('Answer', options(provider, events, {
+    signal: controller.signal, routeOptions: {},
+  }));
+  expect(result.status).toBe('cancelled');
+  expect(events.some(event => event.type === 'cancellation')).toBe(true);
+  expect(provider.recordedCalls).toHaveLength(0);
+});
+
 it('aborts a long retry backoff promptly without sending a second request', async () => {
   const provider = new FakeProviderAdapter();
   provider.queueError(new ModelUnavailableError());

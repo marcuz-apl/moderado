@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { AgentLoop, PolicyManager, Router, cleanConversationalFiller, DEFAULT_MAX_OUTPUT_TOKENS } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
-import { createDefaultToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, resolveInJail, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
+import { createDefaultToolRegistry, ToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, resolveInJail, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult, type UsageEvent } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
@@ -21,6 +21,8 @@ import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } f
 import { askModalChoice } from '../ui/prompt.js';
 import { findModelPricing } from '../model_pricing.js';
 import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
+import { buildWorkspaceMap } from '../repo_map.js';
+import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
 import { discoverSkills, formatSkillContext, UserSkill } from '../skills.js';
 
 function mutationPaths(toolName: string, parameters: unknown): string[] {
@@ -35,6 +37,20 @@ export function createAgentTask(request: string, mode: 'Plan' | 'Execute'): stri
   return `Create a concise implementation checklist for this request. Inspect files as needed, but do not modify files or run commands.\n\nUser request:\n${request}`;
 }
 
+export function createReviewTask(changedFiles: string[]): string {
+  return `Review the current workspace changes. Inspect staged and unstaged Git diffs with git_diff, then inspect relevant surrounding code. Also review untracked files listed below with read_file. Do not modify files or run commands. Report only actionable bugs or security issues, ordered by severity, with file paths and line numbers. If none are found, say "No findings". Keep the report concise.\n\nChanged files:\n${changedFiles.join('\n') || '(none)'}`;
+}
+
+export function createReviewToolRegistry(): IToolRegistry {
+  const source = createDefaultToolRegistry();
+  const registry = new ToolRegistry();
+  for (const name of ['git_diff', 'read_file', 'list_files', 'search_files', 'get_definition', 'find_references']) {
+    const tool = source.get(name);
+    if (tool) registry.register(tool);
+  }
+  return registry;
+}
+
 export const STANDARD_SLASH_COMMANDS = [
   '/connect',
   '/model',
@@ -44,6 +60,9 @@ export const STANDARD_SLASH_COMMANDS = [
   '/session',
   '/queue',
   '/workflow',
+  '/review',
+  '/map',
+  '/budget',
   '/skills',
   '/clear',
   '/help',
@@ -170,6 +189,10 @@ export function resolveTurnAssistantAnswer(
   currentModel = 'unknown',
   otherConnections: string[] = []
 ): { answer: string; isError: boolean } {
+  if (result.status === 'cancelled') {
+    const partial = cleanConversationalFiller(streamedAnswer);
+    return { answer: [partial, 'Task stopped.'].filter(Boolean).join('\n\n'), isError: true };
+  }
   if (result.status === 'failed' || lastErrorEvent) {
     return {
       answer: formatTurnFailureAnswer(result.status, lastErrorEvent, result.selectedModel?.id || currentModel, otherConnections),
@@ -272,14 +295,9 @@ export function handleGenerationKeypress(
     return;
   }
 
-  // 2. Escape: if draft has text, clear draft; if draft is empty, abort generation
+  // 2. Escape always stops the active task; the caller clears queued input.
   if (isGenerationCancelKey(key, str)) {
-    if (queue.currentDraft.length > 0) {
-      queue.setDraft('');
-      actions.onDraftChange();
-    } else {
-      actions.abort();
-    }
+    actions.abort();
     return;
   }
 
@@ -506,9 +524,6 @@ export async function decideApproval(
     return { requestId: request.requestId, status: 'denied', reason: 'Network access requires an explicit Yes reply to the model first.' };
   }
   if (options.autoApprove && !request.toolName.startsWith('mcp.')) {
-    return { requestId: request.requestId, status: 'approved' };
-  }
-  if (['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'].includes(request.toolName)) {
     return { requestId: request.requestId, status: 'approved' };
   }
   return options.requestInteractiveApproval(request, signal);
@@ -802,7 +817,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   if (activeConnection) activateConnection(activeConnection, args.model);
 
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
-  let activeAutoApprove = Boolean(args.autoApprove);
+  let activeAutoApprove = !args.nonInteractive;
+  let tokenBudget: number | undefined;
   const sessionStore = new SessionStore();
   let activeSession: StoredSession = sessionStore.loadLatestSession(canonicalWorkspace) ??
     createSession(canonicalWorkspace, {
@@ -1105,6 +1121,38 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         continue;
       }
     }
+    if (trimmed === '/budget' || trimmed.startsWith('/budget ')) {
+      const budget = parseBudgetCommand(trimmed, tokenBudget);
+      tokenBudget = budget.limit;
+      lastQuestion = trimmed;
+      lastAnswer = budget.message;
+      lastThoughtTime = 0.001;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
+      process.stdout.write('\x1b[H\x1b[J');
+      process.stdout.write(renderFullWelcomeScreen({
+        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
+        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
+        chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
+      }, process.stdout.rows));
+      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      continue;
+    }
+    if (trimmed === '/map') {
+      lastQuestion = trimmed;
+      lastAnswer = await buildWorkspaceMap(canonicalWorkspace);
+      lastThoughtTime = 0.001;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
+      process.stdout.write('\x1b[H\x1b[J');
+      process.stdout.write(renderFullWelcomeScreen({
+        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
+        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
+        chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
+      }, process.stdout.rows));
+      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      continue;
+    }
     if (trimmed.startsWith('/queue')) {
       const args = trimmed.slice('/queue'.length).trim();
       lastQuestion = trimmed;
@@ -1199,6 +1247,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         '  /session   - Create, resume, undo, redo, share, export, or compact sessions\n' +
         '  /queue     - Add, inspect, or clear queued follow-up commands\n' +
         '  /workflow  - Inspect Git, build plans, or undo agent changes\n' +
+        '  /review    - Review current workspace changes for bugs\n' +
+        '  /map       - Show a compact workspace file map\n' +
+        '  /budget    - Set a per-task token limit (/budget 5000, /budget off)\n' +
         '  /skills    - List installed user skills and reload them\n' +
         '  /clear     - Reset conversation memory\n' +
         '  /help      - Display commands, shortcuts & version\n' +
@@ -1324,7 +1375,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
     }
 
-    const policy = new PolicyManager({ maxSteps: args.maxSteps, readOnly: activeMode === 'Plan' || args.readOnly, nonInteractive: args.nonInteractive, timeoutSeconds: args.timeout });
+    const isReview = trimmed === '/review';
+    const reviewFiles = isReview ? (await inspectGitWorkspace(canonicalWorkspace)).files.map(file => `${file.status} ${file.path}`) : [];
+    const policy = new PolicyManager({ maxSteps: args.maxSteps, readOnly: isReview || activeMode === 'Plan' || args.readOnly, nonInteractive: args.nonInteractive, timeoutSeconds: args.timeout });
     const startedAt = Date.now();
     let thinkingTimer: ReturnType<typeof setInterval> | undefined;
     let removeGenerationListener: (() => void) | undefined;
@@ -1344,6 +1397,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = '';
       let firstAssistantDeltaAt: number | undefined;
       let outputTokenRate: number | undefined;
+      let budgetWarningIssued = false;
+      let budgetStopped = false;
       let lastUsagePaint = 0;
       const usedModels = new Set<string>();
       let answerPosition = { row: 15, column: 1 };
@@ -1365,6 +1420,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           chatThoughtTime: thoughtTime,
           outputTokenRate,
           tokenUsage: turnUsage,
+          budgetStatus: budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined,
           input: commandQueue.currentDraft,
           queuedCommands: commandQueue.items,
         }, process.stdout.rows));
@@ -1475,8 +1531,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
       }, 400);
       const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
-      const runAgent = () => loop.run(evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
-        workspaceRoot: canonicalWorkspace, provider: provider!, tools, approvalHandler, router, policy,
+      const runAgent = () => loop.run(isReview ? createReviewTask(reviewFiles) : evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
+        workspaceRoot: canonicalWorkspace, provider: provider!, tools: isReview ? createReviewToolRegistry() : tools, approvalHandler, router, policy,
         maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         skillContext: skillContext(),
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
@@ -1486,8 +1542,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             turnUsage = event;
             lastTokenUsage = event;
             outputTokenRate = event.generationMs > 0 ? event.outputTokensPerSecond : undefined;
-            if (event.final || event.timestamp - lastUsagePaint >= 400) {
-              process.stdout.write(renderChatUsageUpdate(event, process.stdout.columns || 80));
+            const budgetState = evaluateTokenBudget(event.usage.totalTokens, tokenBudget);
+            const firstBudgetWarning = budgetState === 'warning' && !budgetWarningIssued;
+            if (budgetState === 'warning') budgetWarningIssued = true;
+            if (budgetState === 'stop' && !budgetStopped) {
+              budgetStopped = true;
+              requestAbort.abort();
+            }
+            if (budgetStopped || firstBudgetWarning || event.final || event.timestamp - lastUsagePaint >= 400) {
+              process.stdout.write(renderChatUsageUpdate(event, process.stdout.columns || 80, budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined));
               lastUsagePaint = event.timestamp;
             }
           }
@@ -1553,6 +1616,11 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         otherConnections
       );
       lastAnswer = resolution.answer;
+      if (budgetStopped) {
+        const note = `Token budget reached (${tokenBudget?.toLocaleString()} per task). Task stopped; usage may exceed the limit because providers report in chunks.`;
+        lastAnswer = [lastAnswer, note].filter(Boolean).join('\n\n');
+        streamedAnswer = lastAnswer;
+      }
       if (resolution.isError) {
         streamedAnswer = lastAnswer;
       } else {

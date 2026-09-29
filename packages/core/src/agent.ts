@@ -64,7 +64,8 @@ export interface AgentRunResult {
 }
 
 export const DEFAULT_SYSTEM_PROMPT = `CRITICAL DIRECTIVE — EXTREME BREVITY (DEFAULT MODE):
-- Extreme brevity is mandatory. Answer in 1 to 2 short sentences or under 35 words.
+- Answer in 1 to 2 short sentences or under 35 words by default; provide more detail when the user asks for it.
+- Keep thinking concise by default; do not elaborate unless the user asks for more detail.
 - Zero conversational filler: Never output greetings, pleasantries, preambles ("Sure", "Here is", "Certainly", "I'd be happy to"), or sign-offs ("Hope this helps", "Let me know").
 - Never restate, rephrase, or echo the user's question before answering. Start immediately with the direct answer.
 - Zero markdown headers (no ## or ###), no bullet lists unless specifically requested, no conclusion sections.
@@ -174,7 +175,7 @@ export class AgentLoop {
     let hasEstimatedUsage = false;
     let taskGenerationMs = 0;
 
-    if (signal?.aborted) {
+    const cancelBeforeRouting = (): AgentRunResult => {
       emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
       return {
         status: 'cancelled',
@@ -193,7 +194,8 @@ export class AgentLoop {
         messages: options.conversationHistory ? [...options.conversationHistory] : [],
         usage: latestUsage,
       };
-    }
+    };
+    if (signal?.aborted) return cancelBeforeRouting();
 
     // 1. Model Discovery & Routing
     let inventory = options.modelInventory;
@@ -202,6 +204,7 @@ export class AgentLoop {
         try {
           inventory = await options.provider.discoverModels(signal);
         } catch {
+          if (signal?.aborted) return cancelBeforeRouting();
           // A pinned model can still be usable when its provider does not
           // expose a model catalogue. Continue without dynamic metadata.
           inventory = [{ id: options.routeOptions.pinnedModelId, object: 'model', owned_by: options.provider.id }];
@@ -214,9 +217,15 @@ export class AgentLoop {
           status: 'Discovering and selecting models...',
           timestamp: Date.now(),
         });
-        inventory = await options.provider.discoverModels(signal);
+        try {
+          inventory = await options.provider.discoverModels(signal);
+        } catch (error) {
+          if (signal?.aborted) return cancelBeforeRouting();
+          throw error;
+        }
       }
     }
+    if (signal?.aborted) return cancelBeforeRouting();
 
     const { selectedModel: initialModel, rankedCandidates } = router.selectModel(
       inventory,

@@ -170,6 +170,25 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(stripAnsi(lines[4])).toContain('Auto-approve enabled (Shift+Tab)');
   });
 
+  it('starts the interactive workspace with auto-approve enabled', async () => {
+    await runComposerTurn(async (stdin, { writes }) => {
+      expect(stripAnsi(writes.join(''))).toContain('Auto-approve enabled (Shift+Tab)');
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+  });
+
+  it('offers /review in slash suggestions', () => {
+    expect(getMatchingCommands('/rev').map(command => command.name)).toContain('/review');
+  });
+
+  it('offers /map in slash suggestions', () => {
+    expect(getMatchingCommands('/map').map(command => command.name)).toContain('/map');
+  });
+
+  it('offers /budget in slash suggestions', () => {
+    expect(getMatchingCommands('/budget').map(command => command.name)).toContain('/budget');
+  });
+
   it('renders the full welcome screen correctly', () => {
     const full = renderFullWelcomeScreen({
       model: 'z-ai/glm-5.3-flash',
@@ -185,6 +204,17 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('Use / for slash commands');
     expect(plain).toContain('❯ Ask anything, I am all ears...');
     expect(plain).toContain('z-ai/glm-5.3-flash');
+  });
+
+  it('colors markdown section titles in a completed task answer', () => {
+    const rendered = renderChatScreen({
+      model: 'test-model', tokens: 0, cost: 'Cost unknown', workspace: '/workspace',
+      mode: 'Execute', autoApprove: false, chatQuestion: 'Summarize',
+      chatAnswer: '**Summary**\nDone.\n## Changes\nUpdated the CLI.', width: 100,
+    });
+    expect(rendered).toContain('\x1b[1;38;5;25mSummary\x1b[0m');
+    expect(rendered).toContain('\x1b[1;38;5;25mChanges\x1b[0m');
+    expect(stripAnsi(rendered)).not.toContain('**Summary**');
   });
 
   it('does not present zero tokens or zero cost when provider usage is unavailable', () => {
