@@ -42,8 +42,10 @@ describe('E2E Integration: Dynamic Model Failover Cascade', () => {
       { id: 'meta/llama-3.1-70b-instruct', object: 'model', owned_by: 'nvidia' },
     ];
 
-    // First call to primary model fails with ModelUnavailableError
-    provider.queueError(new ModelUnavailableError('Service 503 Overloaded'));
+    // Exhaust the primary model's initial attempt and two retries.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      provider.queueError(new ModelUnavailableError('Service 503 Overloaded'));
+    }
     // Failover call to secondary candidate succeeds
     provider.queueTextResponse('Secondary candidate took over and finished the task.');
 
@@ -53,10 +55,12 @@ describe('E2E Integration: Dynamic Model Failover Cascade', () => {
       tools,
       approvalHandler: autoApproveHandler,
       router: new Router(),
+      retryDelaysMs: [0, 0],
       eventListener: (e) => events.push(e),
     });
 
     expect(result.status).toBe('completed');
+    expect(provider.recordedCalls).toHaveLength(4);
     expect(result.finalMessage).toContain('Secondary candidate took over');
 
     // Verify model_change events

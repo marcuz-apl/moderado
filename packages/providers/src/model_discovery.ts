@@ -64,9 +64,11 @@ export async function fetchProviderModels(
   return results;
 }
 
-/** True when the provider advertises zero prompt cost (decimal-string pricing). */
-export function isFreeModelEntry(entry: ModelInventoryEntry): boolean {
-  return entry.pricing?.['prompt'] === '0';
+/** Require explicit zero input and output prices, with no other metered fees. */
+export function isFreeModelEntry(entry: Pick<ModelInventoryEntry, 'pricing'>): boolean {
+  const pricing = entry.pricing;
+  return pricing?.prompt !== undefined && pricing.completion !== undefined
+    && Object.values(pricing).every((price) => price.trim() !== '' && Number.isFinite(Number(price)) && Number(price) === 0);
 }
 
 export async function fetchProviderFreeModels(

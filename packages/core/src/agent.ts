@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { z } from 'zod';
 import {
   AgentEventListener,
@@ -14,7 +15,7 @@ import {
   IProviderAdapter,
   IToolRegistry,
   ModelInventoryEntry,
-  ModelUnavailableError,
+  isRetryableProviderError,
   ProviderToolDeclaration,
   RateLimitError,
   ToolCall,
@@ -50,6 +51,7 @@ export interface AgentRunOptions {
   maxOutputTokens?: number;
   /** Optional untrusted user skill context appended to the system prompt. */
   skillContext?: string;
+  retryDelaysMs?: number[];
 }
 
 export interface AgentRunResult {
@@ -260,6 +262,12 @@ export class AgentLoop {
 
     let step = 0;
     let finalAssistantText: string | null = null;
+    let attempt = 0;
+    const retryDelays = z.array(z.number().int().nonnegative().max(10000)).max(3).parse(options.retryDelaysMs ?? [250, 750]);
+    const cancelled = (): AgentRunResult => {
+      emit({ type: 'cancellation', reason: 'Aborted by user', timestamp: Date.now() });
+      return { status: 'cancelled', totalSteps: step, finalMessage: finalAssistantText, selectedModel: currentModel, messages, usage: latestUsage };
+    };
 
     while (policy.isStepWithinLimit(step)) {
       if (signal?.aborted) {
@@ -396,6 +404,7 @@ export class AgentLoop {
           if (generatedCharacters > 0 || chunk.usage) publishUsage(false);
         }
 
+        if (signal?.aborted) { publishUsage(true); return cancelled(); }
         for (const item of thinkFilter.flush()) {
           if (item.type === 'reasoning') {
             emit({
@@ -414,9 +423,21 @@ export class AgentLoop {
         }
       } catch (err: any) {
         publishUsage(true);
+        if (signal?.aborted) return cancelled();
         // Handle transient errors & failover cascades in AUTO mode
-        const isTransient = err instanceof RateLimitError || err instanceof ModelUnavailableError;
+        // Do not replay text that the user has already seen.
+        const isTransient = isRetryableProviderError(err) && assistantText.length === 0;
         const isAutoMode = !options.routeOptions?.pinnedModelId;
+
+        if (isTransient && attempt < retryDelays.length) {
+          const delay = retryDelays[attempt++];
+          emit({ type: 'progress', step, maxSteps: policy.maxSteps, status: `Retrying ${currentModel.id} in ${delay}ms...`, timestamp: Date.now() });
+          try { if (delay > 0) await sleep(delay, undefined, { signal }); }
+          catch (error) { if (!signal?.aborted) throw error; }
+          if (signal?.aborted) return cancelled();
+          step--;
+          continue;
+        }
 
         if (isTransient && isAutoMode) {
           const fallback = router.getNextFallback(rankedCandidates, currentModel.id);
@@ -430,6 +451,7 @@ export class AgentLoop {
               timestamp: Date.now(),
             });
             currentModel = fallback;
+            attempt = 0;
             step--; // Retry current step without consuming step limit
             continue;
           }
@@ -445,13 +467,14 @@ export class AgentLoop {
         return {
           status: 'failed',
           totalSteps: step,
-          finalMessage: null,
+          finalMessage: cleanConversationalFiller(assistantText) || finalAssistantText,
           selectedModel: currentModel,
           messages,
           usage: latestUsage,
         };
       }
       publishUsage(true);
+      attempt = 0;
 
       finalAssistantText = cleanConversationalFiller(assistantText) || null;
 

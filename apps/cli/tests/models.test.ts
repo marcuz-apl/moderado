@@ -21,6 +21,7 @@ describe('Free Models Catalog (models command)', () => {
           ],
         }), { status: 200 });
       }
+      if (url.includes('orcarouter.ai')) return new Response(JSON.stringify({ data: [] }), { status: 200 });
       return new Response('Not Found', { status: 404 });
     });
 

@@ -1,7 +1,8 @@
-import { ProviderConnection } from '../config.js';
+import { freeModelPolicyFor, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
+import { isFreeModelOption } from '../model_pricing.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
-import { fetchOpenRouterFreeModels, fetchProviderFreeModels, fetchProviderModels } from '@moderado/providers';
+import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
 import type { ModelInventoryEntry } from '@moderado/contracts';
 
 export interface ConnectionInput {
@@ -17,11 +18,14 @@ export interface PopupConnectionOptions {
   drawFrame?: (popupLines: string[]) => void;
   savedConnections?: Record<string, ProviderConnection>;
   resolveSavedConnection?: (connection: ProviderConnection) => Promise<ProviderConnection>;
+  connectProviders?: ConnectProvidersConfig;
 }
+
+export type ProviderPresetValue = ConnectProviderPresetId | `custom:${string}`;
 
 export interface ProviderPreset {
   label: string;
-  value: 'nvidia-nim' | 'openrouter' | 'agnes-ai' | 'orcarouter' | 'ollama' | 'lm-studio' | 'openai-compatible';
+  value: ProviderPresetValue;
   description: string;
   tag?: string;
   displayName?: string;
@@ -33,15 +37,32 @@ export const PROVIDER_PRESETS: ProviderPreset[] = [
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
   { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
-  { label: 'OrcaRouter', value: 'orcarouter', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', defaultModel: 'orcarouter/free', description: 'Connect OrcaRouter for adaptive model routing.' },
+  { label: 'OrcaRouter', value: 'orcarouter', tag: 'Free Models', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', defaultModel: 'orcarouter/free', description: 'Connect OrcaRouter for adaptive model routing.' },
   { label: 'Ollama', value: 'ollama', tag: 'Local', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', description: 'Use models served locally by Ollama.' },
   { label: 'LM Studio', value: 'lm-studio', tag: 'Local', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', description: 'Use models served by LM Studio local server.' },
   { label: 'Other OpenAI-compatible provider', value: 'openai-compatible', description: 'Connect any compatible endpoint with its base URL, key, and model ID.' },
 ];
 
-export function findReusableConnection(preset: ProviderPreset['value'], connections?: Record<string, ProviderConnection>): ProviderConnection | undefined {
+export function buildProviderPresets(config?: ConnectProvidersConfig): ProviderPreset[] {
+  const enabled = config?.enabled;
+  const builtIns = enabled === undefined
+    ? PROVIDER_PRESETS
+    : PROVIDER_PRESETS.filter((preset) => enabled.includes(preset.value as ConnectProviderPresetId));
+  const custom = (config?.custom ?? []).map((provider): ProviderPreset => ({
+    label: provider.name,
+    value: `custom:${provider.id}`,
+    tag: 'Custom',
+    displayName: provider.name,
+    baseUrl: provider.baseUrl,
+    defaultModel: provider.defaultModel,
+    description: 'Connect this custom OpenAI-compatible endpoint.',
+  }));
+  return [...builtIns, ...custom];
+}
+
+export function findReusableConnection(preset: ProviderPresetValue, connections?: Record<string, ProviderConnection>): ProviderConnection | undefined {
   if (preset === 'openai-compatible') return undefined;
-  const id = preset === 'nvidia-nim' ? 'nvidia-nim' : preset;
+  const id = preset.startsWith('custom:') ? preset.slice('custom:'.length) : preset;
   return connections?.[id];
 }
 
@@ -128,14 +149,16 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
 
 /** Interactive setup used by /connect and by the first attempted prompt. */
 export async function connectProviderInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
-  const choices = PROVIDER_PRESETS;
+  const choices = buildProviderPresets(options.connectProviders);
   const selectedValue = options.drawFrame
     ? await selectListPopup('Connect Provider', choices, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
     : (await askSelect('Connect a provider', choices, 0, { signal: options.signal })).value;
   if (!selectedValue) return undefined;
 
   if (options.signal?.aborted) return undefined;
-  const saved = findReusableConnection(selectedValue as ProviderPreset['value'], options.savedConnections);
+  const selectedPreset = choices.find((item) => item.value === selectedValue);
+  if (!selectedPreset) return undefined;
+  const saved = findReusableConnection(selectedPreset.value, options.savedConnections);
   if (saved && options.resolveSavedConnection) {
     try {
       const resolved = await options.resolveSavedConnection(saved);
@@ -144,25 +167,30 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
       // Continue to key entry when the credential service is unavailable.
     }
   }
-  if (selectedValue === 'nvidia-nim') {
+  if (selectedPreset.value === 'nvidia-nim') {
     const apiKey = await askPopupText('NVIDIA API key', options, true);
     if (!apiKey) return undefined;
     return buildConnection({ kind: 'nvidia-nim', apiKey });
   }
 
-  const preset = PROVIDER_PRESETS.find((item) => item.value === selectedValue);
-  const displayName = preset?.displayName ?? await askPopupText('Provider name (for example, OpenRouter)', options);
+  const customId = selectedPreset.value.startsWith('custom:') ? selectedPreset.value.slice('custom:'.length) : undefined;
+  const displayName = selectedPreset.displayName ?? await askPopupText('Provider name (for example, OpenRouter)', options);
   if (!displayName) return undefined;
-  const baseUrl = preset?.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
+  const baseUrl = selectedPreset.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
   const apiKey = selectedValue === 'ollama' || selectedValue === 'lm-studio'
     ? undefined
     : await askPopupText('API key', options, true);
-  let defaultModel: string | undefined = preset?.defaultModel;
+  let defaultModel: string | undefined = selectedPreset.defaultModel;
   if (!defaultModel && (selectedValue === 'ollama' || selectedValue === 'lm-studio' || selectedValue === 'orcarouter')) {
     try {
-      const models = selectedValue === 'orcarouter'
-        ? await fetchProviderFreeModels(baseUrl!, apiKey, { signal: options.signal })
-        : await fetchProviderModels(baseUrl!, apiKey, { signal: options.signal });
+      // OrcaRouter's free routing endpoints carry no `pricing`, so filtering the
+      // catalog on advertised zero price returns nothing and the flow falls
+      // through to manual entry. Offer the ids its preset declares free instead.
+      const freePolicy = selectedValue === 'orcarouter' ? freeModelPolicyFor(selectedValue) : undefined;
+      const fetched = await fetchProviderModels(baseUrl!, apiKey, { signal: options.signal });
+      const models: ModelInventoryEntry[] = freePolicy
+        ? fetched.filter((entry) => isFreeModelOption(entry, { modelId: entry.id, accessTier: 'unknown', toolSupport: 'unknown', source: 'heuristic' }, freePolicy))
+        : fetched;
       if (models.length) {
         const choices = models.map((entry) => ({ label: entry.id, value: entry.id, description: selectedValue === 'orcarouter' ? 'Free model' : 'Provider model' }));
         const picked = options.drawFrame
@@ -196,7 +224,8 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   }
   defaultModel = defaultModel ?? await askPopupText('Default model ID', options);
   if (!baseUrl || (!apiKey && selectedValue !== 'ollama' && selectedValue !== 'lm-studio') || !defaultModel) return undefined;
-  return buildConnection({ kind: 'openai-compatible', displayName, baseUrl, apiKey, defaultModel });
+  const connection = buildConnection({ kind: 'openai-compatible', displayName, baseUrl, apiKey, defaultModel });
+  return customId ? { ...connection, id: customId } : connection;
 }
 
 /** Ask for a replacement key after a provider rejects its saved credential. */

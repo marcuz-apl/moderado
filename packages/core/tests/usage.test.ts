@@ -9,7 +9,7 @@ describe('task token usage', () => {
   const run = async (provider: IProviderAdapter, router?: Router) => {
     const events: AgentEvent[] = [];
     const result = await new AgentLoop().run('Answer', {
-      workspaceRoot: process.cwd(), provider, router, tools: createDefaultToolRegistry(),
+      workspaceRoot: process.cwd(), provider, router, tools: createDefaultToolRegistry(), retryDelaysMs: [],
       approvalHandler: { async requestApproval(request) { return { requestId: request.requestId, status: 'approved' }; } },
       eventListener: event => events.push(event),
     });
@@ -100,7 +100,7 @@ describe('task token usage', () => {
     let requests = 0;
     provider.streamChat = async function* () {
       if (requests++ === 0) {
-        yield { contentDelta: '12345678' };
+        yield { reasoningDelta: '12345678' };
         throw new RateLimitError('limited');
       }
       yield { contentDelta: 'Done.' };

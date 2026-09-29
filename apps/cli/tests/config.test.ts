@@ -44,6 +44,22 @@ describe('CLI Configuration Storage', () => {
     expect(config).toEqual({});
   });
 
+  it('loads configured provider choices and normalizes custom endpoints', () => {
+    saveConfig({ connectProviders: { enabled: ['orcarouter'], custom: [{ id: 'gateway', name: ' Gateway ', baseUrl: 'https://gateway.example/v1/' }] } }, tempDir);
+    expect(loadConfig(tempDir).connectProviders).toEqual({ enabled: ['orcarouter'], custom: [{ id: 'gateway', name: 'Gateway', baseUrl: 'https://gateway.example/v1' }] });
+  });
+
+  it('rejects custom endpoints with credentials, remote HTTP, or reserved ids', () => {
+    for (const provider of [
+      { id: 'gateway', name: 'Gateway', baseUrl: 'https://secret@gateway.example/v1' },
+      { id: 'gateway', name: 'Gateway', baseUrl: 'http://gateway.example/v1' },
+      { id: 'orcarouter', name: 'Gateway', baseUrl: 'https://gateway.example/v1' },
+    ]) {
+      saveConfig({ connectProviders: { custom: [provider] } }, tempDir);
+      expect(loadConfig(tempDir).connectProviders).toBeUndefined();
+    }
+  });
+
   it('saves and loads configuration cleanly', () => {
     saveConfig({ apiKey: 'nvapi-test123', defaultModel: 'meta/llama-3.2-11b-vision-instruct' }, tempDir);
     const loaded = loadConfig(tempDir);

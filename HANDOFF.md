@@ -2,38 +2,41 @@
 
 Updated: 2026-09-29
 Branch: feature/cli-baseline-0.3.4
-Base: b506e2a (exact v0.3.4 tag)
-Status: live CLI token usage verified; owner authorized commit and push as v0.3.5.
+Prior commit: f7319f8 (v0.3.5+2609291, pushed)
+Status: selective CLI improvements complete; committed and pushed on this branch.
 
 ## Completed
 
-- Created this isolated checkout from v0.3.4; no later implementation changes imported.
-- Installed locked dependencies offline with npm.cmd ci --offline --ignore-scripts.
-- npm.cmd run build: PASS.
-- npm.cmd run typecheck: PASS.
-- npm.cmd test: PASS, 54 files / 392 tests (offline; approved run outside sandbox for installer temporary fixtures).
-- Live task input/output/total tokens and generation rate added; estimates are marked `~` and replaced by provider reports when available.
-- Core emits typed cumulative usage events across requests, partial failures, and delegated child tasks. Generation timing excludes tools, approvals, initial inference wait, and delayed usage trailers.
-- Chat displays live usage beneath the question, preserves the final task snapshot, and accumulates session totals. Estimated session totals retain their marker; costs remain unknown for estimates or mixed-model usage.
-- One-shot `run` displays live usage on its thinking line or terminal title while answering, then a summary. Piped output gets summaries without live cursor traffic.
-- TDD and independent review completed; no new dependencies or live API calls used for tests.
-- node apps/cli/dist/index.js --version: v0.3.4+260924e (original tag content).
+- Preserved live token accounting from v0.3.5 and the v0.3.4 CLI baseline.
+- Ported configurable /connect presets and validated custom providers; OrcaRouter now shows a Free Models annotation. NVIDIA connection text distinguishes trial credits.
+- Free model filtering requires explicit zero input/output prices or scoped declarations; reported paid fees override declarations. Unknown/manual models are not labelled free.
+- Catalog failures report diagnostics and a failing exit code, including JSON output.
+- Classified stream authentication, capacity, rate-limit and malformed-response errors.
+- Added bounded, abortable retries before AUTO fallback; visible partial answers are never replayed. Inference cancellation returns cancelled.
+- Moved slash suggestions above the composer, preserving live usage rendering.
 
 ## Working tree and decisions
 
-- Increment contains CLI chat/session/UI, contracts events, core usage tracking, provider transport/parser, package version metadata, and HANDOFF.md. New tests: chat_usage.test.ts, core usage.test.ts, provider sse_usage.test.ts.
-- Commit subject: feat(cli): display live token usage and generation rate. Version advances to v0.3.5 through the original Git hooks. No merge or npm publication requested.
-- Development location: D:/projects/moderado/.worktrees/cli-baseline-0.3.4.
-- Original extension branch and published refs remain unchanged.
-- Extension redesign is deferred; improve the CLI first.
+- Changes span CLI config/provider/model menus, contracts, core retries, provider parsing/discovery, offline tests and the implementation plan.
+- No new dependencies, extension transport, context meter, merge or release in this increment.
+- Git hooks stamped the feature commit and incremented VERSION.
+- Development location: D:/projects/moderado/.worktrees/cli-baseline-0.3.4. Parent checkout remains on feature/vscode-extension.
+- Plan and configuration example: docs/superpowers/plans/2026-09-29-cli-selective-ports.md.
+
+## Checks
+
+- npm.cmd run build ? PASS.
+- npm.cmd run typecheck ? PASS.
+- npm.cmd test ? PASS: 57 files / 408 tests, offline. Installer fixtures required an approved run outside the sandbox.
+- Local combined review completed; subagents were unavailable due to account usage limits.
 
 ## Blockers
 
-- None. Actual provider behavior has not been exercised with a live API key; token estimates use a coarse four-characters-per-token approximation.
+- None. Provider behavior was tested with offline fixtures; no live provider account was exercised.
 
 ## Next action
 
-1. Restart the CLI with `node apps/cli/dist/index.js` from this worktree and try a task; confirm live usage and speed appear. If the global command was linked here with npm link, it uses the rebuilt code too.
+1. Restart the CLI from this worktree and inspect /connect and the model menu.
 
 ---
 

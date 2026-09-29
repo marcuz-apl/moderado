@@ -59,6 +59,12 @@ export class ProviderTimeoutError extends ProviderError {
 
 // --- Streaming Contracts ---
 
+export function isRetryableProviderError(error: unknown): boolean {
+  if (error instanceof AuthenticationError || error instanceof MalformedResponseError || error instanceof EmptyResponseError) return false;
+  return error instanceof RateLimitError || error instanceof ModelUnavailableError || error instanceof ProviderTimeoutError ||
+    (error instanceof ProviderError && (error.statusCode ?? 0) >= 500);
+}
+
 export const ChatUsageSchema = z.object({
   promptTokens: z.number().int().nonnegative(),
   completionTokens: z.number().int().nonnegative(),

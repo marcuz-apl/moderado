@@ -1,4 +1,16 @@
-import { ChatCompletionChunk, ChatUsageSchema, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
+import { AuthenticationError, ChatCompletionChunk, ChatUsageSchema, MalformedResponseError, ModelUnavailableError, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
+
+export function classifyInjectedStreamError(raw: unknown): ProviderError {
+  const error = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};
+  const code = error.code ?? error.status ?? error.type;
+  const status = typeof code === 'number' ? code : typeof code === 'string' && /^\d{3}$/.test(code) ? Number(code) : undefined;
+  const message = typeof error.message === 'string' ? error.message : typeof raw === 'string' ? raw : 'Provider reported a stream error';
+  if (status === 401 || status === 403) return new AuthenticationError(message, status);
+  if (status === 429 || /rate\s*limit|too many requests/i.test(message)) return new RateLimitError(message);
+  if ((status !== undefined && status >= 500) || /overload|capacity|unavailable|temporar|busy|try again/i.test(message)) return new ModelUnavailableError(message, status ?? 503);
+  if (/api[\s_-]?key|unauthor|forbidden|authentication/i.test(message)) return new AuthenticationError(message);
+  return new ProviderError(message, 'ERR_STREAM_ERROR', status);
+}
 
 export async function* parseSseStream(
   byteStream: AsyncIterable<Uint8Array>
@@ -29,22 +41,11 @@ export async function* parseSseStream(
         try {
           parsed = JSON.parse(dataStr);
         } catch {
-          // Ignore non-JSON data lines
-          continue;
+          throw new MalformedResponseError('Provider sent an unparseable SSE data line');
         }
 
         if (parsed && typeof parsed === 'object' && parsed.error) {
-          const err = parsed.error;
-          const errCode = err.code ?? err.status;
-          const errMsg = err.message || (typeof err === 'string' ? err : JSON.stringify(err));
-          if (errCode === 429 || /rate\s*limit/i.test(errMsg)) {
-            throw new RateLimitError(`Provider rate limit exceeded: ${errMsg}`);
-          }
-          throw new ProviderError(
-            `Provider stream error (${errCode ?? 'unknown'}): ${errMsg}`,
-            'ERR_STREAM_ERROR',
-            typeof errCode === 'number' ? errCode : undefined
-          );
+          throw classifyInjectedStreamError(parsed.error);
         }
 
         const choice = parsed.choices?.[0];

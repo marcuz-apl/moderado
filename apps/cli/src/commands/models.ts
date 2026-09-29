@@ -1,11 +1,17 @@
-import { NvidiaAdapter, fetchOpenRouterFreeModels } from '@moderado/providers';
+import { NvidiaAdapter, fetchOpenRouterFreeModels, fetchProviderModels, isFreeModelEntry } from '@moderado/providers';
 import { Router } from '@moderado/core';
 import { CliParsedArgs } from '../args.js';
+import { findProviderPreset, freeModelPolicyFor } from '../config.js';
+import { isFreeModelOption } from '../model_pricing.js';
 
 export interface HandleModelsOptions {
   fetchImpl?: typeof fetch;
   nvidiaAdapter?: NvidiaAdapter;
 }
+
+/** One catalog row, or the reason a provider's list could not be built. */
+type CatalogEntry = { id: string; provider: string; accessTier: string; toolSupport: string; notes?: string };
+type CatalogResult = CatalogEntry[] | { error: string };
 
 export async function handleModelsCommand(
   args: CliParsedArgs,
@@ -15,13 +21,19 @@ export async function handleModelsCommand(
   const router = new Router();
   const requestedProvider = args.provider?.toLowerCase();
 
-  const results: Record<string, { id: string; provider: string; accessTier: string; toolSupport: string; notes?: string }[]> = {};
+  const results: Record<string, CatalogResult> = {};
+  // A provider that cannot be reached is a failure, not an empty list. Silently
+  // reporting "0 free models" for a broken or unconfigured provider is what made
+  // this command useless as a diagnostic.
+  const failures: string[] = [];
 
   // 1. NVIDIA NIM Free Models
   if (!requestedProvider || requestedProvider === 'nvidia-nim' || requestedProvider === 'nvidia') {
     try {
+      const policy = freeModelPolicyFor('nvidia-nim');
       const inventory = await provider.discoverModels();
-      const freeModels = inventory
+      results['NVIDIA NIM'] = inventory
+        .filter((entry) => isFreeModelOption(entry, router.classifyModel(entry.id), policy))
         .map((entry) => {
           const meta = router.classifyModel(entry.id, args.profile.includes('local'));
           return {
@@ -32,10 +44,13 @@ export async function handleModelsCommand(
             notes: meta.source,
           };
         })
-        .filter((entry) => (entry.accessTier === 'free_trial' || entry.accessTier === 'local') && entry.toolSupport === 'supported');
-      results['NVIDIA NIM'] = freeModels;
-    } catch {
-      results['NVIDIA NIM'] = [];
+        // Free evidence answers cost, not capability. This catalog is the agent's
+        // tool-calling pool, so a model that cannot emit tool calls is still not
+        // offered here, exactly as before the free-catalog declaration.
+        .filter((entry) => entry.toolSupport === 'supported');
+    } catch (err) {
+      results['NVIDIA NIM'] = { error: err instanceof Error ? err.message : String(err) };
+      failures.push('NVIDIA NIM');
     }
   }
 
@@ -50,11 +65,38 @@ export async function handleModelsCommand(
         toolSupport: 'supported',
         notes: 'free tier',
       }));
-    } catch {
-      results['OpenRouter'] = [];
+    } catch (err) {
+      results['OpenRouter'] = { error: err instanceof Error ? err.message : String(err) };
+      failures.push('OpenRouter');
     }
   }
 
+  // 3. OrcaRouter Free Models
+  // The catalog prices metered models but advertises no `pricing` on its free
+  // routing endpoints, so advertised-zero-price filtering returns nothing. Those
+  // endpoints are recognised by the trailing `free` marker the preset declares,
+  // so the whole catalog is scanned through the one shared predicate.
+  if (!requestedProvider || requestedProvider === 'orcarouter') {
+    const preset = findProviderPreset('orcarouter')!;
+    const policy = freeModelPolicyFor('orcarouter');
+    try {
+      const catalog = await fetchProviderModels(preset.baseUrl, undefined, { fetchImpl: options.fetchImpl });
+      results['OrcaRouter'] = catalog
+        .filter((entry) => isFreeModelOption(entry, router.classifyModel(entry.id), policy))
+        .map((entry) => ({
+          id: entry.id,
+          provider: 'OrcaRouter',
+          accessTier: 'free',
+          // A routing alias forwards to whatever backend it picks, so tool
+          // support is reported as unverified rather than claimed.
+          toolSupport: 'unknown',
+          notes: isFreeModelEntry(entry) ? 'advertised zero price' : 'declared free endpoint',
+        }));
+    } catch (err) {
+      results['OrcaRouter'] = { error: err instanceof Error ? err.message : String(err) };
+      failures.push('OrcaRouter');
+    }
+  }
 
   // 4. Agnes AI
   if (!requestedProvider || requestedProvider === 'agnes-ai' || requestedProvider === 'agnes') {
@@ -66,15 +108,18 @@ export async function handleModelsCommand(
 
   if (args.json) {
     process.stdout.write(JSON.stringify(results, null, 2) + '\n');
-    return 0;
+    return failures.length > 0 ? 1 : 0;
   }
 
-  const totalCount = Object.values(results).reduce((acc, list) => acc + list.length, 0);
-  process.stdout.write(`\n\x1b[1;36mModerado Free Models Catalog\x1b[0m \x1b[90m(${totalCount} verified free models across NVIDIA NIM, OpenRouter, OpenCode, and Agnes)\x1b[0m\n\n`);
+  const listed = Object.entries(results).filter(
+    (entry): entry is [string, CatalogEntry[]] => Array.isArray(entry[1])
+  );
+  const totalCount = listed.reduce((acc, [, list]) => acc + list.length, 0);
+  process.stdout.write(`\n\x1b[1;36mModerado Free / Trial Models Catalog\x1b[0m \x1b[90m(${totalCount} free/trial models across ${listed.map(([name]) => name).join(', ')})\x1b[0m\n\n`);
 
-  for (const [providerName, list] of Object.entries(results)) {
+  for (const [providerName, list] of listed) {
     if (list.length === 0) continue;
-    process.stdout.write(`\x1b[1;38;5;75m=== ${providerName} (${list.length} Free Models) ===\x1b[0m\n`);
+    process.stdout.write(`\x1b[1;38;5;75m=== ${providerName} (${list.length} Free / Trial Models) ===\x1b[0m\n`);
     process.stdout.write(
       `${'MODEL ID'.padEnd(52)} ${'ACCESS TIER'.padEnd(14)} ${'TOOL SUPPORT'.padEnd(14)} NOTES\n`
     );
@@ -89,6 +134,14 @@ export async function handleModelsCommand(
     process.stdout.write('\n');
   }
 
+  // Unreachable providers are reported explicitly so they never read as a
+  // provider that genuinely has zero free models.
+  for (const [providerName, result] of Object.entries(results)) {
+    if (!Array.isArray(result)) {
+      process.stdout.write(`\x1b[31m=== ${providerName}: ${result.error}\x1b[0m\n`);
+    }
+  }
+
   if (!args.json && !args.nonInteractive) {
     const { askQuestion } = await import('../ui/prompt.js');
     const { selectModelInteractive } = await import('../ui/model_selector.js');
@@ -98,5 +151,5 @@ export async function handleModelsCommand(
     }
   }
 
-  return 0;
+  return failures.length > 0 ? 1 : 0;
 }

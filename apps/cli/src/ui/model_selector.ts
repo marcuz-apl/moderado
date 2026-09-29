@@ -8,7 +8,8 @@ import {
   selectConfirmPopup,
   type PopupListItem,
 } from './popup.js';
-import { loadConfig, saveConfig, resolveApiKey } from '../config.js';
+import { loadConfig, saveConfig, resolveApiKey, freeModelPolicyFor, type ProviderFreePolicy } from '../config.js';
+import { isFreeModelOption } from '../model_pricing.js';
 
 export interface ModelSelectionResult {
   modelId?: string;
@@ -38,7 +39,6 @@ export interface CompatibleModelSelectorOptions {
   providerId: string;
   providerName: string;
   currentModel?: string;
-  allModelsFree?: boolean;
   signal?: AbortSignal;
   drawFrame: (popupLines: string[]) => void;
 }
@@ -80,10 +80,13 @@ export function buildCompatibleModelMenuItems(
   providerName: string,
   models: CompatibleModelEntry[],
   currentModel?: string,
-  allModelsFree = false
+  freePolicy?: ProviderFreePolicy
 ): PopupListItem[] {
   const items: PopupListItem[] = [];
-  if (allModelsFree && models.length > 0) {
+  if (freePolicy?.freeCatalog && models.length > 0 && models.every(model => isFreeCompatibleModel(model, freePolicy))) {
+    // A provider that declares its whole catalog free (Agnes AI) has nothing to
+    // filter on, so it offers one entry listing everything rather than a
+    // free-vs-paid split that would put every model on the same side.
     items.push({
       label: 'Browse available models',
       value: 'browse',
@@ -91,7 +94,7 @@ export function buildCompatibleModelMenuItems(
       description: `Filter the live ${providerName} free model catalog.`,
     });
   } else {
-    const freeCount = models.filter(isFreeCompatibleModel).length;
+    const freeCount = models.filter((model) => isFreeCompatibleModel(model, freePolicy)).length;
     if (freeCount > 0) {
       items.push({ label: 'Browse Free Models', value: 'free', tag: `${freeCount} Free`, description: `No-cost ${providerName} endpoints.` });
     }
@@ -99,7 +102,7 @@ export function buildCompatibleModelMenuItems(
   items.push({
     label: 'Enter a model ID',
     value: 'custom',
-    tag: 'Free',
+    tag: 'Manual',
     description: `Use any ${providerName} model ID, including one not returned by discovery.`,
   });
   if (currentModel) {
@@ -118,30 +121,35 @@ export function buildCompatibleModelMenuItems(
   return items;
 }
 
-function isFreeCompatibleModel(model: CompatibleModelEntry): boolean {
-  const prices = Object.values(model.pricing ?? {});
-  return prices.length > 0 && prices.every((price) => Number.isFinite(Number(price)) && Number(price) === 0);
+function isFreeCompatibleModel(model: CompatibleModelEntry, policy?: ProviderFreePolicy): boolean {
+  // Preset declarations are evidence the catalog cannot supply: Agnes AI
+  // publishes no `pricing` and every endpoint is free, while OrcaRouter's free
+  // routing endpoints are named for it. A pricing-only test hides both.
+  return isFreeModelOption(model, { modelId: model.id, accessTier: 'unknown', toolSupport: 'unknown', source: 'heuristic' }, policy);
 }
 
-function compatibleModelPopupItem(model: CompatibleModelEntry, allModelsFree: boolean, providerName: string): PopupListItem {
-  const isFree = allModelsFree || isFreeCompatibleModel(model);
+function compatibleModelPopupItem(model: CompatibleModelEntry, providerName: string, policy?: ProviderFreePolicy): PopupListItem {
+  const isFree = isFreeCompatibleModel(model, policy);
   const price = model.pricing?.prompt;
   return {
     label: model.id,
     value: model.id,
-    tag: 'Free',
+    tag: isFree ? 'Free' : 'Price unknown',
     description: isFree
       ? `${providerName} free model`
       : price
         ? `${providerName} model · input $${Number(price) * 1_000_000}/M tokens`
-        : `${providerName} free model`,
+        : `${providerName} model · pricing unavailable`,
   };
 }
 
 export async function selectCompatibleModelOverlay(
   options: CompatibleModelSelectorOptions
 ): Promise<string | undefined> {
-  const { apiKey, baseUrl, providerId, providerName, currentModel, allModelsFree, signal, drawFrame } = options;
+  const { apiKey, baseUrl, providerId, providerName, currentModel, signal, drawFrame } = options;
+  // Whether the provider is entirely free is a declared property of the
+  // preset, never a provider id hardcoded at the call site.
+  const freePolicy = freeModelPolicyFor(providerId);
   let models: CompatibleModelEntry[] = [];
   try {
     layerPromptBox(drawFrame, `\x1b[36mQuerying ${providerName} model catalog...\x1b[0m`);
@@ -155,15 +163,15 @@ export async function selectCompatibleModelOverlay(
 
   const picked = await selectListPopup(
     `${providerName} Free Models`,
-    buildCompatibleModelMenuItems(providerName, models, currentModel, allModelsFree),
+    buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy),
     { drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close' }
   );
   if (picked === null || picked === 'keep' || picked === 'cancel') return currentModel;
   if (picked === 'browse' || picked === 'free') {
-    const visibleModels = allModelsFree ? models : models.filter(isFreeCompatibleModel);
+    const visibleModels = models.filter((model) => isFreeCompatibleModel(model, freePolicy));
     return (await selectListPopup(
       `${providerName} Free Models`,
-      visibleModels.map((model) => compatibleModelPopupItem(model, allModelsFree ?? false, providerName)),
+      visibleModels.map((model) => compatibleModelPopupItem(model, providerName, freePolicy)),
       { drawFrame, signal, filterable: true, pageSize: 10, hint: 'type to filter · ↑↓ navigate · Enter select · Esc close' }
     )) ?? currentModel;
   }

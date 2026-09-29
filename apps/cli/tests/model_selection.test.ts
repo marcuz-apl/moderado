@@ -49,11 +49,11 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
   });
 
   it('marks every Agnes model choice as free', () => {
-    const items = buildCompatibleModelMenuItems('Agnes AI', [{ id: 'agnes/chat' }, { id: 'agnes/code' }], undefined, true);
+    const items = buildCompatibleModelMenuItems('Agnes AI', [{ id: 'agnes/chat' }, { id: 'agnes/code' }], undefined, { freeCatalog: true });
 
     expect(items).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Browse available models', tag: '2 Free' }),
-      expect.objectContaining({ label: 'Enter a model ID', tag: 'Free' }),
+      expect.objectContaining({ label: 'Enter a model ID', tag: 'Manual' }),
     ]));
   });
 
