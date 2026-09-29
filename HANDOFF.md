@@ -2,41 +2,36 @@
 
 Updated: 2026-09-29
 Branch: feature/cli-baseline-0.3.4
-Prior commit: f7319f8 (v0.3.5+2609291, pushed)
-Status: selective CLI improvements complete; committed and pushed on this branch.
+Status: CLI v0.3.7 feature branch pushed; package metadata aligned in a follow-up commit. No release tag or merge.
 
 ## Completed
 
-- Preserved live token accounting from v0.3.5 and the v0.3.4 CLI baseline.
-- Ported configurable /connect presets and validated custom providers; OrcaRouter now shows a Free Models annotation. NVIDIA connection text distinguishes trial credits.
-- Free model filtering requires explicit zero input/output prices or scoped declarations; reported paid fees override declarations. Unknown/manual models are not labelled free.
-- Catalog failures report diagnostics and a failing exit code, including JSON output.
-- Classified stream authentication, capacity, rate-limit and malformed-response errors.
-- Added bounded, abortable retries before AUTO fallback; visible partial answers are never replayed. Inference cancellation returns cancelled.
-- Moved slash suggestions above the composer, preserving live usage rendering.
-
-## Working tree and decisions
-
-- Changes span CLI config/provider/model menus, contracts, core retries, provider parsing/discovery, offline tests and the implementation plan.
-- No new dependencies, extension transport, context meter, merge or release in this increment.
-- Git hooks stamped the feature commit and incremented VERSION.
-- Development location: D:/projects/moderado/.worktrees/cli-baseline-0.3.4. Parent checkout remains on feature/vscode-extension.
-- Plan and configuration example: docs/superpowers/plans/2026-09-29-cli-selective-ports.md.
+- Forked from v0.3.4; v0.3.5 adds live task/session token usage and generation rate.
+- v0.3.6 adds provider presets, evidence-based free model selection, stream errors, retries, cancellation, and slash suggestions.
+- v0.3.7 adds /review (read-only), /map, /budget (best-effort token ceiling), concise thinking, navy task headings, and default interactive auto-approval with a working off toggle.
+- Esc stops active generation on the first press, including with a follow-up draft. Model discovery aborts return cancelled and partial answers show a stopped message.
+- Matched apps/cli/package.json and package-lock.json to VERSION's base SemVer 0.3.7.
 
 ## Checks
 
 - npm.cmd run build ? PASS.
 - npm.cmd run typecheck ? PASS.
-- npm.cmd test ? PASS: 57 files / 408 tests, offline. Installer fixtures required an approved run outside the sandbox.
-- Local combined review completed; subagents were unavailable due to account usage limits.
+- npm.cmd test ? PASS: 59 files / 423 tests, offline; installer fixtures run with approved temp access.
+- No live provider account tested.
+
+## Decisions
+
+- Per-task /budget currently supports token limits only. Provider usage can arrive late, so stopping is best-effort; USD limits require reliable live pricing.
+- Additional competitor-inspired features are deferred. Recommend v0.3.7 release after branch integration and release checks.
+- Original VS Code branch remains separate. Worktree: D:/projects/moderado/.worktrees/cli-baseline-0.3.4.
 
 ## Blockers
 
-- None. Provider behavior was tested with offline fixtures; no live provider account was exercised.
+- None for the feature branch. Release is not tagged or published.
 
 ## Next action
 
-1. Restart the CLI from this worktree and inspect /connect and the model menu.
+1. Review and integrate the green feature branch into master before creating the v0.3.7 release tag.
 
 ---
 
