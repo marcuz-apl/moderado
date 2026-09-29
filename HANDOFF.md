@@ -1,8 +1,8 @@
 # Active CLI Baseline
 
 Updated: 2026-09-29
-Branch: feature/cli-baseline-0.3.4
-Status: CLI v0.3.7 feature branch includes session exit summary. No release tag or merge.
+Branch: master
+Status: CLI v0.3.7 is published on npm and GitHub. Tag v0.3.7 points to 322e326; previous master and VS Code refs are saved in a local recovery bundle.
 
 ## Completed
 
@@ -12,27 +12,30 @@ Status: CLI v0.3.7 feature branch includes session exit summary. No release tag 
 - Esc stops active generation on the first press, including with a follow-up draft. Model discovery aborts return cancelled and partial answers show a stopped message.
 - Matched apps/cli/package.json and package-lock.json to VERSION's base SemVer 0.3.7.
 - /exit and /quit now print a session summary with ID, active model, input/output/total tokens, cost status, and /session resume hint; unavailable and estimated usage are labeled.
+- v0.3.7 tag verification passed all six jobs; npm package and GitHub Release with 11 verified assets are public.
+- The publish workflow's final release-create command passed the tag twice and failed after npm publication. The GitHub Release was completed manually; the command is corrected for future releases.
 
 ## Checks
 
 - npm.cmd run build ? PASS.
 - npm.cmd run typecheck ? PASS.
 - npm.cmd test ? PASS: 59 files / 426 tests, offline; installer fixtures run with approved temp access.
+- npm.cmd run verify:package ? PASS: verified moderado-0.3.7.tgz.
 - No live provider account tested.
 
 ## Decisions
 
 - Per-task /budget currently supports token limits only. Provider usage can arrive late, so stopping is best-effort; USD limits require reliable live pricing.
-- Additional competitor-inspired features are deferred. Recommend v0.3.7 release after branch integration and release checks.
-- Original VS Code branch remains separate. Worktree: D:/projects/moderado/.worktrees/cli-baseline-0.3.4.
+- Additional competitor-inspired features are deferred until after the v0.3.7 release.
+- The old VS Code extension source is removed from the active tree. The previous refs are backed up at %TEMP%/moderado-pre-cli-master-20260929/pre-cli-master.bundle.
 
 ## Blockers
 
-- None for the feature branch. Release is not tagged or published.
+- None. The original publish workflow run is red because its final GitHub Release command had an extra tag argument; npm and the manually completed GitHub Release are live.
 
 ## Next action
 
-1. Integrate the green feature branch into master before creating the v0.3.7 release tag.
+1. Start future development from master; rebuild the VS Code extension on a new feature branch when ready.
 
 ---
 
