@@ -2,11 +2,12 @@ import * as vscode from 'vscode';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import { createDefaultToolRegistry } from '@moderado/tools';
-import type { IProviderAdapter } from '@moderado/contracts';
+import type { HostEventEnvelope, IProviderAdapter } from '@moderado/contracts';
 import { findProviderPreset, NvidiaAdapter, OpenAICompatibleAdapter } from '@moderado/providers';
 import { createAgentHost, type AgentHost } from './agent_host.js';
 import { buildAbout } from './about.js';
 import { renderWebviewHtml } from './webview_html.js';
+import { createTranscript, type Transcript } from './transcript.js';
 import { DEFAULT_APPROVAL_SETTINGS, type ApprovalSettings } from './approval_handler.js';
 
 const APPROVALS_KEY = 'moderado.approvals';
@@ -65,6 +66,9 @@ function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string 
 class ChatViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private host: AgentHost | undefined;
+  private transcript: Transcript | undefined;
+  /** Set by `ready` so a view that reopens lands on a session the host knows. */
+  private sessionId: string | undefined;
 
   constructor(private readonly context: vscode.ExtensionContext) {}
 
@@ -73,11 +77,13 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     view.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')] };
     view.webview.html = webviewHtml(view.webview, this.context.extensionUri);
     const folder = vscode.workspace.workspaceFolders?.[0];
+    const transcript = createTranscript(this.sessionId ?? 'pending');
+    this.transcript = transcript;
     this.host = createAgentHost({
       workspaceRoot: folder?.uri.fsPath ?? process.cwd(),
       createTools: () => createDefaultToolRegistry(),
       createProvider: (connectionId) => createProvider(this.context, connectionId),
-      onEvent: (envelope) => this.post({ type: 'event', event: envelope.event }),
+      onEvent: (envelope) => this.onAgentEvent(transcript, envelope),
       onApproval: (request) => this.post({ type: 'approval', request }),
       // Keys go to SecretStorage and are never read back into a message.
       // VS Code returns a Thenable, so wrap it to satisfy the Promise contract.
@@ -104,12 +110,44 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async onMessage(message: { type?: string; category?: string; enabled?: boolean; providerId?: string; modelId?: string }): Promise<void> {
+  /** Reduce an agent event into view state and push it; the host stays authoritative. */
+  private onAgentEvent(transcript: Transcript, envelope: HostEventEnvelope): void {
+    transcript.apply(envelope);
+    this.post({ type: 'state', state: transcript.snapshot() });
+  }
+
+  private async onMessage(message: { type?: string; sessionId?: string; prompt?: string; category?: string; enabled?: boolean; providerId?: string; modelId?: string }): Promise<void> {
     const host = this.host;
     if (!host) return;
     if (message?.type === 'ready') {
+      // The webview needs a session the host already knows, or start_turn fails.
+      this.sessionId = host.newSession();
+      this.transcript?.reset(this.sessionId);
       await this.sendInitialState(host);
       return;
+    }
+    if (message?.type === 'new_session') {
+      // Sessions are minted by the host; the webview never invents an id.
+      this.sessionId = host.newSession();
+      this.transcript?.reset(this.sessionId);
+      this.post({ type: 'state', state: this.transcript?.snapshot() });
+      return;
+    }
+    if (message?.type === 'resume_session' && typeof message.sessionId === 'string') {
+      const response = await host.handle(message);
+      if (response.ok) {
+        // The host confirms the switch; adopt its session and clear the timeline.
+        this.sessionId = message.sessionId;
+        this.transcript?.reset(message.sessionId);
+        this.post({ type: 'state', state: this.transcript?.snapshot() });
+        return;
+      }
+      this.post(response);
+      return;
+    }
+    if (message?.type === 'start_turn' && typeof message.prompt === 'string' && message.sessionId === this.sessionId) {
+      this.transcript?.beginTurn(message.prompt);
+      this.post({ type: 'state', state: this.transcript?.snapshot() });
     }
     const response = await host.handle(message);
     this.post(response);
@@ -134,6 +172,7 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       host.handle(request('list_sessions')),
     ]);
     const state: Record<string, unknown> = {
+      ...this.transcript?.snapshot(),
       approvals: host.getApprovalSettings(),
       providerId: this.context.workspaceState.get<string>(PROVIDER_KEY) ?? '',
       modelId: this.context.workspaceState.get<string>(MODEL_KEY) ?? '',
@@ -142,6 +181,11 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     if (about.ok && about.result.type === 'about') state.about = about.result;
     if (sessions.ok && sessions.result.type === 'sessions') state.recentSessions = sessions.result.sessions;
     this.post({ type: 'state', state });
+  }
+
+  /** Mint a session on the host and tell the view to start clean. */
+  newSession(): void {
+    this.post({ type: 'new_session' });
   }
 
   post(message: unknown): void {
@@ -153,7 +197,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const provider = new ChatViewProvider(context);
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider('moderado.chat', provider),
-    vscode.commands.registerCommand('moderado.newSession', () => provider.post({ type: 'state', state: { newSession: true } })),
+    vscode.commands.registerCommand('moderado.newSession', () => provider.newSession()),
     vscode.commands.registerCommand('moderado.openSettings', () => provider.post({ type: 'state', state: { view: 'settings' } })),
   );
 }

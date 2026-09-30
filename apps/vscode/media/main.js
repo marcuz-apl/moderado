@@ -22,7 +22,7 @@
   let mode = 'act';
   let selectedProvider = '';
   let composerDraft = '';
-  let sessionId = crypto.randomUUID();
+  let sessionId = '';
 
   document.body.innerHTML = `
     <div class="app-shell">
@@ -58,12 +58,8 @@
   document.getElementById('home').addEventListener('click', () => { view = 'chat'; render(); });
   document.getElementById('settings-button').addEventListener('click', () => { view = 'settings'; render(); });
   document.getElementById('new-session').addEventListener('click', () => {
-    sessionId = crypto.randomUUID();
-    state.turns = [];
-    state.currentTurn = undefined;
-    state.status = 'idle';
     view = 'chat';
-    render();
+    post({ type: 'new_session' });
   });
 
   function showNotice(message) {
@@ -99,7 +95,7 @@
       recent.append(el('h2', 'section-title', 'Recent sessions'));
       for (const session of array(state.recentSessions).slice(0, 5)) {
         if (!session || typeof session.id !== 'string') continue;
-        const row = button(text(session.title, 'Untitled session'), 'recent-row', () => { sessionId = session.id; post({ type: 'resume_session', sessionId }); });
+        const row = button(text(session.title, 'Untitled session'), 'recent-row', () => { post({ type: 'resume_session', sessionId: session.id }); });
         row.append(el('span', 'recent-arrow', '↗'));
         recent.append(row);
       }
@@ -137,7 +133,8 @@
     composer.addEventListener('submit', (event) => {
       event.preventDefault();
       const message = input.value.trim();
-      if (!message || state.status === 'busy') return;
+      // Without a host-minted session there is nothing to run the turn against.
+      if (!message || state.status === 'busy' || !sessionId) return;
       post({ type: 'start_turn', sessionId, prompt: message, mode: mode === 'plan' ? 'Plan' : 'Execute' });
       composerDraft = '';
       input.value = '';

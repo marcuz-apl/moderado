@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type {
-  ApprovalRequest, ChatCompletionChunk, IProviderAdapter, IToolRegistry,
+  ApprovalRequest, ChatCompletionChunk, HostEventEnvelope, IProviderAdapter, IToolRegistry,
   ModelInventoryEntry, ToolResult,
 } from '@moderado/contracts';
 import { createDefaultToolRegistry } from '@moderado/tools';
@@ -140,9 +140,10 @@ describe('agent host', () => {
     host.dispose();
   });
 
-  it('runs an enabled category without asking', async () => {
+  it('runs an enabled category without asking, but still reports it as activity', async () => {
     const pending: ApprovalRequest[] = [];
     const executed: string[] = [];
+    const events: HostEventEnvelope[] = [];
     const tools: IToolRegistry = createDefaultToolRegistry();
     const readFile = tools.get('read_file')!;
     tools.register({
@@ -153,13 +154,59 @@ describe('agent host', () => {
       },
     });
     const { host, session } = await readyHost(
-      { createTools: () => tools, onApproval: (request) => pending.push(request) },
+      { createTools: () => tools, onApproval: (request) => pending.push(request), onEvent: (envelope) => events.push(envelope) },
       once(toolCall('read_file', { path: 'README.md' })),
     );
     await host.handle(intent('start_turn', { sessionId: session, prompt: 'Read it', mode: 'Execute' }));
-    await settle();
+    await host.waitForIdle();
     expect(pending).toEqual([]);
     expect(executed).toEqual(['read_file']);
+    // An auto-approved edit is still visible in the timeline, just never asked.
+    const kinds = events.map((envelope) => envelope.event.type);
+    expect(kinds).toContain('tool_call_initiated');
+    expect(kinds).toContain('tool_result');
+    expect(kinds).not.toContain('approval_request');
+    host.dispose();
+  });
+
+  it('turning on one category leaves the other four untouched', async () => {
+    const { host } = await readyHost();
+    for (const [category, enabled] of [['mcp', true], ['edit', false], ['read', false]] as const) {
+      expect((await host.handle(intent('update_settings', { category, enabled }))).ok).toBe(true);
+    }
+    expect(host.getApprovalSettings()).toEqual({ read: false, edit: false, web_fetch: true, execute: false, mcp: true });
+    host.dispose();
+  });
+
+  it('forces edit approval in Plan mode even when the checkbox is on', async () => {
+    const pending: ApprovalRequest[] = [];
+    const executed: string[] = [];
+    const tools: IToolRegistry = createDefaultToolRegistry();
+    const writeFile = tools.get('write_file')!;
+    tools.register({
+      ...writeFile,
+      execute: async (): Promise<ToolResult> => {
+        executed.push('write_file');
+        return { toolName: 'write_file', status: 'success', output: 'ok' };
+      },
+    });
+    const { host, session } = await readyHost({ createTools: () => tools, onApproval: (request) => pending.push(request) },
+      once(toolCall('write_file', { path: 'out.txt', content: 'x' })));
+    await host.handle(intent('update_settings', { category: 'edit', enabled: true }));
+    await host.handle(intent('start_turn', { sessionId: session, prompt: 'Write it', mode: 'Plan' }));
+    await settle();
+    // Edit is auto-approved in Act mode, but Plan must still ask.
+    expect(pending.map((item) => item.toolName)).toEqual(['write_file']);
+    await host.handle(intent('cancel_turn', { sessionId: session }));
+    await host.waitForIdle();
+    expect(executed).toEqual([]);
+    host.dispose();
+  });
+
+  it('refuses an approval decision with no session in flight', async () => {
+    const { host, session } = await readyHost();
+    expect(await host.handle(intent('resolve_approval', { sessionId: session, approvalRequestId: 'r1', status: 'approved' })))
+      .toMatchObject({ ok: false });
     host.dispose();
   });
 
