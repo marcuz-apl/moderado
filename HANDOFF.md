@@ -17,12 +17,16 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 - **Milestone 3 (chat sidebar):** [`transcript.ts`](file:///d:/projects/moderado/apps/vscode/src/transcript.ts) reduces `HostEventEnvelope` events into the view state `media/main.js` renders (turns, current turn, tool activity, pending approvals, usage, model). It is free of `vscode` and the DOM, so the streaming rules are tested offline. The host pushes a fresh transcript snapshot after every event.
 - **Milestone 4 (approval panel):** auto-approved categories still emit `tool_call_initiated` / `tool_result` so they appear in the activity timeline without an `approval_request`; Plan mode forces edit and web-fetch approval regardless of the checkbox; each toggle mutates only its own category; decisions are refused when no session is in flight.
 - Fixed: sessions are minted by the host and pushed on `ready`. The webview previously generated its own id with `crypto.randomUUID()`, so every `start_turn` failed with `UNKNOWN_SESSION`. The composer now refuses to submit without a host session, and resume adopts the host-confirmed id.
+- **Milestone 5 (packaging and release gate):** VSIX packaging built on the standard library only ([`scripts/zip.mjs`](file:///d:/projects/moderado/scripts/zip.mjs), [`scripts/vsix.mjs`](file:///d:/projects/moderado/scripts/vsix.mjs), [`scripts/package_vscode.mjs`](file:///d:/projects/moderado/scripts/package_vscode.mjs)), a verifier that reopens the artifact ([`scripts/verify_vsix.mjs`](file:///d:/projects/moderado/scripts/verify_vsix.mjs)), an offline extension-host smoke test that activates the real bundle against a stubbed `vscode` ([`host_stub.ts`](file:///d:/projects/moderado/apps/vscode/tests/host_stub.ts)), root scripts `package:vsix` / `verify:vsix`, a Windows+Linux CI matrix ([`.github/workflows/vscode-extension.yml`](file:///d:/projects/moderado/.github/workflows/vscode-extension.yml)), and a real extension README.
 - `scripts/build_vscode.mjs` resolves entry and output from the repo root, because npm runs workspace scripts with `cwd` set to the workspace.
 - Removed stale `apps/vscode/dist/` artifacts left over from deleted `extension.ts`, `protocol.ts`, `sidecar.ts`, and `webview/*` sources.
 
 ## Checks
 
-- On `codex/vscode-extension`: `npm.cmd run build`, `npm.cmd run typecheck`, and `npm.cmd run build --workspace apps/vscode` all PASS; `npm.cmd test` PASS with 66 files / 492 tests, offline.
+- On `codex/vscode-extension`: `npm.cmd run build`, `npm.cmd run typecheck`, and `npm.cmd run build --workspace apps/vscode` all PASS; `npm.cmd test` PASS with 68 files / 507 tests, offline.
+- `npm.cmd run verify:vsix` PASS: packages and reopens the artifact, 8 entries, version 0.3.10.
+- `npm.cmd run verify:package` PASS: `Verified moderado-0.3.10.tgz`, so the CLI package is unaffected.
+- The VSIX was additionally opened with .NET's `System.IO.Compression.ZipFile` to confirm the archive is valid for a reader that is not our own code.
 - On `codex/cli-provider-presets` alone: `build` and `typecheck` PASS; `npm.cmd test` PASS with 60 files / 429 tests.
 - A `tsc -b` rebuild is required after switching branches, or stale `packages/*/dist` output makes typecheck fail on exports that are present in source.
 
@@ -42,8 +46,8 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 
 ## Next action
 
-1. Milestone 5: packaging and release gate. Nothing here has run inside a real VS Code extension host yet — every check so far is offline unit tests plus an esbuild bundle. Add VSIX packaging, an extension-host smoke test, and verify a clean-profile install on Windows and Linux before treating any of this as shipped.
-2. Known gap for that milestone: `listProviderPresets` still omits the `openai-compatible` pick-list entry, so a custom endpoint cannot be added from the UI, and the CLI's custom-connection config is not read by the extension.
+1. Nothing further is planned. The plan defines five milestones and all five are implemented; there is no Milestone 6. The unnumbered "Later settings pages" section stays unimplemented on purpose, since it says to add Features, Terminal, and General only as their actual controls are defined and tested.
+2. Not yet done, and still owner decisions: a clean-profile VSIX install on real Windows and Linux editors (CI proves the artifact builds on both, but no editor has run it), and the `openai-compatible` custom-endpoint entry, which is still missing from `listProviderPresets` so a custom endpoint cannot be added from the UI.
 
 ---
 
