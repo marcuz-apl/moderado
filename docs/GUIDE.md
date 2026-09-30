@@ -3,7 +3,7 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. Everything below applies to Moderado v0.3.0+.
+quick start. Everything below applies to Moderado v0.3.7.
 
 ---
 
@@ -40,7 +40,7 @@ Moderado is organized as an npm workspace:
 ```text
 moderado/
 ├── apps/
-│   └── cli/                 # v0.1 CLI application and terminal event rendering
+│   └── cli/                 # CLI application and terminal event rendering
 ├── packages/
 │   ├── contracts/           # Pure TypeScript interfaces, Zod schemas, events
 │   ├── core/                # Agent loop, routing policy, session state machine

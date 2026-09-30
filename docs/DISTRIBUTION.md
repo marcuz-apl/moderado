@@ -1,10 +1,10 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-Status: `moderado@0.3.0` is live on npm and the GitHub Release `v0.3.0`
+Status: `moderado@0.3.7` is live on npm and the GitHub Release `v0.3.7`
 carries all 7 binary assets. The Homebrew tap
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
-are seeded with the verified v0.3.0 manifests (byte-identical to
+are seeded with the verified v0.3.7 manifests (byte-identical to
 `npm run generate:manifests` output against the release `manifest.json`).
 The winget submission is open as
 [microsoft/winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175)
@@ -25,7 +25,7 @@ users take the `.exe`, Scoop, or winget):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash
-curl -fsSL .../install.sh | bash -s -- --version v0.3.0 --dir ~/.local/bin
+curl -fsSL .../install.sh | bash -s -- --version v0.3.7 --dir ~/.local/bin
 ```
 
 Security properties (deliberate, do not regress): downloads the binary, the
@@ -44,7 +44,7 @@ refusal against a local fixture server).
   `Formula/moderado.rb` and commit. Verify first with
   `npm run generate:manifests -- artifacts/release/manifest.json /tmp/d
   https://github.com/marcuz-apl/moderado/releases/download/vX.Y.Z`
-  and `diff` — for v0.3.0 the tap file was byte-identical.
+  and `diff` — for v0.3.7 the tap file was byte-identical.
 - No homebrew-core submission planned; a personal tap is the standard path.
 
 ## 3. Scoop bucket — seeded, keep in sync
@@ -53,13 +53,14 @@ refusal against a local fixture server).
 - Users: `scoop bucket add moderado
   https://github.com/marcuz-apl/scoop-moderado && scoop install moderado`.
 - Per release: same flow — copy `distribution/scoop/moderado.json` over
-  `bucket/moderado.json` and commit (v0.3.0 verified byte-identical).
+  `bucket/moderado.json` and commit (v0.3.7 verified byte-identical).
 
 ## 4. winget — submitted, awaiting merge
 
 - Package ID: `MarcuzApl.Moderado`. First submission is open as
   [microsoft/winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175)
-  (three manifests under `manifests/m/MarcuzApl/Moderado/0.3.0/`, validated
+  (the original 0.3.0 submission is historical; submit the v0.3.7 manifest
+  under `manifests/m/MarcuzApl/Moderado/0.3.7/`, validated
   locally with `winget validate` before push). Wait for the validation
   pipeline + merge (typically hours–days).
 - Per release: one manifest PR (automatable with `wingetcreate update

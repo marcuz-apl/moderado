@@ -1,7 +1,8 @@
 # First Public Release via npmjs.com + GitHub Actions
 
-A field log of how Moderado published `moderado@0.3.0` for the first time
-(2026-09-22). Read this before cutting `v0.3.1`: the normal path is now CI,
+A historical field log of how Moderado published `moderado@0.3.0` for the first time
+(2026-09-22). The current release is `moderado@0.3.7`; use the README and
+`docs/RELEASING.md` for current installation and release procedures. The normal path is now CI,
 but the first publish could not be, for reasons explained below.
 
 Companion runbook: [`RELEASING.md`](./RELEASING.md) (the standing procedure).
@@ -9,7 +10,7 @@ Install instructions for users: root [`README.md`](../README.md#install-moderado
 
 ---
 
-## 1. What users can install today (v0.3.0)
+## 1. What users could install at the first release (v0.3.0)
 
 | Method | Command | Status |
 |---|---|---|
