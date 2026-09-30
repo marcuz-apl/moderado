@@ -42,11 +42,16 @@ for 0.3.9 (`MERGEABLE`). It adds the three required manifests under
 and defaultLocale (en-US) — with `InstallerSha256` taken from the v0.3.9
 release sidecar.
 
-`winget validate` on winget `v1.30.140-preview` reports "multi file manifest is
-incomplete" for this set, but produces the **identical** error for an unmodified
-Microsoft manifest (`Microsoft.PowerShell` 7.6.6.0) on the same machine, so the
-message reflects a limitation of that preview build rather than these files.
-The PR body states this so a reviewer does not have to rediscover it.
+Microsoft's 10-stage validation pipeline is the authoritative check, and a
+full pass on 2026-09-30 went green through `07. Installers Scan` (which
+downloads and scans the 62 MB binary). The pipeline re-queues and is slow; check
+`gh pr checks 444475 --repo microsoft/winget-pkgs` instead of assuming failure.
+
+A local `winget validate` on `v1.30.140-preview` reports "multi file manifest is
+incomplete", but it produces the **identical** error for an unmodified,
+already-merged Microsoft manifest (`Microsoft.PowerShell` 7.6.6.0) on the same
+machine. That message is a limitation of the local preview build, not a defect
+in these files, and the PR body states this so a reviewer need not rediscover it.
 
 The remaining gate is a community moderator review. Nothing further is
 actionable locally until that lands.

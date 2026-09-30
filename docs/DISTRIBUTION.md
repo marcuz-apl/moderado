@@ -73,11 +73,17 @@ refusal against a local fixture server).
   `MarcuzApl.Moderado.locale.en-US.yaml` (defaultLocale).
 - `InstallerSha256` is the published `moderado-win-x64.exe.sha256` sidecar from
   the v0.3.9 release, verified against the attached binary.
-- `winget validate` was run locally on winget `v1.30.140-preview` and reports
-  "multi file manifest is incomplete" for this set. The identical error is
-  produced for an unmodified, already-merged Microsoft manifest
-  (`Microsoft.PowerShell` 7.6.6.0) on the same machine, so the message is a
-  limitation of that preview build, not a defect in these files.
+- Microsoft runs a 10-stage validation pipeline on the PR (`01. Pull Request
+  Validation` through `10. Validation Completed`), plus a `license/cla` check.
+  A full pass on 2026-09-30 went green through `07. Installers Scan`, which
+  downloads the 62 MB binary and scans it; the pipeline re-queues and is slow,
+  so allow time and check
+  `gh pr checks <id> --repo microsoft/winget-pkgs` rather than assuming failure.
+- This is the authoritative validation. Do **not** rely on a local
+  `winget validate` run: on `v1.30.140-preview` it reports "multi file manifest
+  is incomplete" even for an unmodified, already-merged Microsoft manifest
+  (`Microsoft.PowerShell` 7.6.6.0), so that message is a limitation of the
+  local preview build, not a defect in these files.
 - Per release after the first merge: one manifest PR (automatable with
   `wingetcreate update MarcuzApl.Moderado -u <exe-url> -v <version>`).
 - Until the PR merges, Windows users install with
