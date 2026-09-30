@@ -1,0 +1,41 @@
+{
+  "name": "moderado-vscode",
+  "displayName": "Moderado",
+  "description": "Moderado coding agent for Visual Studio Code",
+  "version": "0.3.10",
+  "publisher": "marcuz-apl",
+  "private": true,
+  "type": "module",
+  "engines": { "vscode": "^1.90.0" },
+  "main": "./dist/extension.cjs",
+  "activationEvents": ["onView:moderado.chat"],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [{ "id": "moderado", "title": "Moderado", "icon": "media/icon.svg" }]
+    },
+    "views": {
+      "moderado": [{ "type": "webview", "id": "moderado.chat", "name": "Moderado" }]
+    },
+    "commands": [
+      { "command": "moderado.newSession", "title": "Moderado: New Session" },
+      { "command": "moderado.openSettings", "title": "Moderado: Open Settings" }
+    ]
+  },
+  "scripts": {
+    "build": "tsc --noEmit && node ../../scripts/build_vscode.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run tests"
+  },
+  "files": ["dist", "media", "README.md", "LICENSE"],
+  "dependencies": {
+    "@moderado/contracts": "*",
+    "@moderado/core": "*",
+    "@moderado/providers": "*",
+    "@moderado/tools": "*",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/vscode": "1.138.0",
+    "esbuild": "0.28.2"
+  }
+}

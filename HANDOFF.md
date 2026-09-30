@@ -1,41 +1,38 @@
-# Active CLI Baseline
+# VS Code Extension Milestone 1
 
 Updated: 2026-09-29
-Branch: master
-Status: CLI v0.3.7 is published on npm and GitHub. Tag v0.3.7 points to 322e326; previous master and VS Code refs are saved in a local recovery bundle.
+Branch: `codex/vscode-extension` (from `master` at `9c87697`, CLI `v0.3.8`)
+Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebuild.md`](file:///d:/projects/moderado/docs/superpowers/plans/2026-09-29-vscode-extension-rebuild.md) is implemented and green. Nothing is pushed to `origin` yet.
 
 ## Completed
 
-- Forked from v0.3.4; v0.3.5 adds live task/session token usage and generation rate.
-- v0.3.6 adds provider presets, evidence-based free model selection, stream errors, retries, cancellation, and slash suggestions.
-- v0.3.7 adds /review (read-only), /map, /budget (best-effort token ceiling), concise thinking, navy task headings, and default interactive auto-approval with a working off toggle.
-- Esc stops active generation on the first press, including with a follow-up draft. Model discovery aborts return cancelled and partial answers show a stopped message.
-- Matched apps/cli/package.json and package-lock.json to VERSION's base SemVer 0.3.7.
-- /exit and /quit now print a session summary with ID, active model, input/output/total tokens, cost status, and /session resume hint; unavailable and estimated usage are labeled.
-- v0.3.7 tag verification passed all six jobs; npm package and GitHub Release with 11 verified assets are public.
-- The publish workflow's final release-create command passed the tag twice and failed after npm publication. The GitHub Release was completed manually; the command is corrected for future releases.
+- Extracted the provider preset catalog and the free-model policy out of the CLI presentation layer into [`packages/providers/src/presets.ts`](file:///d:/projects/moderado/packages/providers/src/presets.ts); `apps/cli/src/config.ts` and `apps/cli/src/model_pricing.ts` now re-export from it. CLI behavior is unchanged.
+- Added the versioned webview host protocol ([`packages/contracts/src/host_protocol.ts`](file:///d:/projects/moderado/packages/contracts/src/host_protocol.ts)): ten intents and ten results, all `.strict()`, with request IDs and `protocolVersion`.
+- Added the extension host: [`apps/vscode/src/agent_host.ts`](file:///d:/projects/moderado/apps/vscode/src/agent_host.ts) (intent dispatch, turn lifecycle, session registry), [`approval_handler.ts`](file:///d:/projects/moderado/apps/vscode/src/approval_handler.ts) (five categories, host-side gate), `provider_service.ts` (catalog + proven-free filter), and [`extension.ts`](file:///d:/projects/moderado/apps/vscode/src/extension.ts) (webview view provider, SecretStorage keys, per-workspace state).
+- Removed a duplicate approval gate bug found while writing the host: `resolve_approval` was consulting the settings-level gate while turns ran under a per-turn gate; the per-turn gate is now tracked in `activeGate`.
+- `scripts/build_vscode.mjs` resolves entry and output from the repo root, because npm runs workspace scripts with `cwd` set to the workspace.
+- Removed stale `apps/vscode/dist/` artifacts left over from deleted `extension.ts`, `protocol.ts`, `sidecar.ts`, and `webview/*` sources.
 
 ## Checks
 
-- npm.cmd run build ? PASS.
-- npm.cmd run typecheck ? PASS.
-- npm.cmd test ? PASS: 59 files / 426 tests, offline; installer fixtures run with approved temp access.
-- npm.cmd run verify:package ? PASS: verified moderado-0.3.7.tgz.
-- No live provider account tested.
+- `npm.cmd run build` — PASS.
+- `npm.cmd run typecheck` — PASS.
+- `npm.cmd test` — PASS: 64 files / 460 tests, offline.
+- `npm.cmd run build --workspace apps/vscode` — PASS: emits `dist/extension.cjs`.
 
 ## Decisions
 
-- Per-task /budget currently supports token limits only. Provider usage can arrive late, so stopping is best-effort; USD limits require reliable live pricing.
-- Additional competitor-inspired features are deferred until after the v0.3.7 release.
-- The old VS Code extension source is removed from the active tree. The previous refs are backed up at %TEMP%/moderado-pre-cli-master-20260929/pre-cli-master.bundle.
+- `filterProvenFreeModels(connectionId, entries)` takes the connection id and resolves the free policy itself. Letting the webview pass a policy object would let a caller widen the free list, so the host rejects any model the provider cannot substantiate (`MODEL_NOT_FREE`).
+- `packages/providers/tests/presets.test.ts` asserted seven preset metas; shipped `0.3.8` has six, because `openai-compatible` is a CLI pick-list entry with no fixed base URL. The test now asserts the six metas and that the id list still contains `openai-compatible`.
+- `listProviderPresets` does not yet append the `openai-compatible` pick-list entry. Milestone 2 owns the provider picker; the existing test pins the current two-source list (enabled built-ins plus configured custom connections).
 
 ## Blockers
 
-- None. The original publish workflow run is red because its final GitHub Release command had an extra tag argument; npm and the manually completed GitHub Release are live.
+- None.
 
 ## Next action
 
-1. Start future development from master; rebuild the VS Code extension on a new feature branch when ready.
+1. Milestone 2: API Configuration and About. `extension.ts` currently has no credential-entry flow, so `createProvider` reads a key that nothing can set yet; add the SecretStorage write path and the `openai-compatible` / custom-provider entries, then the About page sourced from packaged metadata.
 
 ---
 
