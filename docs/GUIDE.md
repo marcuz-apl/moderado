@@ -75,6 +75,31 @@ Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or Ja
 
 Install `typescript-language-server` yourself, then set `typescriptLanguageServer` in `~/.moderado/config.json` to its executable path. Moderado can then use read-only definition and reference lookup for TypeScript/JavaScript files. When the executable is unavailable, it reports how to configure it and leaves normal tools available.
 
+### Provider presets and custom providers
+
+`/connect` offers built-in provider presets. Omit `connectProviders` in
+`~/.moderado/config.json` to show all of them; an empty `enabled` list hides
+every built-in, and `custom` adds your own OpenAI-compatible endpoints:
+
+```json
+{
+  "connectProviders": {
+    "enabled": ["nvidia-nim", "openrouter", "orcarouter"],
+    "custom": [
+      { "id": "gateway", "name": "Gateway", "baseUrl": "https://gateway.example/v1", "defaultModel": "model-id" }
+    ]
+  }
+}
+```
+
+Built-in preset ids: `nvidia-nim`, `openrouter`, `agnes-ai`, `orcarouter`,
+`ollama`, `lm-studio`, `openai-compatible`. Presets carry their access tier, so
+a genuinely free source stays distinguishable from one that only offers trial
+credits. Custom providers are validated: `id` must be unique and must not
+collide with a built-in preset, and `baseUrl` must be HTTPS (or loopback) with
+no embedded credentials. Invalid entries are dropped rather than failing the
+whole config.
+
 ### Coding skills
 
 Moderado includes four compact skills: `code-review`, `implementation-planning`, `systematic-debugging`, and `test-driven-development`. They are available in both interactive chat and `moderado run`. Moderado also discovers user skills at `~/.moderado/skills/<skill-name>/SKILL.md`. User skills are disabled by default; enabling one with the same name replaces the built-in. Each user skill uses simple frontmatter:

@@ -61,9 +61,6 @@ curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/
 
 # npm (requires Node.js >= 20)
 npm install -g moderado@0.3.10
-
-# AUR: build `moderado-bin` from the PKGBUILD attached to the GitHub
-# Release (maintainer upload pending)
 ```
 
 ### macOS

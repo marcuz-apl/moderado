@@ -183,7 +183,7 @@ already a release.
 
 ### M6.3 — Package-manager manifests ✅
 
-- Generate reviewable Homebrew, Scoop, winget, and AUR manifests from verified
+- Generate reviewable Homebrew, Scoop, and winget manifests from verified
   release artifacts and checksums.
 - Keep npm as the canonical channel for npm and Bun users.
 - Generation is deliberately separate from external package-manager submission.

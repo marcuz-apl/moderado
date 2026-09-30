@@ -20,7 +20,7 @@ Install instructions for users: root [`README.md`](../README.md#install-moderado
 | Try without installing | `npx -y moderado@latest --help` | Works |
 | Prebuilt binary (no Node needed) | Download from GitHub Release v0.3.0, verify `.sha256` + `manifest.json` | Works (win-x64, macos-arm64, linux-x64) |
 | `curl \| bash` installer | `curl -fsSL .../scripts/install.sh \| bash` | Available (`scripts/install.sh`) |
-| winget / Scoop / Homebrew / AUR | reviewable manifests on every GitHub Release | Available (see `RELEASING.md` section 4) |
+| winget / Scoop / Homebrew | reviewable manifests on every GitHub Release | Available (see `RELEASING.md` section 4) |
 | Chocolatey | -- | Out of scope |
 
 Post-install: `moderado --help`, then `/connect` in the TUI

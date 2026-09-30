@@ -1,8 +1,38 @@
 # Active CLI Baseline
 
 Updated: 2026-09-30
-Branch: master (`bb9a20d`, `v0.3.10+260930d`, pending tag `v0.3.10`)
-Status: **0.3.10 is prepared, not yet tagged or published.** It is a patch release carrying the standalone-binary version fix: the published `v0.3.9` binaries work correctly but report `moderado --version` as `v0.1.0`, because `pkg` snapshots the filesystem so `VERSION` and `package.json` are absent at runtime. 0.3.10 corrects that. `apps/cli/package.json` is `0.3.10`, `VERSION` is `v0.3.10+260930d`, and 60 test files / 442 tests pass.
+Branch: master (`4006a9d`, tag `v0.3.10`, `v0.3.10+260930d`)
+Status: **0.3.10 is released.** Published to npm as `latest`, the GitHub Release `v0.3.10` carries all 11 assets, and Homebrew, Scoop, and the in-flight winget PR are all on 0.3.10. This is a patch release carrying the standalone-binary version fix: the 0.3.9 binaries work correctly but reported `moderado --version` as `v0.1.0`, because `pkg` snapshots the filesystem so `VERSION` and `package.json` are absent at runtime. Verified against the real CI-built artifact: `v0.3.10+260930d`.
+
+## Release record (v0.3.10)
+
+1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.
+2. Verification run `36774093914` — all six jobs green.
+3. Downloaded the CI artifact and ran the actual Windows binary: reports
+   `v0.3.10+260930d`. `manifest.json` revision `4006a9d`.
+4. Publish run `36774560319` (`confirm: PUBLISH`) succeeded. npm `latest` →
+   0.3.10; GitHub Release with 11 assets.
+5. Checksums (verified against the release sidecars):
+   - `moderado-win-x64.exe` `54263b4801995d99147fb1a720dd52f104c38c4ba76ea6e74d0d2b5cbafeff0f`
+   - `moderado-linux-x64` `b017f640f21939e766d0386c3f0e2bde55237b441aecbc28ebe0d606d40d7689`
+   - `moderado-macos-arm64` `d6fbdcb748eb01e40e3d93ab96dd282ba73bf2a748d7088c04a5e13171f87054`
+6. Homebrew tap → 0.3.10 (`e968625`); Scoop bucket → 0.3.10 (`f7d2e9d`).
+7. winget PR #444475 updated **in place** from 0.3.9 to 0.3.10
+   (`d997c44`), so moderation yields the corrected version and no second PR
+   competes for the same `PackageIdentifier`. Still awaiting a community
+   moderator.
+
+### Channel state after v0.3.10
+
+| Channel | Version | Status |
+|---|---|---|
+| npm `latest` | **0.3.10** | live |
+| GitHub Release | **v0.3.10** | 11 assets |
+| curl installer | 0.3.10 | tracks latest |
+| Homebrew tap | **0.3.10** | `e968625` |
+| Scoop bucket | **0.3.10** | `f7d2e9d` |
+| winget | 0.3.10 in #444475 | awaiting moderator |
+
 
 ### Alfazen commit hook bug found and fixed
 
@@ -18,11 +48,14 @@ Fixed in `.githooks/pre-commit` by stripping all leading stamps:
 `s/^(v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z] )+//`. Verified against a
 synthetic stale message — it now yields `v0.3.10+260930d`.
 
-### Next steps for 0.3.10
+### Next
 
-1. Tag `v0.3.10` and push; the CI gate compares the tag to `VERSION`.
-2. Publish via the guarded `workflow_dispatch` (`confirm: PUBLISH`).
-3. Bump Homebrew, Scoop, and — once winget #444475 merges — winget to 0.3.10.
+1. Wait for the winget moderator; `winget install MarcuzApl.Moderado` works once
+   #444475 merges. A single polite follow-up after ~2 weeks is reasonable.
+
+3. Scope v0.4.0: granular pattern-based approval policies first, then
+   `moderado run --plan`, custom Markdown slash commands, and
+   `--continue`/`--session`/`--fork`.
 
 ## Release record (v0.3.9)
 
@@ -43,7 +76,7 @@ synthetic stale message — it now yields `v0.3.10+260930d`.
 | Homebrew tap | **0.3.9** | done — `a82ccc1` |
 | Scoop bucket | **0.3.9** | done — `f0e47d9` |
 | winget | 0.3.9 PR open | blocked on a community moderator; see below |
-| AUR | never uploaded | first submission still owed |
+
 
 The Homebrew and Scoop repos were verified live and were both still pinned at 0.3.0 — older than the 0.3.7 the runbook previously claimed. Both were bumped to 0.3.9 by copying the canonical manifests from the v0.3.9 GitHub Release, after confirming all three binary checksums matched the published `.sha256` sidecars byte for byte:
 
@@ -131,7 +164,6 @@ still carry the bug** and are only correct once re-released.
 
 1. Decide whether and when to release v0.4.0. It should carry the binary version fix (`v0.3.9` standalone binaries report `v0.1.0`) so corrected binaries are actually shipped. The Tier 1 gap list in [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) is the natural scope after that: **granular pattern-based approval policies** first (ask/allow/deny keyed on tool input, deny wins over `--auto`), then `moderado run --plan`, custom Markdown slash commands, and `--continue`/`--session`/`--fork` for `run`.
 2. winget: #444475 (0.3.9) is open and mergeable, gated only on a volunteer moderator. After it merges, `winget install MarcuzApl.Moderado` works. Optional: a single polite ping after ~2 weeks.
-3. AUR still needs its first upload (`moderado-bin`); one-time, then a checksum bump per release.
 
 ---
 
@@ -142,7 +174,7 @@ The following is historical handoff content from the tag, not current verificati
 Updated: 2026-09-22 22:37 UTC
 Branch: master
 Commit: `bbe1506` (`v0.3.1+2609225`)
-Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenance`); GitHub Release `v0.3.0` carries all 7 binary assets. README reorganized (`bbe1506`, `v0.3.1+2609225`): Tech Stack section, feature/reference sections moved to `docs/GUIDE.md`, Install Moderado rewritten per-OS (Linux/macOS/Windows) with no "Other install channels". All distribution channels except Chocolatey (deliberately out of scope) are DONE: curl installer (`scripts/install.sh`, dual checksum gate, 2 offline tests), Homebrew tap `marcuz-apl/homebrew-moderado` and Scoop bucket `marcuz-apl/scoop-moderado` seeded with byte-identical v0.3.0 manifests, winget submission open as [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) (validation queued), AUR payload attached to the Release (awaiting an Arch uploader). CI wiring landed on master (`9530ddc`, `v0.3.1+2609223`): `release.yml` distribution job, `publish.yml` release attachments + `npm@latest` OIDC fix. Local checks green (50 suites, 347 tests; typecheck clean). Docs: `docs/DISTRIBUTION.md`, `docs/FIRST_PUBLISH.md`, `docs/GUIDE.md`.
+Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenance`); GitHub Release `v0.3.0` carries all 7 binary assets. README reorganized (`bbe1506`, `v0.3.1+2609225`): Tech Stack section, feature/reference sections moved to `docs/GUIDE.md`, Install Moderado rewritten per-OS (Linux/macOS/Windows) with no "Other install channels". All distribution channels except Chocolatey (deliberately out of scope) are DONE: curl installer (`scripts/install.sh`, dual checksum gate, 2 offline tests), Homebrew tap `marcuz-apl/homebrew-moderado` and Scoop bucket `marcuz-apl/scoop-moderado` seeded with byte-identical v0.3.0 manifests, winget submission open as [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) (validation queued), CI wiring landed on master (`9530ddc`, `v0.3.1+2609223`): `release.yml` distribution job, `publish.yml` release attachments + `npm@latest` OIDC fix. Local checks green (50 suites, 347 tests; typecheck clean). Docs: `docs/DISTRIBUTION.md`, `docs/FIRST_PUBLISH.md`, `docs/GUIDE.md`.
 
 ## Current feature implementation
 
@@ -206,7 +238,7 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 
 1. Configure the npm trusted publisher at `https://www.npmjs.com/package/moderado/access` (Trusted Publisher â†’ GitHub Actions): repository `marcuz-apl/moderado`, workflow filename `publish.yml`, environment `release` (or blank). Package now exists.
 2. **Decision recorded â€” do NOT release 0.3.1 yet.** Everything since `v0.3.0` is docs + CI/distribution wiring that does not change the shipped CLI, so `0.3.0` already satisfies the public-release gate. Cutting `0.3.1` now would also stale in-flight winget PR #439175 and would have to be manual again (trusted publisher not yet configured). Recommended: release `0.3.1` later purely as a low-stakes validation of the full OIDC pipeline (sync `apps/cli/package.json` â†’ pre-flight â†’ tag `v0.3.1` â†’ green Verify run â†’ dispatch Publish with `confirm: PUBLISH`), ideally after #439175 merges; otherwise skip it and let the next `feat` commit take over as `v0.4.0`. `VERSION` reading `v0.3.1+2609225` while npm sits at `0.3.0` is normal between releases under Alfazen.
-3. Distribution follow-through: watch [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) to merge; AUR needs an Arch uploader for `moderado-bin`; per-release tap/bucket bumps are manual copies (auto-push needs a cross-repo `TAP_PUSH_TOKEN` â€” owner decision, see `docs/DISTRIBUTION.md` Â§6).
+3. Distribution follow-through: watch [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) to merge per-release tap/bucket bumps are manual copies (auto-push needs a cross-repo `TAP_PUSH_TOKEN` â€” owner decision, see `docs/DISTRIBUTION.md` Â§6).
 
 ## Blockers
 

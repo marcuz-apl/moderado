@@ -96,8 +96,7 @@ moderado-linux-x64) are attached to the
 GitHub Release v0.3.10 at https://github.com/marcuz-apl/moderado/releases/tag/v0.3.10.
 The curl installer (`scripts/install.sh`, Linux x64 + macOS arm64), the
 Homebrew tap, and the Scoop bucket are available; the winget submission is
-pending merge and AUR has not been uploaded yet. See docs/DISTRIBUTION.md in
-the repository.
+pending merge. See docs/DISTRIBUTION.md in the repository.
 To build from source instead:
 
 ```bash
