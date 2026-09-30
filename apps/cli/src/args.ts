@@ -3,6 +3,8 @@ import { parseArgs } from 'node:util';
 export interface CliParsedArgs {
   command?: 'models' | 'run' | 'doctor' | 'skills';
   task?: string;
+  skillAction?: 'on' | 'off';
+  skillName?: string;
   workspace: string;
   model?: string;
   provider?: string;
@@ -56,10 +58,18 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   const positionals = parsed.positionals;
   let command: 'models' | 'run' | 'doctor' | 'skills' | undefined;
   let task: string | undefined;
+  let skillAction: 'on' | 'off' | undefined;
+  let skillName: string | undefined;
 
   if (positionals.length > 0) {
     const first = positionals[0].toLowerCase();
-    if (first === 'doctor') { command = 'doctor'; } else if (first === 'skills') { command = 'skills'; } else if (first === 'models') {
+    if (first === 'doctor') { command = 'doctor'; } else if (first === 'skills') {
+      command = 'skills';
+      if (positionals[1] === 'on' || positionals[1] === 'off') {
+        skillAction = positionals[1];
+        skillName = positionals[2];
+      } else skillName = positionals[1];
+    } else if (first === 'models') {
       command = 'models';
     } else if (first === 'run') {
       command = 'run';
@@ -78,6 +88,8 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   return {
     command,
     task: task?.trim() || undefined,
+    skillAction,
+    skillName,
     workspace: parsed.values.workspace as string,
     model: parsed.values.model as string | undefined,
     provider: parsed.values.provider as string | undefined,
@@ -110,7 +122,8 @@ USAGE:
 
 COMMANDS:
   models                 Discover live models, capability & access tiers
-  run "<task>"           Execute a bounded coding task in the workspace\n  skills                 List installed user skills
+  run "<task>"           Execute a bounded coding task in the workspace\n  skills                 List built-in and user skills
+  skills on|off NAME     Enable or disable a user skill
   doctor                 Check local Moderado setup
 
 OPTIONS:

@@ -21,6 +21,8 @@ export interface ModeradoConfig {
   mcpServers?: Record<string, McpServerConfig>;
   /** Upper bound on model output tokens per response turn. */
   maxOutputTokens?: number;
+  /** User-installed skills explicitly enabled for model use. Built-ins remain available. */
+  enabledSkills?: string[];
 }
 
 export const CONNECT_PROVIDER_PRESET_IDS = [
@@ -240,6 +242,7 @@ export function loadConfig(customHome?: string): ModeradoConfig {
         webSearchEndpoint: typeof parsed.webSearchEndpoint === 'string' ? parsed.webSearchEndpoint : undefined,
         webSearchProvider: parsed.webSearchProvider === 'exa' || parsed.webSearchProvider === 'parallel' || parsed.webSearchProvider === 'custom' ? parsed.webSearchProvider : undefined,
         maxOutputTokens: typeof parsed.maxOutputTokens === 'number' && parsed.maxOutputTokens > 0 ? parsed.maxOutputTokens : undefined,
+        enabledSkills: z.array(z.string().regex(/^[a-z0-9][a-z0-9_-]{0,63}$/)).safeParse(parsed.enabledSkills).data,
       };
     }
     return {};

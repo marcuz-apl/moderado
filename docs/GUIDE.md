@@ -74,9 +74,9 @@ Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or Ja
 
 Install `typescript-language-server` yourself, then set `typescriptLanguageServer` in `~/.moderado/config.json` to its executable path. Moderado can then use read-only definition and reference lookup for TypeScript/JavaScript files. When the executable is unavailable, it reports how to configure it and leaves normal tools available.
 
-### User skills
+### Coding skills
 
-Moderado discovers user skills at `~/.moderado/skills/<skill-name>/SKILL.md`. Each skill uses simple frontmatter:
+Moderado includes four compact skills: `code-review`, `implementation-planning`, `systematic-debugging`, and `test-driven-development`. They are available in both interactive chat and `moderado run`. Moderado also discovers user skills at `~/.moderado/skills/<skill-name>/SKILL.md`. User skills are disabled by default; enabling one with the same name replaces the built-in. Each user skill uses simple frontmatter:
 
 ```markdown
 ---
@@ -86,7 +86,9 @@ description: Review TypeScript changes for type-safety and runtime issues
 Review TypeScript changes carefully.
 ```
 
-Valid skills are loaded into the model context as untrusted advisory instructions. They cannot change approval policy, bypass the workspace jail, run commands automatically, or access secrets. Use `/skill` in the interactive TUI to list and reload installed skills. Malformed files, oversized files, and symlinked `SKILL.md` files are ignored.
+The model sees short descriptions of enabled skills and can call the read-only `load_skill` tool for full instructions when relevant. You can explicitly request one in a task with `skill:code-review`. This avoids sending every skill body on every turn. Skills remain advisory: they cannot change approval policy, bypass the workspace jail, run commands automatically, or access secrets.
+
+Use `/skills` in the TUI or `moderado skills` in the shell to list built-in and installed user skills, their on/off status, and the user skill directory. Use `/skills on NAME` or `moderado skills on NAME` to enable a user skill; use `off` to disable it without deleting its files. `/skills NAME` and `moderado skills NAME` show its description and source path. Malformed files, oversized files, and symlinked `SKILL.md` files are ignored.
 
 ### Local MCP tools
 

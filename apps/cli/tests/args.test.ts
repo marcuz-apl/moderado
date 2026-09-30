@@ -49,6 +49,7 @@ describe('CLI Argument Parser', () => {
   it('parses plural skills command only', () => {
     expect(parseCliArgs(['skills']).command).toBe('skills');
     expect(parseCliArgs(['skill']).command).toBe('run');
+    expect(parseCliArgs(['skills', 'on', 'figma'])).toMatchObject({ command: 'skills', skillAction: 'on', skillName: 'figma' });
   });
   it('parses --help and --version flags', () => {
     expect(parseCliArgs(['--help']).help).toBe(true);

@@ -24,7 +24,7 @@ import { findModelPricing } from '../model_pricing.js';
 import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
 import { buildWorkspaceMap } from '../repo_map.js';
 import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
-import { discoverSkills, formatSkillContext, UserSkill } from '../skills.js';
+import { discoverSkills, formatSkillContext, formatSkillsList, getEnabledSkillNames, selectEnabledSkills, setSkillEnabled, UserSkill } from '../skills.js';
 
 export function formatSessionExitSummary(session: StoredSession, modelId?: string): string {
   const usage = session.usage;
@@ -847,8 +847,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let isFirst = true;
   if (config.typescriptLanguageServer) process.env.MODERADO_TYPESCRIPT_LANGUAGE_SERVER = config.typescriptLanguageServer;
   let tools: IToolRegistry = createDefaultToolRegistry();
-  let skills: UserSkill[] = discoverSkills();
-  const skillContext = (): string => formatSkillContext(skills);
+  let discoveredSkills: UserSkill[] = discoverSkills();
+  let enabledSkillNames = getEnabledSkillNames();
+  let skills: UserSkill[] = selectEnabledSkills(discoveredSkills, enabledSkillNames);
+  const skillContext = (task: string): string => formatSkillContext(skills, task);
   const reloadMcpTools = async (): Promise<void> => {
     config = loadConfig();
     tools = await createMcpToolRegistry(config.mcpServers, resolveWebSearchOptions(config));
@@ -1238,11 +1240,24 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
 
     if (trimmed === '/skills' || trimmed.startsWith('/skills ')) {
-      skills = discoverSkills();
+      const parts = trimmed.split(/\s+/);
+      discoveredSkills = discoverSkills();
+      enabledSkillNames = getEnabledSkillNames();
+      if ((parts[1] === 'on' || parts[1] === 'off') && parts[2]) {
+        try {
+          enabledSkillNames = setSkillEnabled(parts[2], parts[1] === 'on');
+          lastAnswer = `User skill ${parts[2]} ${parts[1] === 'on' ? 'enabled' : 'disabled'}.\n\n${formatSkillsList(discoveredSkills, true, undefined, enabledSkillNames)}`;
+        } catch (error) { lastAnswer = error instanceof Error ? error.message : String(error); }
+      } else if (parts[1] === 'on' || parts[1] === 'off') {
+        lastAnswer = `Usage: /skills ${parts[1]} NAME`;
+      } else if (parts[1]) {
+        const skill = discoveredSkills.find((item) => item.name === parts[1]);
+        lastAnswer = skill
+          ? `**${skill.name}**\n${skill.description}\nSource: ${skill.path}\nStatus: ${skill.path.startsWith('builtin:') || enabledSkillNames.includes(skill.name) ? 'on' : 'off'}${skill.path.startsWith('builtin:') ? '' : `\n\nUse /skills on ${skill.name} to enable this user skill.`}`
+          : `Unknown skill: ${parts[1]}. Use /skills to list installed skills.`;
+      } else lastAnswer = formatSkillsList(discoveredSkills, true, undefined, enabledSkillNames);
+      skills = selectEnabledSkills(discoveredSkills, enabledSkillNames);
       lastQuestion = trimmed;
-      lastAnswer = skills.length
-        ? 'User skills loaded:\n' + skills.map((skill) => `  ${skill.name} — ${skill.description}`).join('\n')
-        : 'No valid user skills found in ~/.moderado/skills.';
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
@@ -1268,7 +1283,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         '  /review    - Review current workspace changes for bugs\n' +
         '  /map       - Show a compact workspace file map\n' +
         '  /budget    - Set a per-task token limit (/budget 5000, /budget off)\n' +
-        '  /skills    - List installed user skills and reload them\n' +
+        '  /skills    - List skills; use /skills on NAME or /skills off NAME\n' +
         '  /clear     - Reset conversation memory\n' +
         '  /help      - Display commands, shortcuts & version\n' +
         '  /exit      - Exit Moderado';
@@ -1551,7 +1566,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const runAgent = () => loop.run(isReview ? createReviewTask(reviewFiles) : evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools: isReview ? createReviewToolRegistry() : tools, approvalHandler, router, policy,
         maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-        skillContext: skillContext(),
+        skillContext: skillContext(effectivePrompt), skills,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'model_change') usedModels.add(event.newModelId);

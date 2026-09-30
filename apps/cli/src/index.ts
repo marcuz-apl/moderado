@@ -58,7 +58,7 @@ async function main(): Promise<void> {
   let exitCode = 0;
   try {
     if (args.command === 'doctor') { exitCode = await handleDoctorCommand(args); } else if (args.command === 'skills') {
-      exitCode = handleSkillsCommand();
+      exitCode = handleSkillsCommand(args.skillAction, args.skillName);
     } else if (args.command === 'models') {
       exitCode = await handleModelsCommand(args);
     } else if (args.command === 'run') {

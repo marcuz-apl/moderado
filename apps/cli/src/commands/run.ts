@@ -9,7 +9,7 @@ import { getActiveConnection, resolveApiKey, resolveConnectionCredential, saveCo
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
-import { discoverSkills, formatSkillContext } from '../skills.js';
+import { discoverSkills, formatSkillContext, getEnabledSkillNames, selectEnabledSkills } from '../skills.js';
 
 export async function handleRunCommand(
   args: CliParsedArgs,
@@ -107,6 +107,7 @@ export async function handleRunCommand(
   });
   const router = new Router();
   const loop = new AgentLoop();
+  const skills = selectEnabledSkills(discoverSkills(), getEnabledSkillNames());
 
   process.stdout.write(`\x1b[1mModerado v0.1.0\x1b[0m | Workspace: \x1b[36m${canonicalWorkspace}\x1b[0m\n`);
   process.stdout.write(`Task: "\x1b[1m${args.task}\x1b[0m"\n\n`);
@@ -120,7 +121,8 @@ export async function handleRunCommand(
       router,
       policy,
       maxOutputTokens: args.maxTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-      skillContext: formatSkillContext(discoverSkills()),
+      skillContext: formatSkillContext(skills, args.task),
+      skills,
       routeOptions: {
         pinnedModelId: selectedModel,
         allowPaid,

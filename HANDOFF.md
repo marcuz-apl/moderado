@@ -1,41 +1,31 @@
 # Active CLI Baseline
 
-Updated: 2026-09-29
+Updated: 2026-09-30
 Branch: master
-Status: CLI v0.3.7 is published on npm and GitHub. Tag v0.3.7 points to 322e326; previous master and VS Code refs are saved in a local recovery bundle.
+Status: v0.3.9 contains the CLI skill enhancement on master. npm remains at v0.3.8 until a separate release.
 
 ## Completed
 
-- Forked from v0.3.4; v0.3.5 adds live task/session token usage and generation rate.
-- v0.3.6 adds provider presets, evidence-based free model selection, stream errors, retries, cancellation, and slash suggestions.
-- v0.3.7 adds /review (read-only), /map, /budget (best-effort token ceiling), concise thinking, navy task headings, and default interactive auto-approval with a working off toggle.
-- Esc stops active generation on the first press, including with a follow-up draft. Model discovery aborts return cancelled and partial answers show a stopped message.
-- Matched apps/cli/package.json and package-lock.json to VERSION's base SemVer 0.3.7.
-- /exit and /quit now print a session summary with ID, active model, input/output/total tokens, cost status, and /session resume hint; unavailable and estimated usage are labeled.
-- v0.3.7 tag verification passed all six jobs; npm package and GitHub Release with 11 verified assets are public.
-- The publish workflow's final release-create command passed the tag twice and failed after npm publication. The GitHub Release was completed manually; the command is corrected for future releases.
+- Added four compact built-in coding skills: code review, implementation planning, systematic debugging, and test-driven development.
+- User `SKILL.md` files are discovered but disabled by default. `/skills on NAME` and `moderado skills on NAME` persist selected user skills in `~/.moderado/config.json`; `off` reverses this without deleting files. An enabled user skill can override a built-in by name.
+- The model receives short metadata for active skills and loads full instructions only through `load_skill` or an explicit `skill:NAME` task mention. `/skills` now groups built-in and user skills and shows the user directory.
+- Updated CLI help and `docs/GUIDE.md`.
+- Confirmed the core has a bounded `subagent` tool: one child agent loop, shared provider/tools/approval policy, five steps, no nesting.
+- Reviewed the local `D:\projects\alfazen-skills\alfazen-coding` bundle. It is a useful source, but its full 20-skill set should not be injected into every prompt; some workflows expect orchestration tools the CLI does not expose.
 
 ## Checks
 
-- npm.cmd run build ? PASS.
-- npm.cmd run typecheck ? PASS.
-- npm.cmd test ? PASS: 59 files / 426 tests, offline; installer fixtures run with approved temp access.
-- npm.cmd run verify:package ? PASS: verified moderado-0.3.7.tgz.
-- No live provider account tested.
+- `npm.cmd run build` and `npm.cmd run typecheck`: pass.
+- Offline tests: 59 files / 436 tests pass with temp fixtures inside the workspace and `GIT_CEILING_DIRECTORIES` set to the workspace root.
+- `node apps/cli/dist/index.js skills`: lists four built-ins and 23 local user skills, all user skills currently off. The default skill context on this profile fell from about 143,500 body characters to 520 catalogue characters.
 
-## Decisions
+## Decision
 
-- Per-task /budget currently supports token limits only. Provider usage can arrive late, so stopping is best-effort; USD limits require reliable live pricing.
-- Additional competitor-inspired features are deferred until after the v0.3.7 release.
-- The old VS Code extension source is removed from the active tree. The previous refs are backed up at %TEMP%/moderado-pre-cli-master-20260929/pre-cli-master.bundle.
-
-## Blockers
-
-- None. The original publish workflow run is red because its final GitHub Release command had an extra tag argument; npm and the manually completed GitHub Release are live.
+- Keep a small built-in set on master. Enable user skills selectively before considering more of `alfazen-coding`.
 
 ## Next action
 
-1. Start future development from master; rebuild the VS Code extension on a new feature branch when ready.
+1. Decide whether and when to release v0.3.9 to npm and other distribution channels.
 
 ---
 

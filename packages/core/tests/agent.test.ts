@@ -80,6 +80,38 @@ describe('AgentLoop (Core Execution Engine)', () => {
     });
   });
 
+  it('loads one validated skill on demand without exposing other skill bodies', async () => {
+    provider.queueToolCallResponse('load_skill', { name: 'review' });
+    provider.queueTextResponse('Reviewed.');
+
+    const result = await loop.run('Review the change', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      skills: [
+        { name: 'review', body: 'Review instructions' },
+        { name: 'debugging', body: 'Debug instructions' },
+      ],
+      eventListener: (event) => events.push(event),
+    });
+
+    expect(provider.recordedCalls[0]?.tools?.some((tool) => tool.name === 'load_skill')).toBe(true);
+    expect(result.messages.some((message) => message.role === 'tool' && message.name === 'load_skill' && message.content.includes('Review instructions'))).toBe(true);
+    expect(result.messages.some((message) => message.role === 'tool' && message.content.includes('Debug instructions'))).toBe(false);
+    expect(events.some((event) => event.type === 'tool_result' && event.result.toolName === 'load_skill' && event.result.status === 'success')).toBe(true);
+  });
+
+  it('rejects an unknown skill name without reading a file', async () => {
+    provider.queueToolCallResponse('load_skill', { name: '../secret' });
+    provider.queueTextResponse('Done.');
+    const result = await loop.run('Use a skill', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler,
+      skills: [{ name: 'review', body: 'Review instructions' }],
+    });
+    expect(result.messages.some((message) => message.role === 'tool' && message.name === 'load_skill' && message.status === 'error')).toBe(true);
+  });
+
   it('rejects an invalid subagent detail without starting a child loop', async () => {
     provider.queueToolCallResponse('subagent', { detail: '   ' });
     const result = await loop.run('Delegate a task.', {
