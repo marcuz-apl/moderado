@@ -1,8 +1,28 @@
 # Active CLI Baseline
 
 Updated: 2026-09-30
-Branch: master (`cbbf47d`, tag `v0.3.9`, v0.3.9+2609305)
-Status: **0.3.9 is released.** Published to npm as `latest` with provenance, and the GitHub Release `v0.3.9` carries all 11 assets. Installer docs now point at 0.3.9.
+Branch: master (`bb9a20d`, `v0.3.10+260930d`, pending tag `v0.3.10`)
+Status: **0.3.10 is prepared, not yet tagged or published.** It is a patch release carrying the standalone-binary version fix: the published `v0.3.9` binaries work correctly but report `moderado --version` as `v0.1.0`, because `pkg` snapshots the filesystem so `VERSION` and `package.json` are absent at runtime. 0.3.10 corrects that. `apps/cli/package.json` is `0.3.10`, `VERSION` is `v0.3.10+260930d`, and 60 test files / 442 tests pass.
+
+### Alfazen commit hook bug found and fixed
+
+The `release(patch):` commit for 0.3.10 initially stamped `v0.3.9+260930c`
+instead of `v0.3.10+260930d`. Root cause: `.githooks/pre-commit` classified the
+bump using a `1s/.../` sed that stripped at most one leading version stamp.
+`.git/COMMIT_EDITMSG` still holds the *previous* commit's already-stamped
+message during `git commit -m`, so `detect_bump_type` received
+`v0.3.9+260930c release(patch): ...`, the `case` glob did not match, and the
+bump was treated as a plain `build`.
+
+Fixed in `.githooks/pre-commit` by stripping all leading stamps:
+`s/^(v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z] )+//`. Verified against a
+synthetic stale message — it now yields `v0.3.10+260930d`.
+
+### Next steps for 0.3.10
+
+1. Tag `v0.3.10` and push; the CI gate compares the tag to `VERSION`.
+2. Publish via the guarded `workflow_dispatch` (`confirm: PUBLISH`).
+3. Bump Homebrew, Scoop, and — once winget #444475 merges — winget to 0.3.10.
 
 ## Release record (v0.3.9)
 
