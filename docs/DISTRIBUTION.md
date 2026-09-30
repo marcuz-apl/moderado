@@ -1,15 +1,15 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-Status: `moderado@0.3.7` is live on npm and the GitHub Release `v0.3.7`
-carries all 7 binary assets. The Homebrew tap
+Status: `moderado@0.3.9` is live on npm and the GitHub Release `v0.3.9`
+carries all 11 assets (3 binaries, 3 checksum sidecars, `manifest.json`, and
+the 4 community manifests). The Homebrew tap
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
-are seeded with the verified v0.3.7 manifests (byte-identical to
-`npm run generate:manifests` output against the release `manifest.json`).
-The winget submission is open as
+are both still pinned at **v0.3.0** and need a per-release bump to v0.3.9
+(see §2 and §3). The winget submission is open as
 [microsoft/winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175)
-(awaiting validation + merge). AUR still needs its first upload (below).
-Chocolatey is deliberately out of scope.
+(0.3.0, awaiting a community moderator). AUR still needs its first upload
+(below). Chocolatey is deliberately out of scope.
 
 CI already does the heavy lifting: `release.yml` builds the three binaries
 and generates the manifests; `publish.yml` attaches `moderado.rb`,
@@ -25,7 +25,7 @@ users take the `.exe`, Scoop, or winget):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash
-curl -fsSL .../install.sh | bash -s -- --version v0.3.7 --dir ~/.local/bin
+curl -fsSL .../install.sh | bash -s -- --version v0.3.9 --dir ~/.local/bin
 ```
 
 Security properties (deliberate, do not regress): downloads the binary, the
@@ -45,6 +45,10 @@ refusal against a local fixture server).
   `npm run generate:manifests -- artifacts/release/manifest.json /tmp/d
   https://github.com/marcuz-apl/moderado/releases/download/vX.Y.Z`
   and `diff` — for v0.3.7 the tap file was byte-identical.
+- **Outstanding: the tap is still at v0.3.0.** Copy the v0.3.9
+  `moderado.rb` from the
+  [v0.3.9 Release](https://github.com/marcuz-apl/moderado/releases/tag/v0.3.9)
+  to close the gap.
 - No homebrew-core submission planned; a personal tap is the standard path.
 
 ## 3. Scoop bucket — seeded, keep in sync
@@ -54,19 +58,31 @@ refusal against a local fixture server).
   https://github.com/marcuz-apl/scoop-moderado && scoop install moderado`.
 - Per release: same flow — copy `distribution/scoop/moderado.json` over
   `bucket/moderado.json` and commit (v0.3.7 verified byte-identical).
+- **Outstanding: the bucket is still at v0.3.0.** Copy the v0.3.9
+  `moderado.json` from the
+  [v0.3.9 Release](https://github.com/marcuz-apl/moderado/releases/tag/v0.3.9)
+  to close the gap.
 
-## 4. winget — submitted, awaiting merge
+## 4. winget — submitted, awaiting a community moderator
 
-- Package ID: `MarcuzApl.Moderado`. First submission is open as
+- Package ID: `MarcuzApl.Moderado`. The first submission is open as
   [microsoft/winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175)
-  (the original 0.3.0 submission is historical; submit the v0.3.7 manifest
-  under `manifests/m/MarcuzApl/Moderado/0.3.7/`, validated
-  locally with `winget validate` before push). Wait for the validation
-  pipeline + merge (typically hours–days).
-- Per release: one manifest PR (automatable with `wingetcreate update
-  MarcuzApl.Moderado -u <exe-url> -v <version>`).
-- Until the PR merges, Windows users install via the `.exe`, Scoop, or
-  `winget install --manifest <downloaded Moderado.yaml>`.
+  and covers **0.3.0 only**. The CLA is signed; the remaining gate is a
+  community moderator approval, which Microsoft states takes hours–days and
+  cannot be expedited.
+- **Do not open a 0.3.9 PR yet.** winget requires the package identifier to
+  exist in `winget-pkgs` before a version bump is accepted, and #439175 has
+  not merged. Submit the v0.3.9 manifest under
+  `manifests/m/MarcuzApl/Moderado/0.3.9/` only *after* the 0.3.0 PR lands,
+  validated locally with `winget validate`.
+- The v0.3.9 manifest is ready and verified:
+  `https://github.com/marcuz-apl/moderado/releases/download/v0.3.9/Moderado.yaml`
+  (`PackageVersion: 0.3.9`, `InstallerSha256: ebade87f…7110f7c6b7`).
+- Per release after that: one manifest PR (automatable with `wingetcreate
+  update MarcuzApl.Moderado -u <exe-url> -v <version>`).
+- Until the PR merges, Windows users install with
+  `winget install --manifest <downloaded Moderado.yaml>`, or take the
+  standalone `moderado-win-x64.exe` from the Release.
 - Note: our draft is `InstallerType: portable` — true today (the exe runs
   standalone); re-check if packaging ever changes.
 

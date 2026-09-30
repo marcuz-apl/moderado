@@ -1,8 +1,31 @@
 # Active CLI Baseline
 
 Updated: 2026-09-30
-Branch: master (`eed8eb9`, v0.3.9+2609304)
-Status: v0.3.9 contains the CLI skill enhancement and shared provider preset catalog on master. npm remains at v0.3.8 until a separate release.
+Branch: master (`cbbf47d`, tag `v0.3.9`, v0.3.9+2609305)
+Status: **0.3.9 is released.** Published to npm as `latest` with provenance, and the GitHub Release `v0.3.9` carries all 11 assets. Installer docs now point at 0.3.9.
+
+## Release record (v0.3.9)
+
+1. Committed the documentation corrections as `cbbf47d` (`v0.3.9+2609305`); the Alfazen hook advanced only the build suffix.
+2. Pushed `master`, tagged `v0.3.9`, and pushed the tag. The tag satisfies the CI gate `test "$GITHUB_REF_NAME" = "$(cut -d+ -f1 VERSION)"`.
+3. Verification run `36746258969` passed all four jobs (438 tests, `verify:package`, three native binaries, merged metadata, generated manifests).
+4. Publish run `36746585342` (`confirm: PUBLISH`, `tag: v0.3.9`) succeeded: npm `latest` → 0.3.9 with sigstore provenance (log index 3022283679), and the GitHub Release with 11 assets.
+5. Smoke-tested the **published** tarball via `npm pack moderado@0.3.9` into an isolated prefix: `--help`, `--version` (reports `v0.3.9`), `skills` (4 built-ins + 23 user skills), and `doctor` (exit 0, no secrets) all pass. Only `zod` was installed alongside it.
+6. Pointed `README.md`, `apps/cli/README.md`, `docs/DISTRIBUTION.md`, and the `install.sh` usage comment at v0.3.9.
+
+### Channel state after v0.3.9
+
+| Channel | Version | Action needed |
+|---|---|---|
+| npm `latest` | **0.3.9** | none |
+| GitHub Release | **v0.3.9** (11 assets) | none |
+| curl installer | 0.3.9 (tracks latest) | none |
+| Homebrew tap | **0.3.0** | bump `Formula/moderado.rb` from the v0.3.9 Release |
+| Scoop bucket | **0.3.0** | bump `bucket/moderado.json` from the v0.3.9 Release |
+| winget | 0.3.0 PR open | wait for moderator; do **not** open a 0.3.9 PR before #439175 merges |
+| AUR | never uploaded | first submission still owed |
+
+The Homebrew and Scoop repos were verified live and are both still pinned at 0.3.0 — older than the 0.3.7 the runbook previously claimed.
 
 ## Completed
 
@@ -36,8 +59,9 @@ Status: v0.3.9 contains the CLI skill enhancement and shared provider preset cat
 
 ## Next action
 
-1. Decide whether and when to release v0.3.9 to npm and other distribution channels.
-2. Owner picks the first item from the Tier 1 gap list in [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md). Recommendation: **granular pattern-based approval policies** (ask/allow/deny keyed on tool input, deny wins over `--auto`), because it extends the existing `PolicyManager` in `packages/core`, closes the largest real gap, and makes unattended use on a trusted repo safe without weakening the default. Runner-ups: `moderado run --plan`, custom Markdown slash commands with `$1`/`$ARGUMENTS` substitution, and `--continue`/`--session`/`--fork` for `run`.
+1. Bump the Homebrew tap and Scoop bucket from 0.3.0 to 0.3.9 using the manifests attached to the v0.3.9 Release. Both are one-file copies each.
+2. Decide whether and when to release v0.4.0. The Tier 1 gap list in [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) is the natural scope: **granular pattern-based approval policies** first (ask/allow/deny keyed on tool input, deny wins over `--auto`), then `moderado run --plan`, custom Markdown slash commands, and `--continue`/`--session`/`--fork` for `run`.
+3. Optional: ping the winget 0.3.0 PR after it reaches two weeks. It is gated on volunteer moderators; do not open a 0.3.9 PR until it merges.
 
 ---
 
