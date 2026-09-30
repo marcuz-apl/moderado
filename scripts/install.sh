@@ -5,7 +5,7 @@
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --version v0.3.7 --dir ~/.local/bin
+#   curl -fsSL .../install.sh | bash -s -- --version v0.3.8 --dir ~/.local/bin
 #
 # The installer never executes downloaded code before the checksum matches the
 # release manifest. Binaries are unsigned; Windows SmartScreen and macOS

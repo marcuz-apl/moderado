@@ -55,7 +55,7 @@ Chocolatey is deliberately out of scope; the full channel runbook lives in
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.7
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.8
 
 # npm (requires Node.js >= 20)
 npm install -g moderado@0.3.8
@@ -71,7 +71,7 @@ npm install -g moderado@0.3.8
 brew tap marcuz-apl/moderado && brew install moderado
 
 # curl installer (arm64), same checksum verification as Linux
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.7
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.8
 
 # npm (requires Node.js >= 20)
 npm install -g moderado@0.3.8
