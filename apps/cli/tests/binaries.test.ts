@@ -1,18 +1,41 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
 import {
   artifactDirectory,
   binaryTargets,
   buildCommand,
+  injectedVersion,
   mergeArtifactManifests,
   pkgEnvironment,
   pkgInvocation,
   verifyArtifactManifest,
+  versionModuleSource,
   writeArtifactManifest,
 } from '../../../scripts/binaries.mjs';
+
+it('generates a version module pkg can snapshot, and never claims a false version', () => {
+  // `pkg` has no --define, so the build writes a real module into dist/ that pkg
+  // snapshots. Without it a standalone binary falls back to a stale literal.
+  expect(versionModuleSource('v0.3.9+2609304')).toContain('"v0.3.9+2609304"');
+  expect(versionModuleSource(undefined)).toContain('"unknown"');
+  expect(injectedVersion('v0.3.9+2609304')).toBe('v0.3.9+2609304');
+  // A blank or missing injection must not silently become a false version claim.
+  expect(injectedVersion(undefined)).toBe('unknown');
+  expect(injectedVersion('')).toBe('unknown');
+});
+
+it('the CLI entry and run banner consume the injected version', () => {
+  const index = readFileSync(resolve('apps/cli/src/index.ts'), 'utf8');
+  const run = readFileSync(resolve('apps/cli/src/commands/run.ts'), 'utf8');
+  expect(index).toContain('INJECTED_VERSION');
+  expect(index).not.toContain("return 'v0.1.0'");
+  // The banner must read the same resolver instead of a second hardcoded literal.
+  expect(run).toContain('resolveVersion()');
+  expect(run).not.toContain('v0.1.0');
+});
 
 it('keeps the packaged CLI free of runtime dynamic imports', () => {
   const sources = [

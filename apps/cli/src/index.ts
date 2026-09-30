@@ -10,6 +10,14 @@ import { handleChatSession } from './commands/chat.js';
 import { handleDoctorCommand } from './commands/doctor.js';
 import { writeDiagnosticLog } from './diagnostic_log.js';
 import { handleSkillsCommand } from './commands/skills.js';
+import { INJECTED_VERSION } from './injected_version.js';
+
+/**
+ * Injected at build time by `scripts/binaries.mjs` via `pkg --define`. `pkg`
+ * snapshots the filesystem, so the root VERSION file and package.json are absent
+ * inside a standalone binary; without this the CLI reported a stale v0.1.0.
+ */
+declare const __MODERADO_VERSION__: string | undefined;
 
 function getVersion(): string {
   try {
@@ -28,7 +36,15 @@ function getVersion(): string {
   } catch {
     // ignore
   }
-  return 'v0.1.0';
+  // pkg snapshots the filesystem, so neither path above exists inside a standalone
+  // binary. scripts/binaries.mjs writes this module before packaging; without it
+  // the CLI reported a stale hardcoded version.
+  return INJECTED_VERSION;
+}
+
+/** Exported so the `run` banner cannot drift from `--version`. */
+export function resolveVersion(): string {
+  return getVersion();
 }
 
 async function main(): Promise<void> {

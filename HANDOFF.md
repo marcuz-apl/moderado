@@ -56,6 +56,27 @@ in these files, and the PR body states this so a reviewer need not rediscover it
 The remaining gate is a community moderator review. Nothing further is
 actionable locally until that lands.
 
+### v0.3.9 binaries reported a wrong version (fixed after release)
+
+A user installing the v0.3.9 standalone binary saw `moderado --version` print
+`v0.1.0`. Cause: `pkg` snapshots the filesystem, so inside the executable
+neither the root `VERSION` file nor `apps/cli/package.json` exists. `getVersion()`
+in `apps/cli/src/index.ts` therefore always fell through to a hardcoded `v0.1.0`
+literal, and `apps/cli/src/commands/run.ts` had a second, independent
+`Moderado v0.1.0` banner literal. npm installs were unaffected because
+`package.json` ships in the tarball.
+
+`pkg` has no `--define`, so `scripts/binaries.mjs` now writes
+`apps/cli/dist/injected_version.js` immediately before packaging, and the CLI
+reads it as the last-resort fallback. `getVersion()` is exported as
+`resolveVersion()` so the `run` banner can no longer drift from `--version`. A
+missing or blank value yields `unknown` rather than a false version claim.
+
+Verified by building a real `node22-win-x64` binary and running it: `--version`
+prints the connected version, and `--help`/`doctor` still work. Every future
+standalone release inherits the fix. **The already-published v0.3.9 binaries
+still carry the bug** and are only correct once re-released.
+
 ## Completed
 
 - Removed the `codex/vscode-extension` branch locally and on `origin`; pruned the remote-tracking ref. The tip commit `193ba46` is retained only as the tag `backup/codex-vscode-extension`. No VS Code extension code was ever merged into `master`, so no product code was reverted.
@@ -88,7 +109,7 @@ actionable locally until that lands.
 
 ## Next action
 
-1. Decide whether and when to release v0.4.0. The Tier 1 gap list in [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) is the natural scope: **granular pattern-based approval policies** first (ask/allow/deny keyed on tool input, deny wins over `--auto`), then `moderado run --plan`, custom Markdown slash commands, and `--continue`/`--session`/`--fork` for `run`.
+1. Decide whether and when to release v0.4.0. It should carry the binary version fix (`v0.3.9` standalone binaries report `v0.1.0`) so corrected binaries are actually shipped. The Tier 1 gap list in [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) is the natural scope after that: **granular pattern-based approval policies** first (ask/allow/deny keyed on tool input, deny wins over `--auto`), then `moderado run --plan`, custom Markdown slash commands, and `--continue`/`--session`/`--fork` for `run`.
 2. winget: #444475 (0.3.9) is open and mergeable, gated only on a volunteer moderator. After it merges, `winget install MarcuzApl.Moderado` works. Optional: a single polite ping after ~2 weeks.
 3. AUR still needs its first upload (`moderado-bin`); one-time, then a checksum bump per release.
 
