@@ -27,9 +27,10 @@
 | [**PRD.md**](file:///d:/projects/moderado/PRD.md) | **Product Requirements Document**: Personas, requirements, CLI specs, and acceptance criteria |
 | [**AGENTS.md**](file:///d:/projects/moderado/AGENTS.md) | **Agent Operational Manual**: Rules of engagement, Ponytail Decision Ladder, and subagent patterns |
 | [**docs/ARCHITECTURE.md**](file:///d:/projects/moderado/docs/ARCHITECTURE.md) | **System Architecture**: Workspaces, Dependency Injection, state machines, and event streams |
-| [**docs/TOOLS.md**](file:///d:/projects/moderado/docs/TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the 7 tools |
+| [**docs/TOOLS.md**](file:///d:/projects/moderado/docs/TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the workspace tools |
 | [**docs/ROUTING.md**](file:///d:/projects/moderado/docs/ROUTING.md) | **Discovery & Routing**: Classification taxonomy, AUTO selection algorithm, and retry/fallback cascades |
 | [**docs/SECURITY.md**](file:///d:/projects/moderado/docs/SECURITY.md) | **Security Model**: Workspace jail, `shell: false` isolation, environment cleansing, and injection defense |
+| [**docs/COMPETITIVE_ANALYSIS.md**](../../docs/COMPETITIVE_ANALYSIS.md) | **Competitive Analysis**: Verified Cline CLI and OpenCode CLI feature survey, gap analysis, and deliberate non-goals |
 | [**HANDOFF.md**](file:///d:/projects/moderado/HANDOFF.md) | **Project Handoff Snapshot**: Real-time status, decisions, blockers, and next implementation milestones |
 
 ---
@@ -108,7 +109,7 @@ node apps/cli/dist/index.js
 
 Maintainers can install a verified release artifact directly with
 `npm install -g ./moderado-<version>.tgz`. See
-[docs/RELEASING.md](docs/RELEASING.md) for the review procedure.
+[docs/RELEASING.md](../../docs/RELEASING.md) for the review procedure.
 
 ### Connect a provider
 
@@ -192,7 +193,7 @@ Use `/workflow` from the TUI to work through a change safely:
 
 ### Diagnostics evidence
 
-Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or JavaScript workspace. It may run only the direct `typecheck`, `lint`, or `test` script defined in that workspace�s `package.json`, and every run requires approval. A non-zero exit returns parsed TypeScript errors as repair evidence; it does not bypass the safety boundary.
+Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or JavaScript workspace. It may run only the direct `typecheck`, `lint`, or `test` script defined in that workspace’s `package.json`, and every run requires approval. A non-zero exit returns parsed TypeScript errors as repair evidence; it does not bypass the safety boundary.
 
 ### TypeScript language intelligence
 

@@ -9,7 +9,9 @@
 ---
 
 > Feature highlights, documentation map, workspace layout, and in-depth TUI
-> capability guides moved to [docs/GUIDE.md](docs/GUIDE.md).
+> capability guides moved to [docs/GUIDE.md](docs/GUIDE.md). A verified survey
+> of Cline CLI and OpenCode CLI, with the ranked gap list for Moderado, lives in
+> [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md).
 
 ## Tech Stack
 

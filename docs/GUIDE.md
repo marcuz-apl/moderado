@@ -3,13 +3,13 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. Everything below applies to Moderado v0.3.7.
+quick start. Everything below applies to Moderado v0.3.9.
 
 ---
 
 ## Highlights
 
-- **Clean-Room & Original**: Built from scratch in TypeScript on Node.js (>= 20 LTS). No code copied from Cline, OpenCode, or legacy wrappers.
+- **Clean-Room & Original**: Built from scratch in TypeScript on Node.js (>= 20 LTS). No code copied from Cline, OpenCode, or legacy wrappers. The two competitors are surveyed in [docs/COMPETITIVE_ANALYSIS.md](COMPETITIVE_ANALYSIS.md), which records what they ship, what Moderado deliberately does not adopt, and why.
 - **Provider-Independent Core**: Core agent loops, tool dispatching, and routing depend on pure contracts (`packages/contracts`) using Dependency Injection.
 - **Dynamic NVIDIA Discovery**: Queries live `/v1/models` from NVIDIA NIM hosted catalog or local NIM instances; never relies on stale static lists.
 - **Free-First AUTO Routing**: Intelligently ranks and selects verified free/trial tool-capable models before any paid endpoints. Paid models and unverified pricing require explicit user opt-in.
@@ -23,13 +23,14 @@ quick start. Everything below applies to Moderado v0.3.7.
 
 | Document | Purpose |
 |---|---|
-| [**PRD.md**](./PRD.md) | **Product Requirements Document**: Personas, requirements, CLI specs, and acceptance criteria |
-| [**AGENTS.md**](./AGENTS.md) | **Agent Operational Manual**: Rules of engagement, Ponytail Decision Ladder, and subagent patterns |
-| [**docs/ARCHITECTURE.md**](./docs/ARCHITECTURE.md) | **System Architecture**: Workspaces, Dependency Injection, state machines, and event streams |
-| [**docs/TOOLS.md**](./docs/TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the 7 tools |
-| [**docs/ROUTING.md**](./docs/ROUTING.md) | **Discovery & Routing**: Classification taxonomy, AUTO selection algorithm, and retry/fallback cascades |
-| [**docs/SECURITY.md**](./docs/SECURITY.md) | **Security Model**: Workspace jail, `shell: false` isolation, environment cleansing, and injection defense |
-| [**HANDOFF.md**](./HANDOFF.md) | **Project Handoff Snapshot**: Real-time status, decisions, blockers, and next implementation milestones |
+| [**PRD.md**](../PRD.md) | **Product Requirements Document**: Personas, requirements, CLI specs, and acceptance criteria |
+| [**AGENTS.md**](../AGENTS.md) | **Agent Operational Manual**: Rules of engagement, Ponytail Decision Ladder, and subagent patterns |
+| [**docs/ARCHITECTURE.md**](./ARCHITECTURE.md) | **System Architecture**: Workspaces, Dependency Injection, state machines, and event streams |
+| [**docs/TOOLS.md**](./TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the workspace tools |
+| [**docs/ROUTING.md**](./ROUTING.md) | **Discovery & Routing**: Classification taxonomy, AUTO selection algorithm, and retry/fallback cascades |
+| [**docs/SECURITY.md**](./SECURITY.md) | **Security Model**: Workspace jail, `shell: false` isolation, environment cleansing, and injection defense |
+| [**docs/COMPETITIVE_ANALYSIS.md**](./COMPETITIVE_ANALYSIS.md) | **Competitive Analysis**: Verified Cline CLI and OpenCode CLI feature survey, gap analysis, and deliberate non-goals |
+| [**HANDOFF.md**](../HANDOFF.md) | **Project Handoff Snapshot**: Real-time status, decisions, blockers, and next implementation milestones |
 
 ---
 
@@ -68,7 +69,7 @@ Use `/workflow` from the TUI to work through a change safely:
 
 ### Diagnostics evidence
 
-Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or JavaScript workspace. It may run only the direct `typecheck`, `lint`, or `test` script defined in that workspace�s `package.json`, and every run requires approval. A non-zero exit returns parsed TypeScript errors as repair evidence; it does not bypass the safety boundary.
+Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or JavaScript workspace. It may run only the direct `typecheck`, `lint`, or `test` script defined in that workspace’s `package.json`, and every run requires approval. A non-zero exit returns parsed TypeScript errors as repair evidence; it does not bypass the safety boundary.
 
 ### TypeScript language intelligence
 

@@ -28,7 +28,10 @@ Moderado will differentiate itself through:
   agent loop.
 
 The product should learn from OpenCode and Cline's workflows without copying
-their code or attempting to reproduce every feature. `v0.3.0` is CLI-only and
+their code or attempting to reproduce every feature. That survey is kept
+current in [COMPETITIVE_ANALYSIS.md](COMPETITIVE_ANALYSIS.md), which records
+the verified competitor feature set, the ranked gap list for Moderado, and the
+deliberate non-goals. `v0.3.0` is CLI-only and
 does not imply parity with OpenCode extras such as themes, keybinds,
 formatters, IDE extensions, plugins, or SDK surfaces.
 

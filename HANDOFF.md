@@ -1,11 +1,17 @@
 # Active CLI Baseline
 
 Updated: 2026-09-30
-Branch: master
+Branch: master (`eed8eb9`, v0.3.9+2609304)
 Status: v0.3.9 contains the CLI skill enhancement and shared provider preset catalog on master. npm remains at v0.3.8 until a separate release.
 
 ## Completed
 
+- Removed the `codex/vscode-extension` branch locally and on `origin`; pruned the remote-tracking ref. The tip commit `193ba46` is retained only as the tag `backup/codex-vscode-extension`. No VS Code extension code was ever merged into `master`, so no product code was reverted.
+- Cleaned the workspace of untracked leftovers from that branch: `apps/vscode/` (stale `dist/` + `node_modules/`), `.vscode/` (an `extensions.json` recommending the abandoned extension), and `artifacts/vsix/`. All three were gitignored build output, so the removal changed no tracked file.
+- Repaired a UTF-8 mojibake corruption (`U+FFFD`) in `docs/GUIDE.md` and `apps/cli/README.md` — the apostrophe in "workspace's `package.json`" had been replaced with a replacement character.
+- Corrected stale documentation: `docs/GUIDE.md` claimed v0.3.7 while the project is at v0.3.9; both READMEs described "the 7 tools" when 12 are registered plus 2 core-owned plus dynamic MCP tools.
+- Added a §2 Tool Inventory table to `docs/TOOLS.md` listing all tools with their approval gate and source file, then renumbered the old §2 Tool Specifications to §3 and the error taxonomy to §4.
+- Added `docs/COMPETITIVE_ANALYSIS.md`: a verified survey of Cline CLI and OpenCode CLI from vendor documentation, Moderado's confirmed baseline read from source, a three-tier ranked gap list, and explicit non-goals. Linked from `README.md`, `docs/GUIDE.md`, `docs/TOOLS.md`, `apps/cli/README.md`, and `docs/CLI_CAPABILITY_ROADMAP.md`.
 - Added four compact built-in coding skills: code review, implementation planning, systematic debugging, and test-driven development.
 - User `SKILL.md` files are discovered but disabled by default. `/skills on NAME` and `moderado skills on NAME` persist selected user skills in `~/.moderado/config.json`; `off` reverses this without deleting files. An enabled user skill can override a built-in by name.
 - The model receives short metadata for active skills and loads full instructions only through `load_skill` or an explicit `skill:NAME` task mention. `/skills` now groups built-in and user skills and shows the user directory.
@@ -24,10 +30,14 @@ Status: v0.3.9 contains the CLI skill enhancement and shared provider preset cat
 
 - Keep a small built-in set on master. Enable user skills selectively before considering more of `alfazen-coding`.
 - Keep package version 0.3.9 through the provider refactor; its squash commit advances only the connected build suffix.
+- IDE extensions are out of product scope. `codex/vscode-extension` is deleted; keep only the `backup/codex-vscode-extension` tag until the owner confirms the work is unrecoverable-needed, then drop the tag.
+- Do not chase OpenCode/Cline parity. Themes, keybinds, formatters, web UI, server mode, kanban, hub daemon, scheduling, and a plugin/hook runtime stay out — they are presentation and orchestration surface, not agent capability.
+- Do not adopt Cline's auto-approve-by-default. The approval-first default is Moderado's identity.
 
 ## Next action
 
 1. Decide whether and when to release v0.3.9 to npm and other distribution channels.
+2. Owner picks the first item from the Tier 1 gap list in [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md). Recommendation: **granular pattern-based approval policies** (ask/allow/deny keyed on tool input, deny wins over `--auto`), because it extends the existing `PolicyManager` in `packages/core`, closes the largest real gap, and makes unattended use on a trusted repo safe without weakening the default. Runner-ups: `moderado run --plan`, custom Markdown slash commands with `$1`/`$ARGUMENTS` substitution, and `--continue`/`--session`/`--fork` for `run`.
 
 ---
 

@@ -38,10 +38,42 @@ export interface ToolResult {
 ```
 
 ---
+## 2. Tool Inventory
 
-## 2. Tool Specifications
+Sections 2.1–2.7 below carry the full schema for the core workspace tools.
+Four further registered tools, two core-owned tools, and dynamic MCP tools
+complete the set. `createDefaultToolRegistry` in
+`packages/tools/src/registry.ts` is the source of truth.
 
-### 2.1 `read_file`
+| Tool | Approval | Added in | Detailed schema |
+|---|---|---|---|
+| `read_file` | Auto (read) | core | §2.1 |
+| `write_file` | **Required** | core | §2.2 |
+| `edit_file` | **Required** | core | §2.3 |
+| `list_files` | Auto (read) | core | §2.4 |
+| `search_files` | Auto (read) | core | §2.5 |
+| `run_command` | **Required** | core | §2.6 |
+| `git_diff` | Auto (read) | core | §2.7 |
+| `apply_patch` | **Required** | M3 | `packages/tools/src/tools/apply_patch.ts` |
+| `run_diagnostics` | **Required** | M4.1 | `packages/tools/src/tools/run_diagnostics.ts` |
+| `get_definition` | Auto (read) | M4.2 | `packages/tools/src/tools/language_intelligence.ts` |
+| `find_references` | Auto (read) | M4.2 | `packages/tools/src/tools/language_intelligence.ts` |
+| `web_search` | Auto (bounded) | M7.1 | `packages/tools/src/tools/web_search.ts` |
+| `load_skill` | Auto (read) | M7.10 | `packages/core/src/agent.ts` (core-owned) |
+| `subagent` | Inherits parent | M7.10 | `packages/core/src/subagent.ts` (core-owned) |
+| `mcp.<server>.<tool>` | **Required, always** | M4.3 | `packages/tools/src/mcp_adapter.ts` |
+
+`load_skill` and `subagent` are declared by the core agent loop rather than
+registered in the tools package, so that `packages/core` stays free of any
+dependency on `packages/tools`. MCP tools are added dynamically at session
+startup and require approval on every call, even when general auto-approval is
+enabled.
+
+
+
+## 3. Tool Specifications
+
+### 3.1 `read_file`
 Reads the content of a file within the workspace.
 
 - **Approval Gate**: Auto-approved (Read).
@@ -67,7 +99,7 @@ Reads the content of a file within the workspace.
 
 ---
 
-### 2.2 `write_file`
+### 3.2 `write_file`
 Creates a new file or completely replaces an existing file atomically.
 
 - **Approval Gate**: **Requires Interactive Approval** (Write).
@@ -88,7 +120,7 @@ Creates a new file or completely replaces an existing file atomically.
 
 ---
 
-### 2.3 `edit_file`
+### 3.3 `edit_file`
 Applies surgical modifications by replacing an exact, unique snippet of text with new content.
 
 - **Approval Gate**: **Requires Interactive Approval** (Write).
@@ -111,7 +143,7 @@ Applies surgical modifications by replacing an exact, unique snippet of text wit
 
 ---
 
-### 2.4 `list_files`
+### 3.4 `list_files`
 Lists directory contents matching search patterns or recursive listings.
 
 - **Approval Gate**: Auto-approved (Read).
@@ -131,7 +163,7 @@ Lists directory contents matching search patterns or recursive listings.
 
 ---
 
-### 2.5 `search_files`
+### 3.5 `search_files`
 Searches file contents within the workspace using literal strings or regex patterns.
 
 - **Approval Gate**: Auto-approved (Read).
@@ -152,7 +184,7 @@ Searches file contents within the workspace using literal strings or regex patte
 
 ---
 
-### 2.6 `run_command`
+### 3.6 `run_command`
 Executes external processes within the workspace directory.
 
 - **Approval Gate**: **Requires Interactive Approval** (Command).
@@ -175,7 +207,7 @@ Executes external processes within the workspace directory.
 
 ---
 
-### 2.7 `git_diff`
+### 3.7 `git_diff`
 Inspects uncommitted changes or compares against git references.
 
 - **Approval Gate**: Auto-approved (Read).
@@ -194,7 +226,7 @@ Inspects uncommitted changes or compares against git references.
 
 ---
 
-## 3. Standardized Error Taxonomy
+## 4. Standardized Error Taxonomy
 
 | Error Code | Error Class | Description |
 |---|---|---|
