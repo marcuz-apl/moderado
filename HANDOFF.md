@@ -2,7 +2,7 @@
 
 Updated: 2026-09-30
 Branch: master
-Status: v0.3.9 contains the CLI skill enhancement on master. npm remains at v0.3.8 until a separate release.
+Status: v0.3.9 contains the CLI skill enhancement and shared provider preset catalog on master. npm remains at v0.3.8 until a separate release.
 
 ## Completed
 
@@ -12,16 +12,18 @@ Status: v0.3.9 contains the CLI skill enhancement on master. npm remains at v0.3
 - Updated CLI help and `docs/GUIDE.md`.
 - Confirmed the core has a bounded `subagent` tool: one child agent loop, shared provider/tools/approval policy, five steps, no nesting.
 - Reviewed the local `D:\projects\alfazen-skills\alfazen-coding` bundle. It is a useful source, but its full 20-skill set should not be injected into every prompt; some workflows expect orchestration tools the CLI does not expose.
+- Squash-merged `codex/cli-provider-presets`: provider preset metadata and free-model policy now live in `packages/providers`, with CLI re-exports preserving existing imports. No `apps/vscode` code was merged.
 
 ## Checks
 
 - `npm.cmd run build` and `npm.cmd run typecheck`: pass.
-- Offline tests: 59 files / 436 tests pass with temp fixtures inside the workspace and `GIT_CEILING_DIRECTORIES` set to the workspace root.
+- Offline tests: 60 files / 438 tests pass with temp fixtures inside the workspace and `GIT_CEILING_DIRECTORIES` set to the workspace root.
 - `node apps/cli/dist/index.js skills`: lists four built-ins and 23 local user skills, all user skills currently off. The default skill context on this profile fell from about 143,500 body characters to 520 catalogue characters.
 
 ## Decision
 
 - Keep a small built-in set on master. Enable user skills selectively before considering more of `alfazen-coding`.
+- Keep package version 0.3.9 through the provider refactor; its squash commit advances only the connected build suffix.
 
 ## Next action
 
