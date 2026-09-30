@@ -1,12 +1,14 @@
 # VS Code Extension Milestone 1
 
 Updated: 2026-09-29
-Branch: `codex/vscode-extension` (from `master` at `9c87697`, CLI `v0.3.8`)
-Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebuild.md`](file:///d:/projects/moderado/docs/superpowers/plans/2026-09-29-vscode-extension-rebuild.md) is implemented and green. Nothing is pushed to `origin` yet.
+Branches:
+- `codex/cli-provider-presets` (`217995c`, pushed) — CLI-only base, branched from `master` `9c87697`
+- `codex/vscode-extension` (`312f994`, pushed) — rebased on the CLI branch, so it no longer duplicates the refactor
+Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebuild.md`](file:///d:/projects/moderado/docs/superpowers/plans/2026-09-29-vscode-extension-rebuild.md) is implemented and green. `master` is untouched.
 
 ## Completed
 
-- Extracted the provider preset catalog and the free-model policy out of the CLI presentation layer into [`packages/providers/src/presets.ts`](file:///d:/projects/moderado/packages/providers/src/presets.ts); `apps/cli/src/config.ts` and `apps/cli/src/model_pricing.ts` now re-export from it. CLI behavior is unchanged.
+- The CLI-side refactor is its own commit (`217995c`): the built-in connect presets and the free-model predicate moved out of the CLI presentation layer into [`packages/providers/src/presets.ts`](file:///d:/projects/moderado/packages/providers/src/presets.ts); `apps/cli/src/config.ts` and `apps/cli/src/model_pricing.ts` re-export from it. CLI behavior is unchanged. `apps/cli/package.json` and the lockfile track VERSION's base SemVer, which `apps/cli/tests/package_metadata.test.ts` enforces.
 - Added the versioned webview host protocol ([`packages/contracts/src/host_protocol.ts`](file:///d:/projects/moderado/packages/contracts/src/host_protocol.ts)): ten intents and ten results, all `.strict()`, with request IDs and `protocolVersion`.
 - Added the extension host: [`apps/vscode/src/agent_host.ts`](file:///d:/projects/moderado/apps/vscode/src/agent_host.ts) (intent dispatch, turn lifecycle, session registry), [`approval_handler.ts`](file:///d:/projects/moderado/apps/vscode/src/approval_handler.ts) (five categories, host-side gate), `provider_service.ts` (catalog + proven-free filter), and [`extension.ts`](file:///d:/projects/moderado/apps/vscode/src/extension.ts) (webview view provider, SecretStorage keys, per-workspace state).
 - Removed a duplicate approval gate bug found while writing the host: `resolve_approval` was consulting the settings-level gate while turns ran under a per-turn gate; the per-turn gate is now tracked in `activeGate`.
@@ -15,16 +17,16 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 
 ## Checks
 
-- `npm.cmd run build` — PASS.
-- `npm.cmd run typecheck` — PASS.
-- `npm.cmd test` — PASS: 64 files / 460 tests, offline.
-- `npm.cmd run build --workspace apps/vscode` — PASS: emits `dist/extension.cjs`.
+- On `codex/vscode-extension`: `npm.cmd run build`, `npm.cmd run typecheck`, and `npm.cmd run build --workspace apps/vscode` all PASS; `npm.cmd test` PASS with 64 files / 460 tests, offline.
+- On `codex/cli-provider-presets` alone: `build` and `typecheck` PASS; `npm.cmd test` PASS with 60 files / 429 tests.
+- A `tsc -b` rebuild is required after switching branches, or stale `packages/*/dist` output makes typecheck fail on exports that are present in source.
 
 ## Decisions
 
 - `filterProvenFreeModels(connectionId, entries)` takes the connection id and resolves the free policy itself. Letting the webview pass a policy object would let a caller widen the free list, so the host rejects any model the provider cannot substantiate (`MODEL_NOT_FREE`).
-- `packages/providers/tests/presets.test.ts` asserted seven preset metas; shipped `0.3.8` has six, because `openai-compatible` is a CLI pick-list entry with no fixed base URL. The test now asserts the six metas and that the id list still contains `openai-compatible`.
+- `packages/providers/tests/presets.test.ts` originally asserted seven preset metas; shipped `0.3.8` has six, because `openai-compatible` is a CLI pick-list entry with no fixed base URL. The test now asserts the six metas and that the id list still contains `openai-compatible`.
 - `listProviderPresets` does not yet append the `openai-compatible` pick-list entry. Milestone 2 owns the provider picker; the existing test pins the current two-source list (enabled built-ins plus configured custom connections).
+- The Alfazen hook in `.githooks/pre-commit` (via `core.hooksPath`) derives the bump from the commit subject: `feat`/`feat(...)` is a patch bump, anything else is a build-only bump. Use `--no-verify` when amending, otherwise each amend bumps VERSION again.
 
 ## Blockers
 
