@@ -5,8 +5,9 @@ carries all 11 assets (3 binaries, 3 checksum sidecars, `manifest.json`, and
 the 4 community manifests). The Homebrew tap
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
-are both still pinned at **v0.3.0** and need a per-release bump to v0.3.9
-(see §2 and §3). The winget submission is open as
+are both at **v0.3.9**, bumped from the manifests attached to the v0.3.9
+Release after verifying every binary checksum against its `.sha256` sidecar.
+The winget submission is open as
 [microsoft/winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175)
 (0.3.0, awaiting a community moderator). AUR still needs its first upload
 (below). Chocolatey is deliberately out of scope.
@@ -35,7 +36,7 @@ pins a release instead of tracking `latest`. Covered by
 `apps/cli/tests/install_script.test.ts` (happy path + manifest-mismatch
 refusal against a local fixture server).
 
-## 2. Homebrew tap — seeded, keep in sync
+## 2. Homebrew tap — at v0.3.9, keep in sync
 
 - Tap repo: `marcuz-apl/homebrew-moderado`, formula `Formula/moderado.rb`.
 - Users: `brew tap marcuz-apl/moderado && brew install moderado`.
@@ -45,23 +46,19 @@ refusal against a local fixture server).
   `npm run generate:manifests -- artifacts/release/manifest.json /tmp/d
   https://github.com/marcuz-apl/moderado/releases/download/vX.Y.Z`
   and `diff` — for v0.3.7 the tap file was byte-identical.
-- **Outstanding: the tap is still at v0.3.0.** Copy the v0.3.9
-  `moderado.rb` from the
-  [v0.3.9 Release](https://github.com/marcuz-apl/moderado/releases/tag/v0.3.9)
-  to close the gap.
+- **Outstanding: none — bumped to v0.3.9** in commit `a82ccc1`, copied from
+  the v0.3.9 Release attachment after checksum verification.
 - No homebrew-core submission planned; a personal tap is the standard path.
 
-## 3. Scoop bucket — seeded, keep in sync
+## 3. Scoop bucket — at v0.3.9, keep in sync
 
 - Bucket repo: `marcuz-apl/scoop-moderado`, manifest `bucket/moderado.json`.
 - Users: `scoop bucket add moderado
   https://github.com/marcuz-apl/scoop-moderado && scoop install moderado`.
 - Per release: same flow — copy `distribution/scoop/moderado.json` over
   `bucket/moderado.json` and commit (v0.3.7 verified byte-identical).
-- **Outstanding: the bucket is still at v0.3.0.** Copy the v0.3.9
-  `moderado.json` from the
-  [v0.3.9 Release](https://github.com/marcuz-apl/moderado/releases/tag/v0.3.9)
-  to close the gap.
+- **Outstanding: none — bumped to v0.3.9** in commit `f0e47d9`, copied from
+  the v0.3.9 Release attachment after checksum verification.
 
 ## 4. winget — submitted, awaiting a community moderator
 
