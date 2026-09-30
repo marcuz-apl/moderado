@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.3.9-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.3.10-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -48,7 +48,7 @@ moderado run "Analyze security boundaries" --read-only
 
 ## Install Moderado
 
-`moderado@0.3.9` is live on the public npm registry (`latest` → 0.3.9).
+`moderado@0.3.10` is live on the public npm registry (`latest` → 0.3.10).
 Chocolatey is deliberately out of scope; the full channel runbook lives in
 [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
@@ -57,10 +57,10 @@ Chocolatey is deliberately out of scope; the full channel runbook lives in
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.9
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.10
 
 # npm (requires Node.js >= 20)
-npm install -g moderado@0.3.9
+npm install -g moderado@0.3.10
 
 # AUR: build `moderado-bin` from the PKGBUILD attached to the GitHub
 # Release (maintainer upload pending)
@@ -73,10 +73,10 @@ npm install -g moderado@0.3.9
 brew tap marcuz-apl/moderado && brew install moderado
 
 # curl installer (arm64), same checksum verification as Linux
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.9
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.10
 
 # npm (requires Node.js >= 20)
-npm install -g moderado@0.3.9
+npm install -g moderado@0.3.10
 ```
 
 ### Windows
@@ -90,14 +90,14 @@ scoop install moderado
 # still awaiting a community moderator, so `winget install
 # MarcuzApl.Moderado` does not resolve yet. Install the current release
 # directly from its manifest:
-#   curl -LO https://github.com/marcuz-apl/moderado/releases/download/v0.3.9/Moderado.yaml
+#   curl -LO https://github.com/marcuz-apl/moderado/releases/download/v0.3.10/Moderado.yaml
 #   winget install --manifest .\Moderado.yaml
 
 # or simply take the standalone binary (no Node.js required):
-#   https://github.com/marcuz-apl/moderado/releases/download/v0.3.9/moderado-win-x64.exe
+#   https://github.com/marcuz-apl/moderado/releases/download/v0.3.10/moderado-win-x64.exe
 
 # npm (requires Node.js >= 20)
-npm install -g moderado@0.3.9
+npm install -g moderado@0.3.10
 ```
 
 Windows binaries are unsigned — expect a SmartScreen prompt on first run.

@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.3.9-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Version](https://img.shields.io/badge/version-v0.3.10-blue.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -88,12 +88,12 @@ npm install -g moderado
 moderado --help
 ```
 
-moderado@0.3.9 is live on the public npm registry (latest tag points at 0.3.9).
+moderado@0.3.10 is live on the public npm registry (latest tag points at 0.3.10).
 Any npm-compatible installer works (bun add -g moderado,
 pnpm add -g moderado, npx -y moderado@latest --help), and prebuilt
 dependency-free binaries (moderado-win-x64.exe, moderado-macos-arm64,
 moderado-linux-x64) are attached to the
-GitHub Release v0.3.9 at https://github.com/marcuz-apl/moderado/releases/tag/v0.3.9.
+GitHub Release v0.3.10 at https://github.com/marcuz-apl/moderado/releases/tag/v0.3.10.
 The curl installer (`scripts/install.sh`, Linux x64 + macOS arm64), the
 Homebrew tap, and the Scoop bucket are available; the winget submission is
 pending merge and AUR has not been uploaded yet. See docs/DISTRIBUTION.md in

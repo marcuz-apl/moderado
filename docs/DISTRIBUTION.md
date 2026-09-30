@@ -1,16 +1,19 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-Status: `moderado@0.3.9` is live on npm and the GitHub Release `v0.3.9`
-carries all 11 assets (3 binaries, 3 checksum sidecars, `manifest.json`, and
-the 4 community manifests). The Homebrew tap
+Status: `moderado@0.3.9` is the most recent published release. **v0.3.10 is
+being prepared** and ships the fix for standalone binaries misreporting their
+version, so the per-channel bumps below must target v0.3.10 once it is
+published. The GitHub Release `v0.3.9` carries all 11 assets (3 binaries, 3
+checksum sidecars, `manifest.json`, and the 4 community manifests). The
+Homebrew tap
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
-are both at **v0.3.9**, bumped from the manifests attached to the v0.3.9
-Release after verifying every binary checksum against its `.sha256` sidecar.
-The winget submission is open as
-[microsoft/winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175)
-(0.3.0, awaiting a community moderator). AUR still needs its first upload
-(below). Chocolatey is deliberately out of scope.
+are both at **v0.3.9**, bumped after verifying every binary checksum against
+its `.sha256` sidecar. The winget submission is open as
+[microsoft/winget-pkgs#444475](https://github.com/microsoft/winget-pkgs/pull/444475)
+(0.3.9, awaiting a community moderator; a 0.3.10 bump PR follows once that
+merges). AUR still needs its first upload (below). Chocolatey is deliberately
+out of scope.
 
 CI already does the heavy lifting: `release.yml` builds the three binaries
 and generates the manifests; `publish.yml` attaches `moderado.rb`,
@@ -26,7 +29,7 @@ users take the `.exe`, Scoop, or winget):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash
-curl -fsSL .../install.sh | bash -s -- --version v0.3.9 --dir ~/.local/bin
+curl -fsSL .../install.sh | bash -s -- --version v0.3.10 --dir ~/.local/bin
 ```
 
 Security properties (deliberate, do not regress): downloads the binary, the
