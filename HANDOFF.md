@@ -22,7 +22,7 @@ Status: **0.3.9 is released.** Published to npm as `latest` with provenance, and
 | curl installer | 0.3.9 (tracks latest) | none |
 | Homebrew tap | **0.3.9** | done — `a82ccc1` |
 | Scoop bucket | **0.3.9** | done — `f0e47d9` |
-| winget | 0.3.0 PR open | blocked on a community moderator; see below |
+| winget | 0.3.9 PR open | blocked on a community moderator; see below |
 | AUR | never uploaded | first submission still owed |
 
 The Homebrew and Scoop repos were verified live and were both still pinned at 0.3.0 — older than the 0.3.7 the runbook previously claimed. Both were bumped to 0.3.9 by copying the canonical manifests from the v0.3.9 GitHub Release, after confirming all three binary checksums matched the published `.sha256` sidecars byte for byte:
@@ -33,16 +33,23 @@ The Homebrew and Scoop repos were verified live and were both still pinned at 0.
 | `moderado-macos-arm64` | `b5d7362d7e4ea082ae1b0ae6434cb35b56554de8b6d3687d7c64f42dba7b9d36` |
 | `moderado-win-x64.exe` | `ebade87fa82bfeb81ed5409d26d9bedd4ee05ad3d896f84a4ea2307110f7c6b7` |
 
-### winget cannot be advanced right now
+### winget 0.3.9 is submitted
 
-`MarcuzApl.Moderado` **does not yet exist** in `winget-pkgs` master (the path
-404s), because #439175 is still open. winget requires a package identifier to
-exist before a version bump is accepted, so a 0.3.9 PR submitted today would be
-rejected as a new/duplicate package rather than a version update. The 0.3.0 PR
-is gated on a volunteer moderator (`reviewDecision: REVIEW_REQUIRED`); the CLA
-is already signed. Open the 0.3.9 PR only after #439175 merges, using
-`https://github.com/marcuz-apl/moderado/releases/download/v0.3.9/Moderado.yaml`
-under `manifests/m/MarcuzApl/Moderado/0.3.9/`.
+Closed the stale 0.3.0 PR #439175 and opened
+[microsoft/winget-pkgs#444475](https://github.com/microsoft/winget-pkgs/pull/444475)
+for 0.3.9 (`MERGEABLE`). It adds the three required manifests under
+`manifests/m/MarcuzApl/Moderado/0.3.9/` — version, installer (portable, x64),
+and defaultLocale (en-US) — with `InstallerSha256` taken from the v0.3.9
+release sidecar.
+
+`winget validate` on winget `v1.30.140-preview` reports "multi file manifest is
+incomplete" for this set, but produces the **identical** error for an unmodified
+Microsoft manifest (`Microsoft.PowerShell` 7.6.6.0) on the same machine, so the
+message reflects a limitation of that preview build rather than these files.
+The PR body states this so a reviewer does not have to rediscover it.
+
+The remaining gate is a community moderator review. Nothing further is
+actionable locally until that lands.
 
 ## Completed
 
@@ -77,7 +84,7 @@ under `manifests/m/MarcuzApl/Moderado/0.3.9/`.
 ## Next action
 
 1. Decide whether and when to release v0.4.0. The Tier 1 gap list in [docs/COMPETITIVE_ANALYSIS.md](docs/COMPETITIVE_ANALYSIS.md) is the natural scope: **granular pattern-based approval policies** first (ask/allow/deny keyed on tool input, deny wins over `--auto`), then `moderado run --plan`, custom Markdown slash commands, and `--continue`/`--session`/`--fork` for `run`.
-2. winget: after #439175 merges, open the 0.3.9 version PR. Until then it is blocked on a volunteer moderator and cannot be expedited. Optional: a single polite ping after the PR reaches two weeks.
+2. winget: #444475 (0.3.9) is open and mergeable, gated only on a volunteer moderator. After it merges, `winget install MarcuzApl.Moderado` works. Optional: a single polite ping after ~2 weeks.
 3. AUR still needs its first upload (`moderado-bin`); one-time, then a checksum bump per release.
 
 ---

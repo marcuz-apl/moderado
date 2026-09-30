@@ -60,27 +60,30 @@ refusal against a local fixture server).
 - **Outstanding: none — bumped to v0.3.9** in commit `f0e47d9`, copied from
   the v0.3.9 Release attachment after checksum verification.
 
-## 4. winget — submitted, awaiting a community moderator
+## 4. winget — 0.3.9 submitted, awaiting a community moderator
 
-- Package ID: `MarcuzApl.Moderado`. The first submission is open as
-  [microsoft/winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175)
-  and covers **0.3.0 only**. The CLA is signed; the remaining gate is a
-  community moderator approval, which Microsoft states takes hours–days and
-  cannot be expedited.
-- **Do not open a 0.3.9 PR yet.** winget requires the package identifier to
-  exist in `winget-pkgs` before a version bump is accepted, and #439175 has
-  not merged. Submit the v0.3.9 manifest under
-  `manifests/m/MarcuzApl/Moderado/0.3.9/` only *after* the 0.3.0 PR lands,
-  validated locally with `winget validate`.
-- The v0.3.9 manifest is ready and verified:
-  `https://github.com/marcuz-apl/moderado/releases/download/v0.3.9/Moderado.yaml`
-  (`PackageVersion: 0.3.9`, `InstallerSha256: ebade87f…7110f7c6b7`).
-- Per release after that: one manifest PR (automatable with `wingetcreate
-  update MarcuzApl.Moderado -u <exe-url> -v <version>`).
+- Package ID: `MarcuzApl.Moderado`. The 0.3.0 submission
+  ([#439175](https://github.com/microsoft/winget-pkgs/pull/439175)) was closed
+  as out of date and superseded by
+  **[#444475](https://github.com/microsoft/winget-pkgs/pull/444475)**
+  (0.3.9, `MERGEABLE`, awaiting a community moderator).
+- The PR carries the required three-file layout under
+  `manifests/m/MarcuzApl/Moderado/0.3.9/`: `MarcuzApl.Moderado.yaml` (version),
+  `MarcuzApl.Moderado.installer.yaml` (portable, x64), and
+  `MarcuzApl.Moderado.locale.en-US.yaml` (defaultLocale).
+- `InstallerSha256` is the published `moderado-win-x64.exe.sha256` sidecar from
+  the v0.3.9 release, verified against the attached binary.
+- `winget validate` was run locally on winget `v1.30.140-preview` and reports
+  "multi file manifest is incomplete" for this set. The identical error is
+  produced for an unmodified, already-merged Microsoft manifest
+  (`Microsoft.PowerShell` 7.6.6.0) on the same machine, so the message is a
+  limitation of that preview build, not a defect in these files.
+- Per release after the first merge: one manifest PR (automatable with
+  `wingetcreate update MarcuzApl.Moderado -u <exe-url> -v <version>`).
 - Until the PR merges, Windows users install with
   `winget install --manifest <downloaded Moderado.yaml>`, or take the
   standalone `moderado-win-x64.exe` from the Release.
-- Note: our draft is `InstallerType: portable` — true today (the exe runs
+- Note: the draft is `InstallerType: portable` — true today (the exe runs
   standalone); re-check if packaging ever changes.
 
 ## 5. AUR — first submission still owed

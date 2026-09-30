@@ -86,9 +86,10 @@ npm install -g moderado@0.3.9
 scoop bucket add moderado https://github.com/marcuz-apl/scoop-moderado
 scoop install moderado
 
-# winget: the `MarcuzApl.Moderado` submission (winget-pkgs#439175) is
-# still awaiting merge, so `winget install MarcuzApl.Moderado` does not
-# resolve yet. Install the current release directly from its manifest:
+# winget: the `MarcuzApl.Moderado` submission (winget-pkgs#444475) is
+# still awaiting a community moderator, so `winget install
+# MarcuzApl.Moderado` does not resolve yet. Install the current release
+# directly from its manifest:
 #   curl -LO https://github.com/marcuz-apl/moderado/releases/download/v0.3.9/Moderado.yaml
 #   winget install --manifest .\Moderado.yaml
 
