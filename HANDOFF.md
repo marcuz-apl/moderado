@@ -14,12 +14,15 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 - Removed a duplicate approval gate bug found while writing the host: `resolve_approval` was consulting the settings-level gate while turns ran under a per-turn gate; the per-turn gate is now tracked in `activeGate`.
 - **Milestone 2 (API Configuration and About):** `set_credential` / `clear_credential` / `test_connection` / `get_about` intents, SecretStorage wiring, a password field that is never prefilled, an About page built from the packaged manifest ([`about.ts`](file:///d:/projects/moderado/apps/vscode/src/about.ts)), and the webview HTML with a nonce and strict CSP ([`webview_html.ts`](file:///d:/projects/moderado/apps/vscode/src/webview_html.ts)).
 - Fixed: `resolveWebviewView` never assigned `webview.html`, so the sidebar would have rendered blank. It now sets HTML and `localResourceRoots`.
+- **Milestone 3 (chat sidebar):** [`transcript.ts`](file:///d:/projects/moderado/apps/vscode/src/transcript.ts) reduces `HostEventEnvelope` events into the view state `media/main.js` renders (turns, current turn, tool activity, pending approvals, usage, model). It is free of `vscode` and the DOM, so the streaming rules are tested offline. The host pushes a fresh transcript snapshot after every event.
+- **Milestone 4 (approval panel):** auto-approved categories still emit `tool_call_initiated` / `tool_result` so they appear in the activity timeline without an `approval_request`; Plan mode forces edit and web-fetch approval regardless of the checkbox; each toggle mutates only its own category; decisions are refused when no session is in flight.
+- Fixed: sessions are minted by the host and pushed on `ready`. The webview previously generated its own id with `crypto.randomUUID()`, so every `start_turn` failed with `UNKNOWN_SESSION`. The composer now refuses to submit without a host session, and resume adopts the host-confirmed id.
 - `scripts/build_vscode.mjs` resolves entry and output from the repo root, because npm runs workspace scripts with `cwd` set to the workspace.
 - Removed stale `apps/vscode/dist/` artifacts left over from deleted `extension.ts`, `protocol.ts`, `sidecar.ts`, and `webview/*` sources.
 
 ## Checks
 
-- On `codex/vscode-extension`: `npm.cmd run build`, `npm.cmd run typecheck`, and `npm.cmd run build --workspace apps/vscode` all PASS; `npm.cmd test` PASS with 65 files / 479 tests, offline.
+- On `codex/vscode-extension`: `npm.cmd run build`, `npm.cmd run typecheck`, and `npm.cmd run build --workspace apps/vscode` all PASS; `npm.cmd test` PASS with 66 files / 492 tests, offline.
 - On `codex/cli-provider-presets` alone: `build` and `typecheck` PASS; `npm.cmd test` PASS with 60 files / 429 tests.
 - A `tsc -b` rebuild is required after switching branches, or stale `packages/*/dist` output makes typecheck fail on exports that are present in source.
 
@@ -31,6 +34,7 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 - The Alfazen hook in `.githooks/pre-commit` (via `core.hooksPath`) derives the bump from the commit subject: `feat`/`feat(...)` is a patch bump, anything else is a build-only bump. Use `--no-verify` when amending, otherwise each amend bumps VERSION again.
 - Credentials are write-only by contract. `set_credential`/`clear_credential` are the only key-bearing intents and no `HostResult` variant accepts a key, so a secret cannot be posted back to the webview; a test asserts the response body does not contain it.
 - About URLs are refined to `https://` rather than plain `z.string().url()`, because these render as anchors and `javascript:` would be script execution. A test pins that.
+- `transcript.ts` deliberately drops events whose `sessionId` differs from the active one, so a reopened view starts empty instead of replaying another run. That covers the "no duplicate events" half of the Milestone 3 acceptance.
 
 ## Blockers
 
@@ -38,7 +42,8 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 
 ## Next action
 
-1. Milestone 3: the Cline-inspired sidebar chat. `media/main.js` already renders a composer, message timeline, Plan/Act switch, model indicator, and About/API settings pages, but the chat view has never been exercised against the host: session creation is not pushed on `ready`, so `start_turn` cannot name a known session yet, and streamed `assistant_delta` / `usage` events are not mapped into the timeline. Wire those, then verify start, stream, stop, and resume.
+1. Milestone 5: packaging and release gate. Nothing here has run inside a real VS Code extension host yet — every check so far is offline unit tests plus an esbuild bundle. Add VSIX packaging, an extension-host smoke test, and verify a clean-profile install on Windows and Linux before treating any of this as shipped.
+2. Known gap for that milestone: `listProviderPresets` still omits the `openai-compatible` pick-list entry, so a custom endpoint cannot be added from the UI, and the CLI's custom-connection config is not read by the extension.
 
 ---
 
