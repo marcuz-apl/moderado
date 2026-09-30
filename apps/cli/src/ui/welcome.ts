@@ -1,3 +1,4 @@
+import readline from 'node:readline';
 import type { UsageEvent } from '@moderado/contracts';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
@@ -636,9 +637,8 @@ export async function promptInteractiveTurn(
   if (!stdin.isTTY) {
     stdout.write('\x1b]0;Moderado\x07');
     stdout.write(renderFullWelcomeScreen(getOptions()));
-    const readlineModule = await import('node:readline');
     return new Promise((resolve) => {
-      const rl = readlineModule.createInterface({ input: stdin, output: stdout });
+      const rl = readline.createInterface({ input: stdin, output: stdout });
       rl.question('\x1b[1;38;5;75m❯\x1b[0m ', (answer) => {
         rl.close();
         resolve({ text: answer.trim(), mode: currentMode, autoApprove: currentAutoApprove });
@@ -647,8 +647,7 @@ export async function promptInteractiveTurn(
   }
 
   // ── TTY Interactive Loop ───────────────────────────────────────────────────
-  const readlineModule = await import('node:readline');
-  readlineModule.emitKeypressEvents(stdin);
+  readline.emitKeypressEvents(stdin);
   // A previous turn's cleanup() pauses stdin — resume it so keystrokes keep
   // flowing after an answer (the main app must never appear dead post-answer).
   stdin.resume();
@@ -831,7 +830,7 @@ export async function promptInteractiveTurn(
           }
 
           // Selection flow left stdin in non-raw mode — restore it for our TUI
-          readlineModule.emitKeypressEvents(stdin);
+          readline.emitKeypressEvents(stdin);
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');
           stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
@@ -855,7 +854,7 @@ export async function promptInteractiveTurn(
             if (newModel) currentModel = newModel;
           }
 
-          readlineModule.emitKeypressEvents(stdin);
+          readline.emitKeypressEvents(stdin);
           stdin.resume();
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');
@@ -875,7 +874,7 @@ export async function promptInteractiveTurn(
               stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
             });
           }
-          readlineModule.emitKeypressEvents(stdin);
+          readline.emitKeypressEvents(stdin);
           stdin.resume();
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');
@@ -907,7 +906,7 @@ export async function promptInteractiveTurn(
               });
             });
           }
-          readlineModule.emitKeypressEvents(stdin);
+          readline.emitKeypressEvents(stdin);
           stdin.resume();
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');
@@ -953,7 +952,7 @@ export async function promptInteractiveTurn(
               stdin.removeListener('keypress', onBtwKey);
             }
           }
-          readlineModule.emitKeypressEvents(stdin);
+          readline.emitKeypressEvents(stdin);
           stdin.resume();
           stdin.setRawMode(true);
           stdout.write('\x1b[H\x1b[J');
@@ -974,7 +973,7 @@ export async function promptInteractiveTurn(
             });
           }
           if (options.signal?.aborted) return;
-          readlineModule.emitKeypressEvents(stdin);
+          readline.emitKeypressEvents(stdin);
           stdin.resume();
           stdin.setRawMode(true);
           redrawFull();
@@ -992,7 +991,7 @@ export async function promptInteractiveTurn(
             });
           }
           if (options.signal?.aborted) return;
-          readlineModule.emitKeypressEvents(stdin);
+          readline.emitKeypressEvents(stdin);
           stdin.resume();
           stdin.setRawMode(true);
           redrawFull();
@@ -1004,7 +1003,7 @@ export async function promptInteractiveTurn(
           const command = input.trim(); setInput(''); unbindComposerInput();
           const action = options.onWorkflow ? await options.onWorkflow(command, (popupLines) => { stdout.write('\x1b[H\x1b[J'); stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows)); }) : undefined;
           if (action === 'build') { cleanup(); resolve({ text: '', mode: 'Execute', autoApprove: currentAutoApprove, workflowAction: 'build' }); return; }
-          readlineModule.emitKeypressEvents(stdin); stdin.resume(); stdin.setRawMode(true); redrawFull(); bindComposerInput(); return;
+          readline.emitKeypressEvents(stdin); stdin.resume(); stdin.setRawMode(true); redrawFull(); bindComposerInput(); return;
         }
 
 

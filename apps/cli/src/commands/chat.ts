@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import readline from 'node:readline';
 import { AgentLoop, PolicyManager, Router, cleanConversationalFiller, DEFAULT_MAX_OUTPUT_TOKENS } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, ToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, resolveInJail, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
@@ -1521,9 +1522,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         });
       };
       if (process.stdin.isTTY) {
-        const readlineModule = await import('node:readline');
         const attachGenerationListener = (): void => {
-          readlineModule.emitKeypressEvents(process.stdin);
+          readline.emitKeypressEvents(process.stdin);
           process.stdin.resume();
           process.stdin.setRawMode(true);
           process.stdin.on('keypress', onGenerationKeypress);

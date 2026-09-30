@@ -3,6 +3,8 @@ import { Router } from '@moderado/core';
 import { CliParsedArgs } from '../args.js';
 import { findProviderPreset, freeModelPolicyFor } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
+import { askQuestion } from '../ui/prompt.js';
+import { selectModelInteractive } from '../ui/model_selector.js';
 
 export interface HandleModelsOptions {
   fetchImpl?: typeof fetch;
@@ -143,8 +145,6 @@ export async function handleModelsCommand(
   }
 
   if (!args.json && !args.nonInteractive) {
-    const { askQuestion } = await import('../ui/prompt.js');
-    const { selectModelInteractive } = await import('../ui/model_selector.js');
     const wantSelect = await askQuestion('Would you like to select and configure a default model? [y/N]: ');
     if (wantSelect.toLowerCase() === 'y' || wantSelect.toLowerCase() === 'yes') {
       await selectModelInteractive({ saveSelectionByDefault: true });

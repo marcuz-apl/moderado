@@ -1,4 +1,5 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, expect, it } from 'vitest';
@@ -12,6 +13,17 @@ import {
   verifyArtifactManifest,
   writeArtifactManifest,
 } from '../../../scripts/binaries.mjs';
+
+it('keeps the packaged CLI free of runtime dynamic imports', () => {
+  const sources = [
+    'apps/cli/src/ui/welcome.ts',
+    'apps/cli/src/commands/chat.ts',
+    'apps/cli/src/commands/models.ts',
+  ];
+  for (const source of sources) {
+    expect(readFileSync(source, 'utf8')).not.toMatch(/await import\(/);
+  }
+});
 
 const dirs: string[] = [];
 afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true }))); });
