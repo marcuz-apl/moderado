@@ -9,15 +9,17 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 ## Completed
 
 - The CLI-side refactor is its own commit (`217995c`): the built-in connect presets and the free-model predicate moved out of the CLI presentation layer into [`packages/providers/src/presets.ts`](file:///d:/projects/moderado/packages/providers/src/presets.ts); `apps/cli/src/config.ts` and `apps/cli/src/model_pricing.ts` re-export from it. CLI behavior is unchanged. `apps/cli/package.json` and the lockfile track VERSION's base SemVer, which `apps/cli/tests/package_metadata.test.ts` enforces.
-- Added the versioned webview host protocol ([`packages/contracts/src/host_protocol.ts`](file:///d:/projects/moderado/packages/contracts/src/host_protocol.ts)): ten intents and ten results, all `.strict()`, with request IDs and `protocolVersion`.
+- Added the versioned webview host protocol ([`packages/contracts/src/host_protocol.ts`](file:///d:/projects/moderado/packages/contracts/src/host_protocol.ts)): intents and results, all `.strict()`, with request IDs and `protocolVersion`.
 - Added the extension host: [`apps/vscode/src/agent_host.ts`](file:///d:/projects/moderado/apps/vscode/src/agent_host.ts) (intent dispatch, turn lifecycle, session registry), [`approval_handler.ts`](file:///d:/projects/moderado/apps/vscode/src/approval_handler.ts) (five categories, host-side gate), `provider_service.ts` (catalog + proven-free filter), and [`extension.ts`](file:///d:/projects/moderado/apps/vscode/src/extension.ts) (webview view provider, SecretStorage keys, per-workspace state).
 - Removed a duplicate approval gate bug found while writing the host: `resolve_approval` was consulting the settings-level gate while turns ran under a per-turn gate; the per-turn gate is now tracked in `activeGate`.
+- **Milestone 2 (API Configuration and About):** `set_credential` / `clear_credential` / `test_connection` / `get_about` intents, SecretStorage wiring, a password field that is never prefilled, an About page built from the packaged manifest ([`about.ts`](file:///d:/projects/moderado/apps/vscode/src/about.ts)), and the webview HTML with a nonce and strict CSP ([`webview_html.ts`](file:///d:/projects/moderado/apps/vscode/src/webview_html.ts)).
+- Fixed: `resolveWebviewView` never assigned `webview.html`, so the sidebar would have rendered blank. It now sets HTML and `localResourceRoots`.
 - `scripts/build_vscode.mjs` resolves entry and output from the repo root, because npm runs workspace scripts with `cwd` set to the workspace.
 - Removed stale `apps/vscode/dist/` artifacts left over from deleted `extension.ts`, `protocol.ts`, `sidecar.ts`, and `webview/*` sources.
 
 ## Checks
 
-- On `codex/vscode-extension`: `npm.cmd run build`, `npm.cmd run typecheck`, and `npm.cmd run build --workspace apps/vscode` all PASS; `npm.cmd test` PASS with 64 files / 460 tests, offline.
+- On `codex/vscode-extension`: `npm.cmd run build`, `npm.cmd run typecheck`, and `npm.cmd run build --workspace apps/vscode` all PASS; `npm.cmd test` PASS with 65 files / 479 tests, offline.
 - On `codex/cli-provider-presets` alone: `build` and `typecheck` PASS; `npm.cmd test` PASS with 60 files / 429 tests.
 - A `tsc -b` rebuild is required after switching branches, or stale `packages/*/dist` output makes typecheck fail on exports that are present in source.
 
@@ -27,6 +29,8 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 - `packages/providers/tests/presets.test.ts` originally asserted seven preset metas; shipped `0.3.8` has six, because `openai-compatible` is a CLI pick-list entry with no fixed base URL. The test now asserts the six metas and that the id list still contains `openai-compatible`.
 - `listProviderPresets` does not yet append the `openai-compatible` pick-list entry. Milestone 2 owns the provider picker; the existing test pins the current two-source list (enabled built-ins plus configured custom connections).
 - The Alfazen hook in `.githooks/pre-commit` (via `core.hooksPath`) derives the bump from the commit subject: `feat`/`feat(...)` is a patch bump, anything else is a build-only bump. Use `--no-verify` when amending, otherwise each amend bumps VERSION again.
+- Credentials are write-only by contract. `set_credential`/`clear_credential` are the only key-bearing intents and no `HostResult` variant accepts a key, so a secret cannot be posted back to the webview; a test asserts the response body does not contain it.
+- About URLs are refined to `https://` rather than plain `z.string().url()`, because these render as anchors and `javascript:` would be script execution. A test pins that.
 
 ## Blockers
 
@@ -34,7 +38,7 @@ Status: Milestone 1 of [`docs/superpowers/plans/2026-09-29-vscode-extension-rebu
 
 ## Next action
 
-1. Milestone 2: API Configuration and About. `extension.ts` currently has no credential-entry flow, so `createProvider` reads a key that nothing can set yet; add the SecretStorage write path and the `openai-compatible` / custom-provider entries, then the About page sourced from packaged metadata.
+1. Milestone 3: the Cline-inspired sidebar chat. `media/main.js` already renders a composer, message timeline, Plan/Act switch, model indicator, and About/API settings pages, but the chat view has never been exercised against the host: session creation is not pushed on `ready`, so `start_turn` cannot name a known session yet, and streamed `assistant_delta` / `usage` events are not mapped into the timeline. Wire those, then verify start, stream, stop, and resume.
 
 ---
 
