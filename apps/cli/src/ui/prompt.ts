@@ -51,12 +51,79 @@ export async function askQuestion(
   });
 }
 
+/**
+ * Fixed-width mask for secret input.
+ *
+ * Deliberately constant-length: masking one `*` per character would leak the
+ * exact length of the API key to anyone watching the screen.
+ */
+export function maskSecret(value: string): string {
+  return value.length > 0 ? '********' : '';
+}
+
+/**
+ * Read a secret without echoing it.
+ *
+ * Uses the same raw-mode key handling as `askModalChoice` but writes a fixed
+ * mask instead of the typed character, so the key never reaches the terminal
+ * scrollback.
+ */
 export async function askSecret(
   query: string,
   options: PromptOptions = {}
 ): Promise<string> {
-  // In Node terminal, askQuestion with clean prompt
-  return askQuestion(query, options);
+  const stdin = (options.stdin ?? process.stdin) as NodeJS.ReadStream & { isTTY?: boolean; setRawMode?: (m: boolean) => void };
+  const stdout = options.stdout ?? process.stdout;
+
+  if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') {
+    // Non-TTY input cannot hide anything, but readline is still the only way
+    // to consume the line. Nothing is written back in that case.
+    return askQuestion(query, options);
+  }
+
+  return new Promise((resolve) => {
+    readline.emitKeypressEvents(stdin);
+    stdin.setRawMode(true);
+    stdin.resume();
+
+    let buffer = '';
+    let closed = false;
+    const cleanup = (): void => {
+      if (closed) return;
+      closed = true;
+      stdin.removeListener('keypress', onKeypress);
+      try { stdin.setRawMode(false); } catch { /* ignore */ }
+    };
+    const onKeypress = (str: string, key: { name?: string; ctrl?: boolean }): void => {
+      if (key?.name === 'escape' || (key?.ctrl && key?.name === 'c')) {
+        cleanup();
+        stdout.write('\r\n');
+        resolve('');
+        return;
+      }
+      if (key?.name === 'return' || key?.name === 'enter') {
+        cleanup();
+        stdout.write('\r\n');
+        resolve(buffer.trim());
+        return;
+      }
+      if (key?.name === 'backspace' || key?.name === 'delete') {
+        if (buffer.length > 0) {
+          buffer = buffer.slice(0, -1);
+          stdout.write('\b \b');
+        }
+        return;
+      }
+      if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key?.ctrl) {
+        buffer += str;
+        // Constant-width: redraw the same number of mask characters every time.
+        stdout.write(str.length === 1 ? '*' : maskSecret(buffer));
+      }
+    };
+    if (options.signal) options.signal.addEventListener('abort', () => { cleanup(); resolve(''); }, { once: true });
+    stdout.write(query);
+    stdin.on('keypress', onKeypress);
+  });
 }
 
 export async function askModalChoice(

@@ -47,8 +47,12 @@ describe('provider connection setup', () => {
   it('renders credential entry as a popup, masking secrets', () => {
     const plain = renderConnectionPrompt('NVIDIA API key', 'nvapi-secret', true).join('\n').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
     expect(plain).toContain('NVIDIA API key');
-    expect(plain).toContain('************');
+    expect(plain).toContain('*');
     expect(plain).not.toContain('nvapi-secret');
+    // A per-character mask would reveal the key length, so the mask is fixed
+    // width regardless of how much has been typed.
+    const short = renderConnectionPrompt('NVIDIA API key', 'ab', true).join('\n').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    expect(short).toContain(plain.match(/\*+/)?.[0]);
   });
 
   it('builds a NVIDIA NIM profile with free-first AUTO routing', () => {

@@ -1,6 +1,6 @@
 import { freeModelPolicyFor, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
-import { askQuestion, askSecret, askSelect } from './prompt.js';
+import { askQuestion, askSecret, askSelect, maskSecret } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
 import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
 import type { ModelInventoryEntry } from '@moderado/contracts';
@@ -71,7 +71,9 @@ export function isAuthenticationFailure(error: unknown): boolean {
 }
 
 export function renderConnectionPrompt(label: string, value: string, secret = false): string[] {
-  const shown = secret ? '*'.repeat(value.length) : value;
+  // A fixed-width mask keeps a typed secret on screen without revealing its
+  // length, and without the field resizing on every keystroke.
+  const shown = secret ? maskSecret(value) : value;
   return renderBoxLines('Connect Provider', [
     `\x1b[1;38;5;75m${label}\x1b[0m`,
     '',
