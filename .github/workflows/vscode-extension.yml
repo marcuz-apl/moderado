@@ -1,0 +1,76 @@
+name: VS Code extension
+
+on:
+  push:
+    branches: [master, 'codex/**']
+    paths:
+      - 'apps/vscode/**'
+      - 'packages/**'
+      - 'scripts/zip.mjs'
+      - 'scripts/vsix.mjs'
+      - 'scripts/package_vscode.mjs'
+      - 'scripts/verify_vsix.mjs'
+  pull_request:
+    paths:
+      - 'apps/vscode/**'
+      - 'packages/**'
+      - 'scripts/zip.mjs'
+      - 'scripts/vsix.mjs'
+      - 'scripts/package_vscode.mjs'
+      - 'scripts/verify_vsix.mjs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # @moderado/* resolve through their dist entry points, which are build
+      # outputs and never committed.
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build --workspace apps/vscode
+      # Offline extension-host smoke test: the packaged bundle is activated
+      # with a stubbed vscode module.
+      - run: npm run verify:vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix-${{ matrix.os }}
+          path: artifacts/vsix/*.vsix
+          if-no-files-found: error
+
+  publish:
+    # The extension ships separately from the npm CLI, and only once the
+    # build matrix is green on both platforms.
+    needs: build
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run verify:vsix
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vsix
+          path: artifacts/vsix/*.vsix
+          if-no-files-found: error
