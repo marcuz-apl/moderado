@@ -47,6 +47,11 @@ end
 `);
   await writeFile(join(outputDirectory, 'scoop', 'moderado.json'), `${JSON.stringify({ version, description: 'Free-first AI coding agent', homepage: 'https://github.com/marcuz-apl/moderado', architecture: { '64bit': { url: windowsUrl, hash: windows.checksum } }, bin: windows.filename }, null, 2)}\n`);
   await writeFile(join(outputDirectory, 'winget', 'Moderado.yaml'), `PackageIdentifier: MarcuzApl.Moderado\nPackageVersion: ${version}\nPackageName: Moderado\nPublisher: Marcuz Apl\nInstallerType: portable\nInstallers:\n- Architecture: x64\n  InstallerUrl: ${windowsUrl}\n  InstallerSha256: ${windows.checksum}\nManifestType: singleton\nManifestVersion: 1.6.0\n`);
+  // winget requires a sibling locale manifest; `winget validate` otherwise fails
+  // with "Required field missing. [PackageLocale]". Follow the upstream defaultLocale
+  // schema exactly: ManifestType `defaultLocale`, `License` (not `PackageLicense`),
+  // and PackageIdentifier/PackageVersion repeated in the locale file.
+  await writeFile(join(outputDirectory, 'winget', 'Moderado.locale.en-US.yaml'), `# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json\n\nPackageIdentifier: MarcuzApl.Moderado\nPackageVersion: ${version}\nPackageLocale: en-US\nPublisher: Marcuz Apl\nPublisherUrl: https://github.com/marcuz-apl/moderado\nPublisherSupportUrl: https://github.com/marcuz-apl/moderado/issues\nPackageName: Moderado\nPackageUrl: https://github.com/marcuz-apl/moderado\nLicense: MIT\nLicenseUrl: https://github.com/marcuz-apl/moderado/blob/master/LICENSE\nShortDescription: Free-first AI coding agent\nDescription: |-\n  Moderado is a lightweight, provider-independent CLI coding agent with free-first model routing and a human-in-the-loop approval boundary.\nMoniker: moderado\nTags:\n- command-line\n- ai\n- coding-agent\n- cli\nManifestType: defaultLocale\nManifestVersion: 1.6.0\n`);
   await writeFile(join(outputDirectory, 'aur', 'PKGBUILD'), `pkgname=moderado-bin\npkgver=${version}\npkgrel=1\npkgdesc='Free-first AI coding agent'\narch=('x86_64')\nurl='https://github.com/marcuz-apl/moderado'\nlicense=('MIT')\nsource_x86_64=("${linuxUrl}")\nsha256sums_x86_64=('${linux.checksum}')\npackage() {\n  install -Dm755 "$srcdir/${linux.filename}" "$pkgdir/usr/bin/moderado"\n}\n`);
 }
 

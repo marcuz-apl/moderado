@@ -36,6 +36,22 @@ it('generates reviewable Homebrew, Scoop, and winget manifests from checksums', 
   } finally { await rm(root, { recursive: true, force: true }); }
 });
 
+it('emits a winget manifest plus the locale file that winget validate requires', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'moderado-winget-locale-'));
+  try {
+    await generateDistributionManifests(manifest, root, base);
+    const installer = await readFile(join(root, 'winget', 'Moderado.yaml'), 'utf8');
+    const locale = await readFile(join(root, 'winget', 'Moderado.locale.en-US.yaml'), 'utf8');
+    // `winget validate` fails with "Required field missing. [PackageLocale]" when
+    // the sibling locale manifest is absent, so the generator must emit both.
+    expect(installer).toContain('PackageIdentifier: MarcuzApl.Moderado');
+    expect(installer).toContain('InstallerSha256: ' + 'a'.repeat(64));
+    expect(locale).toContain('PackageLocale: en-US');
+    expect(locale).toContain('Publisher: Marcuz Apl');
+    expect(locale).toContain('PublisherUrl: https://github.com/marcuz-apl/moderado');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
 it('generates an AUR PKGBUILD from the verified Linux artifact', async () => {
   const root = await mkdtemp(join(tmpdir(), 'moderado-aur-'));
   try {
