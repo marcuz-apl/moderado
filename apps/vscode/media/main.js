@@ -225,11 +225,35 @@
       providerSelect.append(new Option(text(provider.name || provider.label, provider.id), provider.id));
     }
     providerSelect.value = selectedProvider || text(state.providerId || state.provider?.id);
-    providerSelect.addEventListener('change', () => { selectedProvider = providerSelect.value; post({ type: 'select_provider', providerId: selectedProvider }); render(); });
+    providerSelect.addEventListener('change', () => { selectedProvider = providerSelect.value; state.connectionStatus = ''; post({ type: 'list_models', providerId: selectedProvider }); render(); });
     providerField.append(providerSelect);
     pane.append(providerField);
-    if (providerSelect.value) pane.append(button('Connect and verify', 'primary-button connect-button', () => post({ type: 'select_provider', providerId: providerSelect.value })));
-    pane.append(el('p', 'muted small', 'Credentials and local endpoints are requested securely by VS Code when needed.'));
+    const chosen = text(providerSelect.value);
+    if (chosen) {
+      const needsKey = text(state.requiresApiKey?.[chosen], 'true') !== 'false';
+      const keyField = el('label', 'field');
+      keyField.append(el('span', 'field-label', needsKey ? 'API key' : 'No key required'));
+      const keyInput = el('input', 'input');
+      keyInput.type = 'password';
+      keyInput.autocomplete = 'off';
+      keyInput.placeholder = needsKey ? 'Paste the provider API key' : 'Local runtimes need no key';
+      keyInput.setAttribute('aria-label', 'API key');
+      // Never prefill a stored secret: the webview must not hold it at all.
+      keyInput.value = '';
+      keyField.append(keyInput);
+      pane.append(keyField);
+      const actions = el('div', 'settings-actions');
+      const saveButton = button('Save key', 'primary-button', () => {
+        post({ type: 'set_credential', providerId: chosen, apiKey: keyInput.value.trim() });
+        keyInput.value = '';
+      });
+      saveButton.hidden = true;
+      // The button appears only once something has actually been typed.
+      keyInput.addEventListener('input', () => { saveButton.hidden = !keyInput.value.trim(); });
+      actions.append(saveButton, button('Test connection', 'primary-button connect-button', () => { state.connectionStatus = ''; post({ type: 'test_connection', providerId: chosen }); }));
+      pane.append(actions);
+      pane.append(el('p', 'muted small', 'Keys are stored in VS Code SecretStorage and are never sent back to this panel.'));
+    }
     if (state.connectionStatus) pane.append(el('p', state.connectionStatus === 'connected' ? 'connection-ok' : 'inline-error', state.connectionStatus === 'connected' ? 'Connected and verified' : text(state.connectionStatus)));
     pane.append(el('h3', 'list-heading', 'Free Models'));
     const models = array(state.models).filter((item) => item && (item.verifiedFree === true || item.free === true || item.freeStatus === 'verified'));
@@ -290,10 +314,20 @@
       if (typeof next.sessionId === 'string') sessionId = next.sessionId;
       if (next.approvals && typeof next.approvals === 'object') state.approvals = { ...defaultApprovals, ...next.approvals };
       render();
-    } else if (message.type === 'error') {
-      showNotice(text(message.message, 'Something went wrong.'));
-    } else if (message.protocolVersion === 1 && message.ok === false) {
-      showNotice(text(message.message, 'The action could not be completed.'));
+      return;
+    }
+    if (message.protocolVersion === 1 && message.ok === true) {
+      const result = message.result;
+      if (result && result.type === 'providers') { state.providers = result.providers; render(); }
+      if (result && result.type === 'about') { state.about = result; render(); }
+      if (result && result.type === 'models') { state.models = result.models; state.connectionStatus = 'connected'; render(); }
+      if (result && result.type === 'model_selected') { state.modelId = result.modelId; render(); }
+      if (result && result.type === 'connection_tested') { state.connectionStatus = result.ok ? 'connected' : result.message; render(); }
+      if (result && result.type === 'credential_updated') { state.connectionStatus = 'Key saved. Test the connection.'; render(); }
+      return;
+    }
+    if (message.protocolVersion === 1 && message.ok === false) {
+      showNotice(text(message.error?.message, 'The action could not be completed.'));
     }
   });
   render();

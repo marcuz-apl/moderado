@@ -13,6 +13,7 @@ import {
 } from '@moderado/contracts';
 import { AgentLoop, Router } from '@moderado/core';
 import { DEFAULT_APPROVAL_SETTINGS, createApprovalGate, withApprovalSettings, type ApprovalGate, type ApprovalSettings } from './approval_handler.js';
+import { findProviderPreset } from '@moderado/providers';
 import { filterProvenFreeModels, listProviderPresets } from './provider_service.js';
 
 /** Failure with a stable code so the webview can branch without parsing prose. */
@@ -30,6 +31,16 @@ export interface HostServices {
   onApproval?: (request: ApprovalRequest) => void;
   /** Replaces the built-in preset list, e.g. with the workspace's own config. */
   providers?: () => { id: string; label: string }[];
+  /** Secret storage. Absent means this host cannot hold credentials. */
+  credentials?: {
+    get: (providerId: string) => Promise<string | undefined>;
+    set: (providerId: string, apiKey: string) => Promise<void>;
+    delete: (providerId: string) => Promise<void>;
+  };
+  /** About metadata from the packaged manifest. */
+  about?: () => HostResult;
+  /** Whether a provider currently holds a usable credential. */
+  hasCredential?: (providerId: string) => Promise<boolean>;
 }
 
 interface Session {
@@ -144,6 +155,8 @@ export function createAgentHost(services: HostServices): AgentHost {
             created: entry.created,
             ownedBy: entry.owned_by,
             classification: router.classifyModel(entry.id, false, entry.supported_parameters),
+            // Every entry here already cleared the free policy.
+            verifiedFree: true as const,
           })),
         };
       }
@@ -156,6 +169,47 @@ export function createAgentHost(services: HostServices): AgentHost {
         selectedModel = { providerId: intent.providerId, modelId: intent.modelId };
         return { type: 'model_selected', providerId: intent.providerId, modelId: intent.modelId };
       }
+      case 'set_credential': {
+        // Write-only: the key goes to SecretStorage and is never echoed back.
+        if (!services.credentials) throw new HostError('NO_SECRET_STORE', 'This host cannot store credentials.');
+        await services.credentials.set(intent.providerId, intent.apiKey);
+        return { type: 'credential_updated', providerId: intent.providerId };
+      }
+      case 'clear_credential': {
+        if (!services.credentials) throw new HostError('NO_SECRET_STORE', 'This host cannot store credentials.');
+        await services.credentials.delete(intent.providerId);
+        return { type: 'credential_updated', providerId: intent.providerId };
+      }
+      case 'test_connection': {
+        const known = listProviderPresets().some((item) => item.id === intent.providerId);
+        if (!known) throw new HostError('UNKNOWN_PROVIDER', `No such provider: ${intent.providerId}`);
+        const needsKey = Boolean(findProviderPreset(intent.providerId)?.requiresApiKey);
+        if (needsKey && !(await services.hasCredential?.(intent.providerId))) {
+          return { type: 'connection_tested', providerId: intent.providerId, ok: false, modelCount: 0, message: 'Add an API key for this provider first.' };
+        }
+        try {
+          const adapter = await services.createProvider(intent.providerId);
+          const models = filterProvenFreeModels(intent.providerId, await adapter.discoverModels());
+          return {
+            type: 'connection_tested',
+            providerId: intent.providerId,
+            ok: true,
+            modelCount: models.length,
+            message: models.length ? `Connected. ${models.length} verified free model(s).` : 'Connected, but no verified free models.',
+          };
+        } catch (err) {
+          return {
+            type: 'connection_tested',
+            providerId: intent.providerId,
+            ok: false,
+            modelCount: 0,
+            message: err instanceof Error ? err.message : String(err),
+          };
+        }
+      }
+      case 'get_about':
+        if (!services.about) throw new HostError('NO_ABOUT', 'About metadata is unavailable.');
+        return services.about();
       case 'start_turn':
         return runTurn(intent);
       case 'cancel_turn': {

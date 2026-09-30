@@ -185,4 +185,75 @@ describe('agent host', () => {
     expect(host.getSelectedModel()).toBeUndefined();
     host.dispose();
   });
+
+  it('stores a credential write-only and never echoes the key', async () => {
+    const store = new Map<string, string>();
+    const { host } = await readyHost({
+      credentials: {
+        get: async (id) => store.get(id),
+        set: async (id, key) => { store.set(id, key); },
+        delete: async (id) => { store.delete(id); },
+      },
+      hasCredential: async (id) => store.has(id),
+    });
+    const response = await host.handle(intent('set_credential', { providerId: 'nvidia-nim', apiKey: 'sk-secret' }));
+    expect(response).toMatchObject({ ok: true, result: { type: 'credential_updated', providerId: 'nvidia-nim' } });
+    expect(JSON.stringify(response)).not.toContain('sk-secret');
+    expect(store.get('nvidia-nim')).toBe('sk-secret');
+    await host.handle(intent('clear_credential', { providerId: 'nvidia-nim' }));
+    expect(store.has('nvidia-nim')).toBe(false);
+    host.dispose();
+  });
+
+  it('fails closed on a blank credential and when no secret store is wired', async () => {
+    const { host } = await readyHost();
+    expect((await host.handle(intent('set_credential', { providerId: 'nvidia-nim', apiKey: '   ' }))).ok).toBe(false);
+    expect(await host.handle(intent('set_credential', { providerId: 'nvidia-nim', apiKey: 'k' })))
+      .toMatchObject({ ok: false, error: { code: 'NO_SECRET_STORE' } });
+    host.dispose();
+  });
+
+  it('asks for a missing credential instead of attempting the connection', async () => {
+    const { host } = await readyHost({ hasCredential: async () => false });
+    expect(await host.handle(intent('test_connection', { providerId: 'nvidia-nim' })))
+      .toMatchObject({ ok: true, result: { ok: false, message: expect.stringContaining('API key') } });
+    host.dispose();
+  });
+
+  it('reports the connection result and its proven-free model count', async () => {
+    const { host } = await readyHost({ hasCredential: async () => true },
+      [{ contentDelta: 'x' }], [{ id: FREE_MODEL }, { id: 'paid-model', pricing: { prompt: '0.5', completion: '1' } }]);
+    // NVIDIA NIM declares the whole catalog free, yet a reported nonzero price
+    // outranks that declaration, so only the free entry is counted.
+    expect(await host.handle(intent('test_connection', { providerId: 'nvidia-nim' })))
+      .toMatchObject({ ok: true, result: { type: 'connection_tested', ok: true, modelCount: 1 } });
+    expect((await host.handle(intent('test_connection', { providerId: 'nope' }))).ok).toBe(false);
+    host.dispose();
+  });
+
+  it('lists no models when a provider substantiates none as free', async () => {
+    const host = createAgentHost(services({
+      createProvider: async () => new FakeProvider([
+        { id: 'free-one' },
+        { id: 'paid-one', pricing: { prompt: '0.2', completion: '0.4' } },
+      ]),
+    }));
+    await host.selectProvider('openrouter');
+    expect(await host.handle(intent('list_models', { providerId: 'openrouter' })))
+      .toMatchObject({ ok: true, result: { models: [] } });
+    host.dispose();
+  });
+
+  it('serves About metadata only when the host supplies it', async () => {
+    const about = {
+      type: 'about', version: '0.3.10', license: 'MIT', description: 'x',
+      documentation: 'https://d', repository: 'https://r', issues: 'https://i',
+    } as const;
+    const { host } = await readyHost({ about: () => about });
+    expect(await host.handle(intent('get_about'))).toMatchObject({ ok: true, result: about });
+    const bare = createAgentHost(services({ createProvider: async () => new FakeProvider([]) }));
+    expect((await bare.handle(intent('get_about'))).ok).toBe(false);
+    bare.dispose();
+    host.dispose();
+  });
 });

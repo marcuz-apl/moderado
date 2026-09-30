@@ -11,6 +11,10 @@ describe('webview host protocol', () => {
     { type: 'select_provider', providerId: 'nvidia' },
     { type: 'list_models', providerId: 'nvidia' },
     { type: 'select_model', providerId: 'nvidia', modelId: 'free-model' },
+    { type: 'set_credential', providerId: 'nvidia', apiKey: 'secret-value' },
+    { type: 'clear_credential', providerId: 'nvidia' },
+    { type: 'test_connection', providerId: 'nvidia' },
+    { type: 'get_about' },
     { type: 'resolve_approval', sessionId: 'session-1', approvalRequestId: 'approval-1', status: 'denied' },
     { type: 'update_settings', category: 'execute', enabled: true },
     { type: 'list_sessions' },
@@ -32,6 +36,31 @@ describe('webview host protocol', () => {
 
   it('rejects unexpected fields at the trust boundary', () => {
     expect(HostIntentSchema.safeParse({ ...base, type: 'list_sessions', command: 'echo hi' }).success).toBe(false);
+  });
+
+  it('never carries a secret back out in a result', () => {
+    // The key is write-only: no result variant may carry one back to the webview.
+    for (const result of [
+      { type: 'credential_updated', providerId: 'nvidia' },
+      { type: 'connection_tested', providerId: 'nvidia', ok: true, modelCount: 2, message: 'ok' },
+    ]) {
+      expect(HostResponseSchema.safeParse({ ...base, ok: true, result: { ...result, apiKey: 'secret' } }).success).toBe(false);
+    }
+    expect(HostIntentSchema.safeParse({ ...base, type: 'set_credential', providerId: 'nvidia', apiKey: '   ' }).success).toBe(false);
+    expect(HostIntentSchema.safeParse({ ...base, type: 'set_credential', providerId: 'nvidia' }).success).toBe(false);
+  });
+
+  it('requires verified-free evidence on every listed model', () => {
+    const model = { id: 'm', ownedBy: 'x', classification: { modelId: 'm', accessTier: 'unknown', toolSupport: 'unknown', source: 'heuristic' } };
+    expect(HostResponseSchema.safeParse({ ...base, ok: true, result: { type: 'models', providerId: 'p', models: [model] } }).success).toBe(false);
+    expect(HostResponseSchema.safeParse({ ...base, ok: true, result: { type: 'models', providerId: 'p', models: [{ ...model, verifiedFree: true }] } }).success).toBe(true);
+  });
+
+  it('requires real https urls for every About link', () => {
+    const about = { type: 'about', version: '0.3.10', license: 'MIT', description: 'x', documentation: 'https://d', repository: 'https://r', issues: 'https://i' };
+    expect(HostResponseSchema.safeParse({ ...base, ok: true, result: about }).success).toBe(true);
+    expect(HostResponseSchema.safeParse({ ...base, ok: true, result: { ...about, repository: 'javascript:alert(1)' } }).success).toBe(false);
+    expect(HostResponseSchema.safeParse({ ...base, ok: true, result: { ...about, documentation: 'not-a-url' } }).success).toBe(false);
   });
 
   it('accepts typed results and correlated errors', () => {

@@ -1,12 +1,27 @@
 import * as vscode from 'vscode';
+import fs from 'node:fs';
+import crypto from 'node:crypto';
 import { createDefaultToolRegistry } from '@moderado/tools';
 import type { IProviderAdapter } from '@moderado/contracts';
 import { findProviderPreset, NvidiaAdapter, OpenAICompatibleAdapter } from '@moderado/providers';
 import { createAgentHost, type AgentHost } from './agent_host.js';
+import { buildAbout } from './about.js';
+import { renderWebviewHtml } from './webview_html.js';
 import { DEFAULT_APPROVAL_SETTINGS, type ApprovalSettings } from './approval_handler.js';
 
 const APPROVALS_KEY = 'moderado.approvals';
 const SECRET_PREFIX = 'moderado.apiKey.';
+const PROVIDER_KEY = 'moderado.provider';
+const MODEL_KEY = 'moderado.model';
+
+/**
+ * Read the packaged manifest so the About page shows the installed VSIX's own
+ * version. `context.extensionPath` is the extension root inside the VSIX.
+ */
+function readManifest(context: vscode.ExtensionContext): Record<string, unknown> {
+  const manifestPath = vscode.Uri.joinPath(context.extensionUri, 'package.json');
+  return JSON.parse(fs.readFileSync(manifestPath.fsPath, 'utf8')) as Record<string, unknown>;
+}
 
 /**
  * Only the five known categories may be persisted, and each falls back to the
@@ -33,6 +48,20 @@ async function createProvider(context: vscode.ExtensionContext, connectionId: st
     : new OpenAICompatibleAdapter({ apiKey, baseUrl: preset.baseUrl, providerId: preset.id, providerName: preset.label });
 }
 
+/**
+ * The webview is presentation only. A nonce plus a strict CSP keeps injected
+ * markup from running: no inline script, no remote origins, no eval.
+ */
+function webviewHtml(webview: vscode.Webview, extensionUri: vscode.Uri): string {
+  const asset = (file: string): string =>
+    webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', file)).toString();
+  return renderWebviewHtml({
+    cspSource: webview.cspSource,
+    nonce: crypto.randomUUID().replace(/-/g, ''),
+    asset,
+  });
+}
+
 class ChatViewProvider implements vscode.WebviewViewProvider {
   private view: vscode.WebviewView | undefined;
   private host: AgentHost | undefined;
@@ -41,6 +70,8 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.view = view;
+    view.webview.options = { enableScripts: true, localResourceRoots: [vscode.Uri.joinPath(this.context.extensionUri, 'media')] };
+    view.webview.html = webviewHtml(view.webview, this.context.extensionUri);
     const folder = vscode.workspace.workspaceFolders?.[0];
     this.host = createAgentHost({
       workspaceRoot: folder?.uri.fsPath ?? process.cwd(),
@@ -48,6 +79,15 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
       createProvider: (connectionId) => createProvider(this.context, connectionId),
       onEvent: (envelope) => this.post({ type: 'event', event: envelope.event }),
       onApproval: (request) => this.post({ type: 'approval', request }),
+      // Keys go to SecretStorage and are never read back into a message.
+      // VS Code returns a Thenable, so wrap it to satisfy the Promise contract.
+      credentials: {
+        get: async (providerId) => this.context.secrets.get(`${SECRET_PREFIX}${providerId}`),
+        set: async (providerId, apiKey) => { await this.context.secrets.store(`${SECRET_PREFIX}${providerId}`, apiKey); },
+        delete: async (providerId) => { await this.context.secrets.delete(`${SECRET_PREFIX}${providerId}`); },
+      },
+      hasCredential: async (providerId) => Boolean(await this.context.secrets.get(`${SECRET_PREFIX}${providerId}`)),
+      about: () => buildAbout(readManifest(this.context)),
     });
     for (const [category, enabled] of Object.entries(readApprovals(this.context.workspaceState))) {
       void this.host.handle({ protocolVersion: 1, requestId: `restore-${category}`, type: 'update_settings', category, enabled });
@@ -64,11 +104,11 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async onMessage(message: { type?: string; category?: string; enabled?: boolean }): Promise<void> {
+  private async onMessage(message: { type?: string; category?: string; enabled?: boolean; providerId?: string; modelId?: string }): Promise<void> {
     const host = this.host;
     if (!host) return;
     if (message?.type === 'ready') {
-      this.post({ type: 'state', state: { approvals: host.getApprovalSettings() } });
+      await this.sendInitialState(host);
       return;
     }
     const response = await host.handle(message);
@@ -77,6 +117,31 @@ class ChatViewProvider implements vscode.WebviewViewProvider {
     if (response.ok && message?.type === 'update_settings') {
       await this.context.workspaceState.update(APPROVALS_KEY, host.getApprovalSettings());
     }
+    if (response.ok && message?.type === 'select_provider' && message.providerId) {
+      await this.context.workspaceState.update(PROVIDER_KEY, message.providerId);
+    }
+    if (response.ok && message?.type === 'select_model' && message.modelId) {
+      await this.context.workspaceState.update(MODEL_KEY, message.modelId);
+    }
+  }
+
+  /** Everything the settings pages need on first paint, in one message. */
+  private async sendInitialState(host: AgentHost): Promise<void> {
+    const request = (type: string): Record<string, unknown> => ({ protocolVersion: 1, requestId: `init-${type}`, type });
+    const [providers, about, sessions] = await Promise.all([
+      host.handle(request('list_providers')),
+      host.handle(request('get_about')),
+      host.handle(request('list_sessions')),
+    ]);
+    const state: Record<string, unknown> = {
+      approvals: host.getApprovalSettings(),
+      providerId: this.context.workspaceState.get<string>(PROVIDER_KEY) ?? '',
+      modelId: this.context.workspaceState.get<string>(MODEL_KEY) ?? '',
+    };
+    if (providers.ok && providers.result.type === 'providers') state.providers = providers.result.providers;
+    if (about.ok && about.result.type === 'about') state.about = about.result;
+    if (sessions.ok && sessions.result.type === 'sessions') state.recentSessions = sessions.result.sessions;
+    this.post({ type: 'state', state });
   }
 
   post(message: unknown): void {
