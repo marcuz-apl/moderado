@@ -6,7 +6,7 @@ describe('shared provider presets', () => {
     // The shipped v0.3.8 catalog has six connectable presets. `openai-compatible`
     // is a CLI pick-list entry with no fixed base URL, so it has no preset meta.
     expect(CONNECT_PROVIDER_PRESET_META.map((item) => item.id)).toEqual([
-      'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio',
+      'nvidia-nim', 'moderado-cloud', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio',
     ]);
     expect(CONNECT_PROVIDER_PRESET_IDS).toContain('openai-compatible');
   });

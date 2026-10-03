@@ -1436,6 +1436,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const usedModels = new Set<string>();
       let answerPosition = { row: 15, column: 1 };
       let lastErrorEvent: { code?: string; message: string } | undefined;
+      let gatewayNotice: string | undefined;
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
         const displayAnswer = streamedAnswer || lastAnswer;
@@ -1450,6 +1451,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           autoApprove: activeAutoApprove,
           chatQuestion: trimmed,
           chatAnswer: displayAnswer,
+          gatewayNotice,
           chatThoughtTime: thoughtTime,
           outputTokenRate,
           tokenUsage: turnUsage,
@@ -1569,7 +1571,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         skillContext: skillContext(effectivePrompt), skills,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
-          if (event.type === 'model_change') usedModels.add(event.newModelId);
+          if (event.type === 'model_change') {
+            usedModels.add(event.newModelId);
+            if (event.reason === 'gateway_fallback') { gatewayNotice = event.notice; redrawChatFrame(); }
+          }
           if (event.type === 'usage') {
             turnUsage = event;
             lastTokenUsage = event;

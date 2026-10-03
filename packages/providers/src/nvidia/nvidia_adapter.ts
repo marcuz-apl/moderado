@@ -137,7 +137,7 @@ export class NvidiaAdapter implements IProviderAdapter {
     });
 
     const payload: Record<string, unknown> = {
-      model: options.modelId,
+      model: options.serverRouting ? 'auto' : options.modelId,
       messages: wireMessages,
       stream: true,
       stream_options: { include_usage: true },

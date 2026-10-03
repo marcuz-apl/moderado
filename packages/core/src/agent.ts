@@ -348,6 +348,7 @@ export class AgentLoop {
       try {
         const stream = options.provider.streamChat({
           modelId: currentModel.id,
+          serverRouting: options.provider.id === 'moderado-cloud' && !options.routeOptions?.pinnedModelId,
           messages,
           tools:
             currentModel.classification.toolSupport === 'unsupported'
@@ -374,6 +375,13 @@ export class AgentLoop {
               messages,
               usage: latestUsage,
             };
+          }
+
+          if (chunk.gatewayFallback) {
+            const previousModelId = chunk.gatewayFallback.fromModel;
+            emit({ type: 'model_change', previousModelId, newModelId: chunk.gatewayFallback.toModel,
+              reason: 'gateway_fallback', accessClass: currentModel.classification.accessTier,
+              notice: `Gateway switched from ${previousModelId} to ${chunk.gatewayFallback.toModel} (${chunk.gatewayFallback.reason}). Use /model to choose another enabled model.`, timestamp: Date.now() });
           }
 
           const toolCharacters = (chunk.toolCallChunks ?? []).reduce((count, delta) => count + (delta.argumentsDelta?.length ?? 0) + (delta.name?.length ?? 0), 0);
@@ -463,7 +471,7 @@ export class AgentLoop {
           continue;
         }
 
-        if (isTransient && isAutoMode) {
+        if (isTransient && isAutoMode && options.provider.id !== 'moderado-cloud') {
           const fallback = router.getNextFallback(rankedCandidates, currentModel.id);
           if (fallback) {
             emit({

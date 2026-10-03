@@ -2,7 +2,7 @@ import type { ModelClassification, ModelInventoryEntry } from '@moderado/contrac
 import { isFreeModelEntry } from './model_discovery.js';
 
 export const CONNECT_PROVIDER_PRESET_IDS = [
-  'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
+  'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'moderado-cloud', 'openai-compatible',
 ] as const;
 
 export type ConnectProviderPresetId = typeof CONNECT_PROVIDER_PRESET_IDS[number];
@@ -100,6 +100,10 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     // for the default provider.
     freeCatalog: true,
     requiresApiKey: true,
+  },
+  {
+    id: 'moderado-cloud', label: 'Moderado Gateway', description: 'Use your private Gateway model pool with server-side failover.',
+    kind: 'openai-compatible', baseUrl: 'https://gateway.example.invalid/v1', defaultModel: 'auto', requiresApiKey: true,
   },
   {
     id: 'openrouter',

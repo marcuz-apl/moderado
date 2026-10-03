@@ -17,6 +17,8 @@ export async function* parseSseStream(
 ): AsyncIterable<ChatCompletionChunk> {
   const decoder = new TextDecoder('utf8');
   let buffer = '';
+  let currentEvent = 'message';
+  let pendingFallback: { fromModel: string; toModel: string; reason: 'rate_limited_or_unavailable' } | undefined;
 
   for await (const chunk of byteStream) {
     buffer += decoder.decode(chunk, { stream: true });
@@ -28,6 +30,12 @@ export async function* parseSseStream(
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith(':')) {
         // Empty line or SSE comment (heartbeat)
+        if (!trimmed) currentEvent = 'message';
+        continue;
+      }
+
+      if (trimmed.startsWith('event:')) {
+        currentEvent = trimmed.slice(6).trim();
         continue;
       }
 
@@ -48,6 +56,15 @@ export async function* parseSseStream(
           throw classifyInjectedStreamError(parsed.error);
         }
 
+        if (currentEvent === 'moderado_status') {
+          const validId = (id: unknown): id is string => typeof id === 'string' && /^[A-Za-z0-9_.:/-]{1,200}$/.test(id);
+          const value = validId(parsed?.from_model) && validId(parsed?.to_model) && parsed?.reason === 'rate_limited_or_unavailable' ? {
+            fromModel: parsed.from_model, toModel: parsed.to_model, reason: parsed.reason as 'rate_limited_or_unavailable',
+          } : undefined;
+          if (value && value.fromModel.length <= 200 && value.toModel.length <= 200) pendingFallback = value;
+          continue;
+        }
+
         const choice = parsed.choices?.[0];
         const delta = choice?.delta;
         const finishReason = choice?.finish_reason ?? null;
@@ -65,6 +82,7 @@ export async function* parseSseStream(
           }
 
           const completionChunk: ChatCompletionChunk = {};
+          if (pendingFallback) { completionChunk.gatewayFallback = pendingFallback; pendingFallback = undefined; }
           const reasoning = delta?.reasoning_content ?? delta?.thought;
           if (reasoning) {
             completionChunk.reasoningDelta = reasoning;
@@ -98,6 +116,7 @@ export async function* parseSseStream(
             completionChunk.toolCallChunks !== undefined ||
             completionChunk.finishReason !== undefined ||
             completionChunk.usage !== undefined
+            || completionChunk.gatewayFallback !== undefined
           ) {
             yield completionChunk;
           }

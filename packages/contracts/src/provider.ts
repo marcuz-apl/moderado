@@ -78,11 +78,13 @@ export const ChatCompletionChunkSchema = z.object({
   toolCallChunks: z.array(z.custom<ToolCallChunk>()).optional(),
   finishReason: z.enum(['stop', 'tool_calls', 'length', 'error']).nullable().optional(),
   usage: ChatUsageSchema.optional(),
+  gatewayFallback: z.object({ fromModel: z.string().min(1).max(200), toModel: z.string().min(1).max(200), reason: z.enum(['rate_limited_or_unavailable']) }).optional(),
 });
 export type ChatCompletionChunk = z.infer<typeof ChatCompletionChunkSchema>;
 
 export interface ProviderChatOptions {
   modelId: string;
+  serverRouting?: boolean;
   messages: ChatMessage[];
   tools?: ProviderToolDeclaration[];
   temperature?: number;

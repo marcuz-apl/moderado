@@ -17,6 +17,7 @@ export interface WelcomeLayoutOptions {
   /** When set, render the full chat window (question row 1 + answer) instead of the logo header. */
   chatQuestion?: string;
   chatAnswer?: string;
+  gatewayNotice?: string;
   chatThoughtTime?: number;
   /** Generated completion tokens per second for the preceding response. */
   outputTokenRate?: number;
@@ -308,6 +309,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
   lines.push(options.tokenUsage ? `\x1b[38;5;244m${(formatTokenUsage(options.tokenUsage) + (options.budgetStatus ? ` | ${options.budgetStatus}` : '')).slice(0, Math.max(0, terminalWidth - 1))}\x1b[0m` : options.chatAnswer?.trim() ? `\x1b[38;5;244mThought for ${thoughtTimeLabel}\x1b[0m` : '');
+  if (options.gatewayNotice) lines.push(`\x1b[38;5;220m⚠ ${options.gatewayNotice}\x1b[0m`);
 
   // Answer section: multi-line model answer
   if (options.chatAnswer && options.chatAnswer.trim().length > 0) {

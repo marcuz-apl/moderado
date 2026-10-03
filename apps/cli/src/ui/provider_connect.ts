@@ -34,6 +34,7 @@ export interface ProviderPreset {
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
+  { label: 'Moderado Gateway', value: 'moderado-cloud', tag: 'Private model pool', displayName: 'Moderado Gateway', baseUrl: 'https://gateway.example.invalid/v1', defaultModel: 'auto', description: 'Connect to your private Moderado Gateway and use its ordered failover pool.' },
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
   { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
@@ -176,7 +177,9 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   const customId = selectedPreset.value.startsWith('custom:') ? selectedPreset.value.slice('custom:'.length) : undefined;
   const displayName = selectedPreset.displayName ?? await askPopupText('Provider name (for example, OpenRouter)', options);
   if (!displayName) return undefined;
-  const baseUrl = selectedPreset.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
+  const baseUrl = selectedValue === 'moderado-cloud'
+    ? await askPopupText('Moderado Gateway base URL', options)
+    : selectedPreset.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
   const apiKey = selectedValue === 'ollama' || selectedValue === 'lm-studio'
     ? undefined
     : await askPopupText('API key', options, true);
@@ -225,6 +228,7 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   defaultModel = defaultModel ?? await askPopupText('Default model ID', options);
   if (!baseUrl || (!apiKey && selectedValue !== 'ollama' && selectedValue !== 'lm-studio') || !defaultModel) return undefined;
   const connection = buildConnection({ kind: 'openai-compatible', displayName, baseUrl, apiKey, defaultModel });
+  if (selectedValue === 'moderado-cloud') return { ...connection, id: 'moderado-cloud' };
   return customId ? { ...connection, id: customId } : connection;
 }
 

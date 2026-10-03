@@ -28,8 +28,9 @@ export type ProgressEvent = z.infer<typeof ProgressEventSchema>;
 export const ModelChangeEventSchema = z.object({
   type: z.literal('model_change'),
   previousModelId: z.string().optional(),
+  notice: z.string().optional(),
   newModelId: z.string().min(1),
-  reason: z.enum(['initial_selection', 'fallback_rate_limit', 'fallback_unavailable', 'user_pinned']),
+  reason: z.enum(['initial_selection', 'fallback_rate_limit', 'fallback_unavailable', 'gateway_fallback', 'user_pinned']),
   accessClass: AccessTierSchema,
   timestamp: z.number().int().nonnegative(),
 });
