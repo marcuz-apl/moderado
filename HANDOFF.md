@@ -1,13 +1,13 @@
 # Active CLI Baseline
 
 Updated: 2026-10-04
-Branch: `cloud-login-0.4.0-local` (0.4.0 Cloud Gateway update based on `master` at `e5c2e19`; latest published release `v0.3.10`)
-Status: **0.3.10 is live on npm, GitHub Releases, Homebrew, and Scoop. winget PR #444475 passed validation but is still open awaiting moderator approval, so the package is not yet searchable. Preparing the 0.4.0 Cloud Gateway CLI update.** The 0.3.10 release includes the standalone-binary version fix and its real Windows artifact reports `v0.3.10+260930d`.
+Branch: `cloud-login-0.4.0-local` (pushed to `origin/master` as `42ac3e5`; latest published release `v0.3.10`)
+Status: **The 0.4.0 Cloud Gateway CLI update is pushed to master as source, but has not been tagged or published.** The latest published release is 0.3.10 on npm, GitHub Releases, Homebrew, and Scoop. winget PR #444475 passed validation but remains open awaiting moderator approval, so the package is not searchable yet. The 0.3.10 release includes the standalone-binary version fix; its Windows artifact reports `v0.3.10+260930d`.
 
 
 ## Current task: Cloud Gateway integration
 
-Handoff: [docs/CLOUD_GATEWAY_INTEGRATION.md](docs/CLOUD_GATEWAY_INTEGRATION.md). The chat UI now uses `/login` for Moderado Cloud: it prompts only for an `mrd_` key and always manages the Gateway URL as `https://api.mod.alfazen.org/v1`; `/connect` is retired from slash command suggestions and dispatch. `/model` uses the authenticated Cloud inventory and exposes its free routes through the existing compatible-provider selector. Existing saved BYOK/local profiles remain loadable and independent. Cloud keys use credential references and never persist in plaintext; non-Windows uses the existing memory-only store, so users re-enter the key in a new CLI process. Browser authorization, Gateway-specific request limits, visible fallback handling, and error mapping remain. Verification: `npm test` passes (60 files / 449 tests); `npm run build`, `npm run typecheck`, and `npm run verify:package` pass. Next: push the verified 0.4.0 Cloud Gateway update, then continue through the remaining Gateway contract requirements.
+Handoff: [docs/CLOUD_GATEWAY_INTEGRATION.md](docs/CLOUD_GATEWAY_INTEGRATION.md). The chat UI now uses `/login` for Moderado Cloud: it prompts only for an `mrd_` key and always manages the Gateway URL as `https://api.mod.alfazen.org/v1`; `/connect` is retired from slash command suggestions and dispatch. `/model` uses the authenticated Cloud inventory and exposes its free routes through the existing compatible-provider selector. Existing saved BYOK/local profiles remain loadable and independent. Cloud keys use credential references and never persist in plaintext; non-Windows uses the existing memory-only store, so users re-enter the key in a new CLI process. Browser authorization, Gateway-specific request limits, visible fallback handling, and error mapping remain. Verification: `npm test` passes (60 files / 449 tests); `npm run build`, `npm run typecheck`, `npm run verify:package`, and `git diff --check` pass. Next: decide whether to create and push the `v0.4.0` tag, then continue through the remaining Gateway contract requirements.
 
 ## Release record (v0.3.10)
 
@@ -54,8 +54,8 @@ synthetic stale message — it now yields `v0.3.10+260930d`.
 
 ### Next
 
-1. Verify and push the 0.4.0 Cloud Gateway update. Do not tag or publish
-   until the release verification workflow passes and publication is explicitly
+1. Decide whether to create and push the `v0.4.0` tag. Do not publish until
+   the release verification workflow passes and publication is explicitly
    requested.
 2. Continue Cloud Gateway work with browser authorization, request limits,
    visible fallback handling, and Gateway error mapping.
