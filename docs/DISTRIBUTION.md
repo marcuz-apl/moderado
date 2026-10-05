@@ -6,15 +6,16 @@ Status: `moderado@0.3.10` is live on npm as `latest`, and the GitHub Release
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
 are both at **v0.3.10**, bumped after verifying every binary checksum against
-its `.sha256` sidecar. The winget submission is open as
+its `.sha256` sidecar. The winget submission has merged and
 [microsoft/winget-pkgs#444475](https://github.com/microsoft/winget-pkgs/pull/444475)
-(0.3.10, all 10 validation stages passed, awaiting a community moderator).
+publishes 0.3.10. Windows users can install it with
+`winget install --id MarcuzApl.Moderado --exact`.
 Chocolatey is deliberately out of scope.
 
 CI already does the heavy lifting: `release.yml` builds the three binaries
 and generates the manifests; `publish.yml` attaches `moderado.rb`,
-`moderado.json`, and `Moderado.yaml` to every GitHub Release.
-What remains per channel is submission + per-release bumps.
+`moderado.json`, and `Moderado.yaml` to every GitHub Release. After a release,
+refresh the Homebrew and Scoop manifests and submit the new winget manifest.
 
 ---
 
@@ -59,13 +60,13 @@ refusal against a local fixture server).
 - **Outstanding: none — bumped to v0.3.10** in commit `f7d2e9d`, copied from
   the v0.3.10 Release attachment after checksum verification.
 
-## 4. winget — 0.3.10 submitted, awaiting a community moderator
+## 4. winget — 0.3.10 merged and available
 
 - Package ID: `MarcuzApl.Moderado`. The 0.3.0 submission
   ([#439175](https://github.com/microsoft/winget-pkgs/pull/439175)) was closed
   as out of date and superseded by
-  **[#444475](https://github.com/microsoft/winget-pkgs/pull/444475)**
-  (0.3.10, awaiting a community moderator).
+  **[#444475](https://github.com/microsoft/winget-pkgs/pull/444475)**,
+  which has merged with version 0.3.10.
 - The PR carries the required three-file layout under
   `manifests/m/MarcuzApl/Moderado/0.3.10/`: `MarcuzApl.Moderado.yaml` (version),
   `MarcuzApl.Moderado.installer.yaml` (portable, x64), and
@@ -89,9 +90,8 @@ refusal against a local fixture server).
   local preview build, not a defect in these files.
 - Per release after the first merge: one manifest PR (automatable with
   `wingetcreate update MarcuzApl.Moderado -u <exe-url> -v <version>`).
-- Until the PR merges, Windows users install with
-  `winget install --manifest <downloaded Moderado.yaml>`, or take the
-  standalone `moderado-win-x64.exe` from the Release.
+- Windows users can run `winget install --id MarcuzApl.Moderado --exact` or
+  install the standalone `moderado-win-x64.exe` from the Release.
 - Note: the draft is `InstallerType: portable` — true today (the exe runs
   standalone); re-check if packaging ever changes.
 
