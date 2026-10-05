@@ -49,7 +49,9 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     const valid = { modelId: 'auto', messages: [{ role: 'user' as const, content: 'Hi' }], maxTokens: 1 };
     await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: undefined })) {} })
       .rejects.toThrow(/max_tokens/);
-    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: 2049 })) {} })
+    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: 0 })) {} })
+      .rejects.toThrow(/max_tokens/);
+    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: 1.5 })) {} })
       .rejects.toThrow(/max_tokens/);
     await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, messages: [] })) {} })
       .rejects.toThrow(/1.*32.*messages/);
@@ -71,6 +73,29 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     const compatible = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'openrouter' });
     nextHandler = (_req, res) => { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end('data: [DONE]\n\n'); };
     for await (const _ of compatible.streamChat({ modelId: 'x', messages: [{ role: 'user', content: 'Hi' }] })) {}
+  });
+
+  it('caps the default agent output limit to the Gateway maximum', async () => {
+    let sentMaxTokens: unknown;
+    nextHandler = (req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => { body += chunk; });
+      req.on('end', () => {
+        sentMaxTokens = JSON.parse(body).max_tokens;
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      });
+    };
+    const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+
+    for await (const _ of gateway.streamChat({
+      modelId: 'nvidia:deepseek-ai/deepseek-v4.1-flash',
+      messages: [{ role: 'user', content: 'What is the weather in Calgary today?' }],
+      maxTokens: 4096,
+    })) {}
+
+    expect(sentMaxTokens).toBe(2048);
   });
 
   it.each([

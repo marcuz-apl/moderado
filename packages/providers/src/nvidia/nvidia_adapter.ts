@@ -13,6 +13,8 @@ import {
 } from '@moderado/contracts';
 import { parseSseStream } from './sse_parser.js';
 
+const MODERADO_CLOUD_MAX_OUTPUT_TOKENS = 2048;
+
 export interface NvidiaAdapterConfig {
   apiKey?: string;
   baseUrl?: string;
@@ -104,6 +106,9 @@ export class NvidiaAdapter implements IProviderAdapter {
 
   async *streamChat(options: ProviderChatOptions): AsyncIterable<ChatCompletionChunk> {
     const url = `${this.baseUrl}/chat/completions`;
+    const maxTokens = this.isModeradoCloud && Number.isInteger(options.maxTokens)
+      ? Math.min(options.maxTokens!, MODERADO_CLOUD_MAX_OUTPUT_TOKENS)
+      : options.maxTokens;
 
     // Map contracts ChatMessage to OpenAI/NIM wire payload
     const wireMessages = options.messages.map((msg) => {
@@ -161,12 +166,12 @@ export class NvidiaAdapter implements IProviderAdapter {
     if (options.temperature !== undefined) {
       payload.temperature = options.temperature;
     }
-    if (options.maxTokens !== undefined) {
-      payload.max_tokens = options.maxTokens;
+    if (maxTokens !== undefined) {
+      payload.max_tokens = maxTokens;
     }
 
     if (this.isModeradoCloud) {
-      this.validateGatewayRequest(options, wireMessages, payload);
+      this.validateGatewayRequest({ ...options, maxTokens }, wireMessages, payload);
     }
 
     const body = JSON.stringify(payload);
@@ -209,7 +214,7 @@ export class NvidiaAdapter implements IProviderAdapter {
     wireMessages: Record<string, unknown>[],
     payload: Record<string, unknown>
   ): void {
-    if (!Number.isInteger(options.maxTokens) || options.maxTokens! < 1 || options.maxTokens! > 2048) {
+    if (!Number.isInteger(options.maxTokens) || options.maxTokens! < 1 || options.maxTokens! > MODERADO_CLOUD_MAX_OUTPUT_TOKENS) {
       throw new ProviderError('Moderado Cloud requires max_tokens between 1 and 2048', 'ERR_GATEWAY_INVALID_REQUEST', 400);
     }
     if (wireMessages.length < 1 || wireMessages.length > 32 || wireMessages.some((message) =>
