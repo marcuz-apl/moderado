@@ -43,19 +43,28 @@ export function verifyPackedFiles(files) {
   }
 }
 
+export function getPackedPackageResult(result) {
+  const packages = Array.isArray(result)
+    ? result
+    : result && typeof result === 'object'
+      ? Object.values(result)
+      : [];
+  if (packages.length !== 1 || typeof packages[0]?.filename !== 'string') {
+    throw new Error('npm pack did not return exactly one package result.');
+  }
+  return packages[0];
+}
+
 async function pack(cliDirectory, cacheDirectory) {
   const { stdout } = await runNpm(['pack', '--json', '--ignore-scripts'], {
     cwd: cliDirectory,
     env: createNpmEnvironment(cacheDirectory),
   });
-  const result = JSON.parse(stdout);
-  if (!Array.isArray(result) || result.length !== 1 || typeof result[0]?.filename !== 'string') {
-    throw new Error('npm pack did not return exactly one package result.');
-  }
-  const files = result[0].files?.map((entry) => `package/${entry.path}`);
+  const result = getPackedPackageResult(JSON.parse(stdout));
+  const files = result.files?.map((entry) => `package/${entry.path}`);
   if (!Array.isArray(files)) throw new Error('npm pack did not provide a package file list.');
   verifyPackedFiles(files);
-  return join(cliDirectory, result[0].filename);
+  return join(cliDirectory, result.filename);
 }
 
 async function installAndSmokeTest(tarball, cacheDirectory) {

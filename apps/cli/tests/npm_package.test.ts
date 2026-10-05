@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { prepareNpmPackage } from '../../../scripts/prepare_npm_package.mjs';
-import { createNpmEnvironment, getInstalledCliInvocation, getNpmInvocation, verifyPackedFiles } from '../../../scripts/verify_npm_package.mjs';
+import { createNpmEnvironment, getInstalledCliInvocation, getNpmInvocation, getPackedPackageResult, verifyPackedFiles } from '../../../scripts/verify_npm_package.mjs';
 
 describe('npm package preparation', () => {
   const roots: string[] = [];
@@ -39,6 +39,13 @@ describe('npm package preparation', () => {
     expect(() => verifyPackedFiles(['package/src/index.ts'])).toThrow('source file');
     expect(() => verifyPackedFiles(['package/node_modules/zod/index.js'])).toThrow('node_modules');
     expect(() => verifyPackedFiles(['package/.moderado/config.json'])).toThrow('user data');
+  });
+
+  it('normalizes npm pack metadata from array and package-keyed output formats', () => {
+    const packed = { filename: 'moderado-0.4.0.tgz', files: [] };
+    expect(getPackedPackageResult([packed])).toEqual(packed);
+    expect(getPackedPackageResult({ moderado: packed })).toEqual(packed);
+    expect(() => getPackedPackageResult({})).toThrow('exactly one package result');
   });
 
   it('runs npm through node on Windows without enabling a shell', () => {
