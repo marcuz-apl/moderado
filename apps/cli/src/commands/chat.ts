@@ -12,11 +12,11 @@ import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
-import { isAuthenticationFailure, loginModeradoCloudInteractive, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
+import { isAuthenticationFailure, isModeradoCloudOAuthConnection, loginModeradoCloudInteractive, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
+import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
 import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
@@ -1571,6 +1571,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'model_change') usedModels.add(event.newModelId);
+          if (event.type === 'gateway_status') process.stdout.write(renderGatewayFallbackUpdate(event, process.stdout.columns || 80));
           if (event.type === 'usage') {
             turnUsage = event;
             lastTokenUsage = event;
@@ -1617,8 +1618,13 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       } catch (error) {
         if (!activeConnection || !isAuthenticationFailure(error)) throw error;
         if (thinkingTimer) clearInterval(thinkingTimer);
-        process.stdout.write(`\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
-        const replacement = await replaceProviderKeyInteractive(activeConnection, { signal });
+        const cloudOAuth = isModeradoCloudOAuthConnection(activeConnection);
+        process.stdout.write(cloudOAuth
+          ? '\nModerado Cloud rejected this browser login. Sign in again to retry once.\n'
+          : `\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
+        const replacement = cloudOAuth
+          ? await loginModeradoCloudInteractive({ signal })
+          : await replaceProviderKeyInteractive(activeConnection, { signal });
         if (!replacement) throw error;
         recordTurnUsage();
         turnUsage = undefined;

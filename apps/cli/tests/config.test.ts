@@ -14,6 +14,7 @@ import {
   removeMcpServer,
   migrateLegacyCredentials,
   requiresCredentialReference,
+  resolveConnectionCredential,
   storeConnectionCredential,
 } from '../src/config.js';
 import { MemoryCredentialStore } from '../src/credentials.js';
@@ -127,6 +128,18 @@ describe('CLI Configuration Storage', () => {
     }, tempDir);
     expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
       .toBe('https://api.mod.alfazen.org/v1');
+  });
+
+  it('persists OAuth credential expiry and refuses expired credentials', async () => {
+    const store = new MemoryCredentialStore();
+    const connection = await storeConnectionCredential({
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+      baseUrl: 'https://api.mod.alfazen.org/v1', apiKey: 'mrd_expired', defaultModel: 'auto',
+      credentialExpiresAt: Date.now() - 1000,
+    }, store);
+    saveConnection(connection, tempDir);
+    expect(loadConfig(tempDir).connections?.['moderado-cloud']?.credentialExpiresAt).toBeLessThan(Date.now());
+    expect((await resolveConnectionCredential(connection, store)).apiKey).toBeUndefined();
   });
 
   it('requires a credential reference for Moderado Cloud on every platform', () => {

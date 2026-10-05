@@ -1,10 +1,28 @@
 import {
   ModelInventoryEntry,
   ModelInventoryEntrySchema,
+  GATEWAY_ERROR_CODES,
+  GatewayError,
   ProviderError,
 } from '@moderado/contracts';
 
 export const SPIKE_PROVIDER_ENDPOINTS = {} as const;
+
+function isModeradoGatewayUrl(baseUrl: string): boolean {
+  try {
+    const parsed = new URL(baseUrl);
+    return parsed.hostname === 'api.mod.alfazen.org'
+      || (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') && parsed.port === '8787';
+  } catch {
+    return false;
+  }
+}
+
+function gatewayErrorCode(status: number): string {
+  return status === 401 ? 'unauthorized' : status === 403 ? 'scope_denied' : status === 400 ? 'invalid_request'
+    : status === 404 ? 'model_unavailable' : status === 429 ? 'quota_exceeded'
+      : status === 503 ? 'service_unavailable' : 'provider_error';
+}
 
 /**
  * Fetch the OpenAI-compatible `/models` listing from any provider endpoint.
@@ -37,6 +55,27 @@ export async function fetchProviderModels(
     );
   }
   if (!response.ok) {
+    if (isModeradoGatewayUrl(baseUrl)) {
+      let code = gatewayErrorCode(response.status);
+      let retryAfterSeconds: number | undefined;
+      try {
+        const body: unknown = await response.json();
+        if (body && typeof body === 'object' && 'error' in body && body.error && typeof body.error === 'object'
+          && 'code' in body.error && typeof body.error.code === 'string') code = body.error.code;
+      } catch {
+        // Use the status mapping if the error body is not JSON.
+      }
+      if (!GATEWAY_ERROR_CODES.includes(code)) code = 'provider_error';
+      const retryHeader = response.headers.get('Retry-After');
+      if (retryHeader) {
+        if (/^\d+$/.test(retryHeader)) retryAfterSeconds = Number(retryHeader);
+        else {
+          const retryAt = Date.parse(retryHeader);
+          if (!Number.isNaN(retryAt)) retryAfterSeconds = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+        }
+      }
+      throw new GatewayError(code, response.status, retryAfterSeconds);
+    }
     throw new ProviderError(
       `Model discovery failed with status ${response.status} at ${url}`,
       'ERR_HTTP_ERROR',

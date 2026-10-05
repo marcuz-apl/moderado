@@ -212,8 +212,9 @@ export class AgentLoop {
     if (signal?.aborted) return cancelBeforeRouting();
 
     // 1. Model Discovery & Routing
+    const gatewayAuto = options.provider.id === 'moderado-cloud' && !options.routeOptions?.pinnedModelId;
     let inventory = options.modelInventory;
-    if (!inventory || inventory.length === 0) {
+    if (!gatewayAuto && (!inventory || inventory.length === 0)) {
       if (options.routeOptions?.pinnedModelId) {
         try {
           inventory = await options.provider.discoverModels(signal);
@@ -241,10 +242,16 @@ export class AgentLoop {
     }
     if (signal?.aborted) return cancelBeforeRouting();
 
-    const { selectedModel: initialModel, rankedCandidates } = router.selectModel(
-      inventory,
-      options.routeOptions
-    );
+    const { selectedModel: initialModel, rankedCandidates } = gatewayAuto
+      ? {
+          selectedModel: {
+            id: 'auto',
+            ownedBy: options.provider.id,
+            classification: router.classifyModel('auto', false),
+          },
+          rankedCandidates: [],
+        }
+      : router.selectModel(inventory ?? [], options.routeOptions);
 
     let currentModel = initialModel;
     emit({
@@ -376,6 +383,8 @@ export class AgentLoop {
             };
           }
 
+          if (chunk.gatewayStatus) emit({ type: 'gateway_status', ...chunk.gatewayStatus, timestamp: Date.now() });
+
           const toolCharacters = (chunk.toolCallChunks ?? []).reduce((count, delta) => count + (delta.argumentsDelta?.length ?? 0) + (delta.name?.length ?? 0), 0);
           const generatedCharacters = (chunk.contentDelta?.length ?? 0) + (chunk.reasoningDelta?.length ?? 0) + toolCharacters;
           if (generatedCharacters > 0) {
@@ -450,8 +459,8 @@ export class AgentLoop {
         if (signal?.aborted) return cancelled();
         // Handle transient errors & failover cascades in AUTO mode
         // Do not replay text that the user has already seen.
-        const isTransient = isRetryableProviderError(err) && assistantText.length === 0;
-        const isAutoMode = !options.routeOptions?.pinnedModelId;
+        const isTransient = isRetryableProviderError(err) && assistantText.length === 0 && !gatewayAuto;
+        const isAutoMode = !gatewayAuto && !options.routeOptions?.pinnedModelId;
 
         if (isTransient && attempt < retryDelays.length) {
           const delay = retryDelays[attempt++];
@@ -524,7 +533,7 @@ export class AgentLoop {
         const emptyResponse = new EmptyResponseError(
           `${options.provider.name} returned no assistant content or tool calls for ${currentModel.id}.`
         );
-        const isAutoMode = !options.routeOptions?.pinnedModelId;
+        const isAutoMode = !gatewayAuto && !options.routeOptions?.pinnedModelId;
         const fallback = isAutoMode
           ? router.getNextFallback(rankedCandidates, currentModel.id)
           : undefined;

@@ -1,13 +1,14 @@
 # Active CLI Baseline
 
-Updated: 2026-10-04
-Branch: `cloud-login-0.4.0-local` (pushed to `origin/master` as `42ac3e5`; latest published release `v0.3.10`)
-Status: **The 0.4.0 Cloud Gateway CLI update is pushed to master as source, but has not been tagged or published.** The latest published release is 0.3.10 on npm, GitHub Releases, Homebrew, and Scoop. winget PR #444475 passed validation but remains open awaiting moderator approval, so the package is not searchable yet. The 0.3.10 release includes the standalone-binary version fix; its Windows artifact reports `v0.3.10+260930d`.
+Updated: 2026-10-05
+Branch: `cloud-login-0.4.0-local`; base/tag `v0.4.0` at `dd982e4` (`origin/master`).
+Status: **The v0.4.0 source tag is pushed and its release verification workflow passed (run `37267416050`), but the release has not been published.** npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10. Current Cloud completion changes are follow-up source work and are not part of the immutable v0.4.0 tag. npm package metadata is aligned to 0.4.1; the Alfazen feature commit will advance `VERSION` from v0.4.0 to v0.4.1.
 
+## Current task: Cloud Gateway integration completion
 
-## Current task: Cloud Gateway integration
+The implementation follows [docs/CLOUD_GATEWAY_INTEGRATION.md](docs/CLOUD_GATEWAY_INTEGRATION.md) and the stable v1 contract in `D:\projects\moderado-cloud\docs\CONTRACT.md`. `/login` now supports manual `mrd_` keys and browser PKCE; the CLI fixes the Gateway URL at `https://api.mod.alfazen.org/v1`. `/model` uses authenticated Cloud routes. Cloud `auto` is sent to the Gateway, while selected route IDs remain pinned. The adapter enforces v1 message/token/tool/body bounds, reports sanitized Gateway errors including `Retry-After`, and displays validated streamed fallback status. BYOK streams ignore Gateway-only status events. Browser credentials expire after 30 days and can be reauthorized through `/login`; Windows uses Credential Manager, while non-Windows credentials remain memory-only between CLI processes. Existing BYOK/local profiles remain independent.
 
-Handoff: [docs/CLOUD_GATEWAY_INTEGRATION.md](docs/CLOUD_GATEWAY_INTEGRATION.md). The chat UI now uses `/login` for Moderado Cloud: it prompts only for an `mrd_` key and always manages the Gateway URL as `https://api.mod.alfazen.org/v1`; `/connect` is retired from slash command suggestions and dispatch. `/model` uses the authenticated Cloud inventory and exposes its free routes through the existing compatible-provider selector. Existing saved BYOK/local profiles remain loadable and independent. Cloud keys use credential references and never persist in plaintext; non-Windows uses the existing memory-only store, so users re-enter the key in a new CLI process. Browser authorization, Gateway-specific request limits, visible fallback handling, and error mapping remain. Verification: `npm test` passes (60 files / 449 tests); `npm run build`, `npm run typecheck`, `npm run verify:package`, and `git diff --check` pass. Next: decide whether to create and push the `v0.4.0` tag, then continue through the remaining Gateway contract requirements.
+Verification with 0.4.1 metadata: `npm run build` and `npm run typecheck` pass; `npm test` passes (61 files / 480 tests); `npm run verify:package` passes (`moderado-0.4.1.tgz`); and `git diff --check` passes. The explicit earlier request to push source applies; do not create/move tags or publish a release. Smallest next action: commit the patch update and push it to `master` while preserving `v0.4.0`.
 
 ## Release record (v0.3.10)
 

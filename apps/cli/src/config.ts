@@ -35,6 +35,8 @@ export interface ProviderConnection {
   kind: ProviderConnectionKind;
   baseUrl: string;
   credentialReference?: string;
+  /** Unix epoch milliseconds for expiring OAuth credentials. */
+  credentialExpiresAt?: number;
   apiKey?: string;
   defaultModel?: string;
 }
@@ -127,6 +129,7 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
       kind,
       baseUrl: item.id === 'moderado-cloud' ? MODERADO_CLOUD_BASE_URL : item.baseUrl,
       credentialReference: typeof item.credentialReference === 'string' ? item.credentialReference : undefined,
+      credentialExpiresAt: typeof item.credentialExpiresAt === 'number' && Number.isFinite(item.credentialExpiresAt) ? item.credentialExpiresAt : undefined,
       apiKey: typeof item.apiKey === 'string' ? item.apiKey : undefined,
       defaultModel: typeof item.defaultModel === 'string' ? item.defaultModel : undefined,
     };
@@ -238,6 +241,7 @@ export function requiresCredentialReference(connection: Pick<ProviderConnection,
 }
 
 export async function resolveConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
+  if (connection.credentialExpiresAt !== undefined && connection.credentialExpiresAt <= Date.now()) return { ...connection, apiKey: undefined };
   const environmentName = connection.id === 'nvidia-nim' ? 'NVIDIA_API_KEY' : `${connection.id.replace(/[^a-z0-9]/gi, '_').toUpperCase()}_API_KEY`;
   const apiKey = await resolveCredential(process.env[environmentName], connection.credentialReference, connection.apiKey, store);
   return { ...connection, apiKey };

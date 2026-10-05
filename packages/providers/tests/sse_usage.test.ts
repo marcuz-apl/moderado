@@ -36,3 +36,40 @@ it.each([
 it('accepts null usage sent before the final usage report', async () => {
   expect((await readUsage(null))[0].usage).toBeUndefined();
 });
+
+it('parses validated Gateway fallback status events before content', async () => {
+  async function* bytes() {
+    yield new TextEncoder().encode(`event: moderado_status\ndata: ${JSON.stringify({ from_model: 'free/old', to_model: `free/model_${'a'.repeat(229)}`, reason: 'rate_limited_or_unavailable' })}\n\ndata: {"choices":[{"delta":{"content":"hello"}}]}\n\n`);
+  }
+  const chunks = [];
+  for await (const chunk of parseSseStream(bytes(), { moderadoCloud: true })) chunks.push(chunk);
+  expect(chunks).toEqual([
+    { gatewayStatus: { fromModel: 'free/old', toModel: `free/model_${'a'.repeat(229)}`, reason: 'rate_limited_or_unavailable' } },
+    { contentDelta: 'hello', finishReason: null },
+  ]);
+});
+
+it('rejects unsafe Gateway fallback metadata', async () => {
+  async function* bytes() {
+    yield new TextEncoder().encode('event: moderado_status\ndata: {"from_provider":"\\u001b[31m","from_model":"old","to_provider":"provider-b","to_model":"new","reason":"untrusted text"}\n\n');
+  }
+  await expect(async () => { for await (const _ of parseSseStream(bytes(), { moderadoCloud: true })) { /* consume */ } }).rejects.toThrow('Invalid Gateway status event');
+});
+
+it('ignores Gateway status events on non-Cloud provider streams', async () => {
+  async function* bytes() {
+    yield new TextEncoder().encode('event: moderado_status\ndata: {"from_provider":"provider-a","from_model":"old","to_provider":"provider-b","to_model":"new","reason":"unexpected"}\n\ndata: {"choices":[{"delta":{"content":"BYOK answer"}}]}\n\n');
+  }
+  const chunks = [];
+  for await (const chunk of parseSseStream(bytes())) chunks.push(chunk);
+  expect(chunks).toEqual([{ contentDelta: 'BYOK answer', finishReason: null }]);
+});
+
+it('ignores malformed Gateway status JSON on non-Cloud provider streams', async () => {
+  async function* bytes() {
+    yield new TextEncoder().encode('event: moderado_status\ndata: {broken json\n\ndata: {"choices":[{"delta":{"content":"BYOK answer"}}]}\n\n');
+  }
+  const chunks = [];
+  for await (const chunk of parseSseStream(bytes())) chunks.push(chunk);
+  expect(chunks).toEqual([{ contentDelta: 'BYOK answer', finishReason: null }]);
+});

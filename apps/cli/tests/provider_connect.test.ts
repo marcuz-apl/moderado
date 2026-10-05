@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildConnection, buildModeradoCloudConnection, findReusableConnection, isAuthenticationFailure, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { GatewayError } from '@moderado/contracts';
+import { buildConnection, buildModeradoCloudConnection, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
 
 const openRouter = {
   id: 'openrouter',
@@ -42,6 +43,13 @@ describe('provider connection setup', () => {
   it('recognizes provider authentication failures without exposing a key', () => {
     expect(isAuthenticationFailure(new Error('OpenRouter authentication failed (401) during chat'))).toBe(true);
     expect(isAuthenticationFailure(new Error('request failed with status 429'))).toBe(false);
+    expect(isAuthenticationFailure(new GatewayError('unauthorized', 401))).toBe(true);
+    expect(isAuthenticationFailure(new GatewayError('scope_denied', 403))).toBe(false);
+  });
+
+  it('identifies expiring Moderado OAuth credentials for browser reauthorization', () => {
+    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', credentialExpiresAt: Date.now(), displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://api.mod.alfazen.org/v1' })).toBe(true);
+    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://api.mod.alfazen.org/v1' })).toBe(false);
   });
 
   it('renders credential entry as a popup, masking secrets', () => {
@@ -72,6 +80,15 @@ describe('provider connection setup', () => {
     });
     expect(() => buildModeradoCloudConnection('sk_wrong')).toThrow('mrd_');
     expect(() => buildModeradoCloudConnection('mrd_')).toThrow('mrd_');
+  });
+
+  it('builds a Moderado Cloud profile from a browser token with expiry metadata', () => {
+    expect(buildModeradoCloudConnection('mrd_oauth-token', Date.now() + 2_592_000_000)).toMatchObject({
+      id: 'moderado-cloud',
+      apiKey: 'mrd_oauth-token',
+      credentialExpiresAt: expect.any(Number),
+      defaultModel: 'auto',
+    });
   });
 
   it('normalizes an OpenAI-compatible endpoint and requires a model', () => {

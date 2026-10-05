@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AccessTierSchema } from './models.js';
 import { DiagnosticSchema, ToolResultSchema } from './tools.js';
 import { ApprovalRequestSchema, ApprovalStatusSchema } from './approvals.js';
-import { ChatUsageSchema } from './provider.js';
+import { ChatUsageSchema, GatewayFallbackStatusSchema } from './provider.js';
 
 /** Cumulative task usage; estimates are never provider-reported billing counts. */
 export const UsageEventSchema = z.object({
@@ -34,6 +34,12 @@ export const ModelChangeEventSchema = z.object({
   timestamp: z.number().int().nonnegative(),
 });
 export type ModelChangeEvent = z.infer<typeof ModelChangeEventSchema>;
+
+export const GatewayStatusEventSchema = GatewayFallbackStatusSchema.extend({
+  type: z.literal('gateway_status'),
+  timestamp: z.number().int().nonnegative(),
+});
+export type GatewayStatusEvent = z.infer<typeof GatewayStatusEventSchema>;
 
 export const AssistantDeltaEventSchema = z.object({
   type: z.literal('assistant_delta'),
@@ -115,6 +121,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
   UsageEventSchema,
   ProgressEventSchema,
   ModelChangeEventSchema,
+  GatewayStatusEventSchema,
   AssistantDeltaEventSchema,
   ReasoningDeltaEventSchema,
   ToolCallInitiatedEventSchema,

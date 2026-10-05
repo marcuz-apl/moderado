@@ -13,10 +13,10 @@ CLI already supports custom OpenAI-compatible endpoints, `/v1/models`, `/v1/chat
 
 ## CLI work
 
-1. Add `/login` for a named **Moderado Cloud** connection/profile. Prompt only for a manual `mrd_…` key and set the base URL to `https://api.mod.alfazen.org/v1` internally. Retire `/connect` from the chat UI. Keep existing saved BYOK/local profiles independent.
-2. Support both manual `mrd_…` keys and browser authorization. For browser auth, use `client_id=moderado-cli`, random state, PKCE S256, a loopback callback, then exchange at `https://mod.alfazen.org/oauth/token`. Verify state and bind the exact callback/client ID. The exchanged access key expires in 30 days; there is no refresh token, so prompt to authorize again. Avoid logging or writing key material to plain config; use existing credential storage where available.
-3. Fetch the authenticated Gateway inventory from `GET /v1/models`. Preserve route IDs as model identifiers and let `/model` browse the Gateway's available free routes. Support `auto` as well as a pinned route ID. `auto` follows the Admin pool; a pinned route never silently switches. Keep local/BYOK profiles independent.
-4. Parse and surface fallback metadata: non-stream `moderado_fallback`; streaming `event: moderado_status` before model output. Tell the user the destination route and safe reason, and allow choosing/pinning another returned route without changing the Admin pool.
+1. Add `/login` for a named **Moderado Cloud** connection/profile. Offer a manual `mrd_…` key or browser authorization and set the base URL to `https://api.mod.alfazen.org/v1` internally. Retire `/connect` from the chat UI. Keep existing saved BYOK/local profiles independent.
+2. For browser auth, use `client_id=moderado-cli`, random state, PKCE S256, an exact loopback callback, then exchange at `https://mod.alfazen.org/oauth/token`. Verify state and bind the exact callback/client ID; reject redirects during token exchange. The exchanged access key expires in 30 days; there is no refresh token, so `/login` must allow reauthorization. Avoid logging or writing key material to plain config; use existing credential storage where available.
+3. Fetch the authenticated Gateway inventory from `GET /v1/models`. Preserve route IDs as model identifiers and let `/model` browse the Gateway's available free routes. Send `auto` to the Gateway so it follows the Admin pool; a pinned route never silently switches. Keep local/BYOK profiles independent.
+4. Parse and surface streaming `event: moderado_status` fallback metadata before model output. Tell the user the destination route and a safe reason, and allow choosing/pinning another returned route without changing the Admin pool. The CLI currently uses streaming chat requests only; if a non-stream path is added later, it must also parse `moderado_fallback`.
 5. Match the v1 request subset: text-only messages, required `max_tokens` (1–2048), tools/tool results, streaming, and usage option. Client executes tool calls. Show actionable errors, including `quota_exceeded` with `Retry-After`, `hosted_routes_unavailable`, scope denial, and unavailable model. Do not retry an ambiguous or post-output failure in a way that duplicates work.
 6. Add offline fake-server tests for PKCE/state, token expiry/re-auth, model discovery, request validation, streaming status events, fallback display, and error mapping. No live provider calls in tests.
 
@@ -29,6 +29,6 @@ CLI already supports custom OpenAI-compatible endpoints, `/v1/models`, `/v1/chat
 - Requests are text-only, at most 32 KiB, and messages/tools are bounded to 4096 encoded bytes. `max_tokens` is required and capped at 2048.
 - Private beta quotas currently include 8 requests/account/key per UTC day and 80 globally per UTC day. Treat these as server policy; never advertise them as permanent.
 
-## First implementation step
+## Implementation status (2026-10-05)
 
-Implement `/login` with a fixed Gateway URL and a masked manual-key prompt, then verify `/model` browses the authenticated free route inventory. Add browser authorization and fallback handling in subsequent slices. Do not add runtime dependencies without a concrete need and owner approval.
+The implementation is on branch `cloud-login-0.4.0-local` as follow-up work after the pushed `v0.4.0` tag. It implements the items above without adding runtime dependencies. The 0.4.0 tag remains unchanged; npm metadata is aligned to the 0.4.1 follow-up. Full repository verification is recorded in [HANDOFF.md](../HANDOFF.md).

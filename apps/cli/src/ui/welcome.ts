@@ -1,5 +1,5 @@
 import readline from 'node:readline';
-import type { UsageEvent } from '@moderado/contracts';
+import type { GatewayStatusEvent, UsageEvent } from '@moderado/contracts';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
 
@@ -1189,5 +1189,14 @@ export function formatTokenUsage(event: UsageEvent): string {
 export function renderChatUsageUpdate(event: UsageEvent, width = process.stdout.columns || 80, budgetStatus?: string): string {
   const text = (formatTokenUsage(event) + (budgetStatus ? ` | ${budgetStatus}` : '')).slice(0, Math.max(0, width - 1));
   const row = renderModeradoHeader().split("\n").length + 3;
+  return `\x1b7\x1b[${row};1H\r\x1b[K\x1b[38;5;244m${text}\x1b[0m\x1b8`;
+}
+
+/** Show trusted, schema-validated Gateway route changes without provider supplied prose. */
+export function renderGatewayFallbackUpdate(event: GatewayStatusEvent, width = process.stdout.columns || 80): string {
+  const destination = event.toProvider ? `${event.toProvider}/${event.toModel}` : event.toModel;
+  const reason = event.reason === 'rate_limited_or_unavailable' ? 'after an upstream route was rate limited or unavailable' : 'after a fallback';
+  const text = `Gateway route changed to ${destination} ${reason}`.slice(0, Math.max(0, width - 1));
+  const row = renderModeradoHeader().split('\n').length + 3;
   return `\x1b7\x1b[${row};1H\r\x1b[K\x1b[38;5;244m${text}\x1b[0m\x1b8`;
 }

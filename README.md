@@ -117,30 +117,34 @@ Maintainers can install a verified release artifact directly with
 [docs/RELEASING.md](docs/RELEASING.md) for the review procedure.
 
 
-### Connect a provider
+### Log in to Moderado Cloud
 
-Open Moderado and use `/connect`. NVIDIA NIM is the default free-first provider;
-OpenRouter, Agnes AI, and compatible OpenAI-style endpoints are also supported.
-On Windows, newly saved provider keys go to Windows Credential Manager and
-`~/.moderado/config.json` retains only a credential reference. On other
-platforms, use an environment variable such as `NVIDIA_API_KEY` or
-`OPENROUTER_API_KEY`.
+Run `/login` in the TUI and choose browser authorization or enter a Moderado
+Cloud `mrd_` API key. The CLI manages the Gateway URL automatically. After
+login, `/model` lists the available Cloud routes: `auto` follows the Cloud
+admin's model pool, while selecting a route pins requests to that route. Existing
+BYOK and local provider profiles remain independent.
+
+Cloud OAuth credentials last 30 days and have no refresh token; authorize again
+after expiry. On Windows, credentials are stored in Windows Credential Manager.
+On other platforms, the current credential store is memory-only, so log in again
+after starting a new CLI process.
 
 Run `moderado doctor` to inspect local setup without exposing secrets. Add
 `--connectivity` only when you want an optional live model-catalog check.
 `npm test` never performs live provider calls.
 ## Getting Started & Development
 
-### Connect a provider in the TUI
+### Log in and select a model in the TUI
 
 Run `moderado` to open the TUI immediately. A fresh installation does not require
 an API key or a preselected model. The welcome card shows **No model connected —
-use `/connect`** until you add one.
+use `/login`** until you add one.
 
-Use `/connect` to add NVIDIA NIM. NVIDIA NIM starts with `AUTO` free-first
-routing, so choosing a model is optional; use `/model` later to pin one. Obtain
-an NVIDIA key from [build.nvidia.com](https://build.nvidia.com), or set it as
-`NVIDIA_API_KEY` before launching Moderado.
+Use `/login` for Moderado Cloud and `/model` to browse its available free routes.
+Cloud `auto` follows the Gateway's configured pool; choosing a route in `/model`
+pins it for subsequent requests. Existing direct BYOK and local profiles remain
+available separately.
 
 ### Sessions and usage
 
@@ -150,11 +154,10 @@ exports redact recognized API-key prefixes. The status line uses only
 provider-reported token usage. It shows the calculated cost when the selected
 model exposes prompt and completion prices, and **Cost unknown** otherwise.
 
-`/connect` also accepts an OpenAI-compatible base URL, API key, and explicit
-model ID for providers such as OpenRouter, Z.AI, DeepSeek, Moonshot, and
-Mistral. Compatibility depends on each provider supporting `/v1/models` and
-streaming `/v1/chat/completions` with tool calls. Provider credentials are saved
-in `~/.moderado/config.json`; protect that file and never commit it.
+Saved OpenAI-compatible profiles continue to support providers such as
+OpenRouter, Z.AI, DeepSeek, Moonshot, and Mistral. Compatibility depends on each
+provider supporting `/v1/models` and streaming `/v1/chat/completions` with tool
+calls. Cloud keys are never written in plaintext to `~/.moderado/config.json`.
 
 ### 1. Build & Test
 ```bash
@@ -184,7 +187,11 @@ node scripts/smoke_test.js
 
 ## Windows credential storage
 
-On Windows, /connect saves provider API keys in Windows Credential Manager and stores only a provider credential reference in ~/.moderado/config.json. Existing plaintext keys remain usable for compatibility. Migrate them explicitly with moderado doctor --migrate-credentials; a failed migration leaves the existing configuration unchanged. On other platforms, set the provider environment variable (for example, NVIDIA_API_KEY or OPENROUTER_API_KEY).
+On Windows, `/login` stores Moderado Cloud credentials in Windows Credential
+Manager and keeps only a credential reference in `~/.moderado/config.json`.
+Non-Windows platforms use the current memory-only credential store, so log in
+again for each new CLI process. Existing BYOK environment variables and saved
+profiles remain independent.
 
 ## License
 

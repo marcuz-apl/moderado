@@ -4,6 +4,9 @@ import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
 import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
 import type { ModelInventoryEntry } from '@moderado/contracts';
+import { createServer } from 'node:http';
+import { spawn } from 'node:child_process';
+import { createModeradoOAuthRequest, exchangeModeradoOAuthCode, validateModeradoOAuthCallback } from '../moderado_oauth.js';
 
 export interface ConnectionInput {
   kind: ProviderConnection['kind'];
@@ -67,7 +70,13 @@ export function findReusableConnection(preset: ProviderPresetValue, connections?
 }
 
 export function isAuthenticationFailure(error: unknown): boolean {
-  return error instanceof Error && /authentication failed \((401|403)\)/i.test(error.message);
+  if (!(error instanceof Error)) return false;
+  return (error as Error & { code?: string }).code === 'ERR_GATEWAY_UNAUTHORIZED'
+    || /authentication failed \((401|403)\)/i.test(error.message);
+}
+
+export function isModeradoCloudOAuthConnection(connection: ProviderConnection): boolean {
+  return connection.id === 'moderado-cloud' && connection.credentialExpiresAt !== undefined;
 }
 
 export function renderConnectionPrompt(label: string, value: string, secret = false): string[] {
@@ -148,19 +157,84 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
 }
 
 /** Build a manual-key Moderado Cloud profile, optionally targeting a private Gateway. */
-export function buildModeradoCloudConnection(apiKey: string): ProviderConnection {
+export function buildModeradoCloudConnection(apiKey: string, credentialExpiresAt?: number): ProviderConnection {
   const key = apiKey.trim();
   if (!/^mrd_.+/.test(key)) throw new Error('Enter a non-empty Moderado Cloud key starting with mrd_.');
-  return buildConnection({
+  const connection = buildConnection({
     kind: 'openai-compatible',
     displayName: 'Moderado Cloud',
     baseUrl: MODERADO_CLOUD_BASE_URL,
     apiKey: key,
     defaultModel: 'auto',
   });
+  return credentialExpiresAt === undefined ? connection : { ...connection, credentialExpiresAt };
+}
+
+function openAuthorizationPage(url: string): void {
+  const [program, args] = process.platform === 'win32'
+    ? ['rundll32.exe', ['url.dll,FileProtocolHandler', url]]
+    : process.platform === 'darwin' ? ['open', [url]] : ['xdg-open', [url]];
+  const child = spawn(program, args, { shell: false, detached: true, stdio: 'ignore', windowsHide: true });
+  child.on('error', () => process.stderr.write(`Could not open a browser automatically. Visit ${url} to continue Moderado login.\n`));
+  child.unref();
+}
+
+async function authorizeModeradoCloudInBrowser(signal?: AbortSignal): Promise<{ accessToken: string; expiresAt: number } | undefined> {
+  const server = createServer();
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => { server.removeListener('error', reject); resolve(); });
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') { server.close(); throw new Error('Could not start the Moderado login callback.'); }
+  const request = createModeradoOAuthRequest(`http://127.0.0.1:${address.port}/callback`);
+  try {
+    const code = await new Promise<string | undefined>((resolve, reject) => {
+      let settled = false;
+      const finish = (value?: string, error?: Error): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        signal?.removeEventListener('abort', onAbort);
+        error ? reject(error) : resolve(value);
+      };
+      const onAbort = () => finish(undefined);
+      const timeout = setTimeout(() => finish(undefined, new Error('Moderado browser login timed out. Run /login to try again.')), 5 * 60_000);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      server.on('request', (incoming, response) => {
+        if (incoming.method !== 'GET') { response.writeHead(405).end(); return; }
+        let authCode: string;
+        try {
+          authCode = validateModeradoOAuthCallback(incoming.url ?? '/', request);
+        } catch {
+          response.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('Login could not be verified. Return to Moderado CLI and try /login again.');
+          finish(undefined, new Error('Moderado browser login callback could not be verified.'));
+          return;
+        }
+        response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end('Moderado login complete. You can close this tab.');
+        finish(authCode);
+      });
+      openAuthorizationPage(request.authorizationUrl);
+    });
+    return code ? await exchangeModeradoOAuthCode(code, request) : undefined;
+  } finally {
+    server.close();
+  }
 }
 
 export async function loginModeradoCloudInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+  const loginChoices = [
+    { label: 'Sign in with browser', value: 'browser', description: 'Authorize Moderado Cloud in your browser.' },
+    { label: 'Enter an API key', value: 'manual', description: 'Paste a Moderado Cloud key starting with mrd_.' },
+  ];
+  const method = options.drawFrame
+    ? await selectListPopup('Log in to Moderado Cloud', loginChoices, { drawFrame: options.drawFrame, signal: options.signal })
+    : (await askSelect('Log in to Moderado Cloud', loginChoices, 0, { signal: options.signal })).value;
+  if (!method || options.signal?.aborted) return undefined;
+  if (method === 'browser') {
+    const credential = await authorizeModeradoCloudInBrowser(options.signal);
+    return credential ? buildModeradoCloudConnection(credential.accessToken, credential.expiresAt) : undefined;
+  }
   let prompt = 'Moderado Cloud API key (mrd_…)';
   while (!options.signal?.aborted) {
     const apiKey = await askPopupText(prompt, options, true);

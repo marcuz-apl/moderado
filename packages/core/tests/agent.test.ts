@@ -7,7 +7,7 @@ import { PolicyManager } from '../src/policy.js';
 import { Router } from '../src/router.js';
 import { FakeProviderAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry } from '@moderado/tools';
-import { AgentEvent, HostEventEnvelope, IApprovalHandler } from '@moderado/contracts';
+import { AgentEvent, HostEventEnvelope, IApprovalHandler, ModelUnavailableError } from '@moderado/contracts';
 
 describe('AgentLoop (Core Execution Engine)', () => {
   let tempDir: string;
@@ -55,6 +55,47 @@ describe('AgentLoop (Core Execution Engine)', () => {
 
     const completionEvent = events.find((e) => e.type === 'completion');
     expect(completionEvent).toBeDefined();
+  });
+
+  it('sends Cloud auto to the Gateway without selecting from the local inventory', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    provider.queueTextResponse('Gateway selected a route.');
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler,
+      routeOptions: {}, eventListener: event => events.push(event),
+    });
+
+    expect(result.status).toBe('completed');
+    expect(result.selectedModel.id).toBe('auto');
+    expect(provider.recordedCalls.map(call => call.modelId)).toEqual(['auto']);
+  });
+
+  it('does not locally fail over Cloud auto to another Gateway route', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    provider.queueError(new ModelUnavailableError());
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler,
+      routeOptions: {}, retryDelaysMs: [], eventListener: event => events.push(event),
+    });
+
+    expect(result.status).toBe('failed');
+    expect(provider.recordedCalls.map(call => call.modelId)).toEqual(['auto']);
+    expect(events.filter(event => event.type === 'model_change')).toHaveLength(1);
+  });
+
+  it('keeps an explicitly pinned Cloud route pinned', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    provider.queueTextResponse('Pinned route answered.');
+
+    const result = await loop.run('Answer', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler,
+      routeOptions: { pinnedModelId: 'cloud/free-route' },
+    });
+
+    expect(result.status).toBe('completed');
+    expect(provider.recordedCalls.map(call => call.modelId)).toEqual(['cloud/free-route']);
   });
 
   it('advertises the core-owned subagent declaration to tool-capable models', async () => {
@@ -532,6 +573,18 @@ describe('AgentLoop (Core Execution Engine)', () => {
     const assistantEvents = events.filter((e) => e.type === 'assistant_delta');
     expect(assistantEvents.length).toBe(1);
     expect((assistantEvents[0] as any).delta).toBe('Here is the direct answer.');
+  });
+
+  it('emits validated Gateway fallback status before streamed answer content', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    provider.queueResponse([
+      { gatewayStatus: { fromProvider: 'provider-a', fromModel: 'free/old', toProvider: 'provider-b', toModel: 'free/new', reason: 'rate_limited_or_unavailable' } },
+      { contentDelta: 'hello' },
+    ]);
+    await loop.run('Answer', { workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler, eventListener: event => events.push(event) });
+    expect(events.filter(event => event.type === 'gateway_status' || event.type === 'assistant_delta').map(event => event.type))
+      .toEqual(['gateway_status', 'assistant_delta']);
+    expect(events.find(event => event.type === 'gateway_status')).toMatchObject({ type: 'gateway_status', toModel: 'free/new', reason: 'rate_limited_or_unavailable' });
   });
 
   it('calls mutation lifecycle hooks only for an approved write', async () => {

@@ -44,6 +44,73 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(adapter.name).toBe('OpenRouter');
   });
 
+  it('enforces Gateway request limits without changing OpenAI-compatible profiles', async () => {
+    const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const valid = { modelId: 'auto', messages: [{ role: 'user' as const, content: 'Hi' }], maxTokens: 1 };
+    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: undefined })) {} })
+      .rejects.toThrow(/max_tokens/);
+    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: 2049 })) {} })
+      .rejects.toThrow(/max_tokens/);
+    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, messages: [] })) {} })
+      .rejects.toThrow(/1.*32.*messages/);
+    await expect(async () => { for await (const _ of gateway.streamChat({
+      ...valid, messages: Array.from({ length: 33 }, () => ({ role: 'user' as const, content: 'x' })),
+    })) {} }).rejects.toThrow(/1.*32.*messages/);
+    await expect(async () => { for await (const _ of gateway.streamChat({
+      ...valid, tools: Array.from({ length: 17 }, (_, i) => ({ name: `t${i}`, description: '', parameters: {} })),
+    })) {} }).rejects.toThrow(/16.*tools/);
+    await expect(async () => { for await (const _ of gateway.streamChat({
+      ...valid, messages: [{ role: 'user', content: 'é'.repeat(2049) }],
+    })) {} }).rejects.toThrow(/messages.*4096/);
+    await expect(async () => { for await (const _ of gateway.streamChat({
+      ...valid,
+      messages: [{ role: 'user', content: 'm'.repeat(2100) }],
+      tools: [{ name: 'tool', description: 't'.repeat(2100), parameters: {} }],
+    })) {} }).rejects.toThrow(/messages and tools.*4096/);
+
+    const compatible = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'openrouter' });
+    nextHandler = (_req, res) => { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end('data: [DONE]\n\n'); };
+    for await (const _ of compatible.streamChat({ modelId: 'x', messages: [{ role: 'user', content: 'Hi' }] })) {}
+  });
+
+  it.each([
+    ['unauthorized', 401], ['scope_denied', 403], ['invalid_request', 400], ['model_unavailable', 404],
+    ['quota_exceeded', 429], ['hosted_routes_unavailable', 503], ['provider_rate_limited', 502],
+    ['provider_protocol_error', 502], ['provider_error', 502], ['service_unavailable', 503],
+  ])('maps Gateway %s errors to sanitized non-retryable errors', async (code, status) => {
+    nextHandler = (_req, res) => {
+      res.writeHead(status, { 'Content-Type': 'application/json', ...(code === 'quota_exceeded' ? { 'Retry-After': '17' } : {}) });
+      res.end(JSON.stringify({ error: { code, message: 'secret upstream details' } }));
+    };
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    let caught: unknown;
+    try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }], maxTokens: 10 })) {} }
+    catch (error) { caught = error; }
+    expect(caught).toMatchObject({ gatewayCode: code, statusCode: status });
+    expect(String(caught)).not.toContain('secret upstream details');
+    const { isRetryableProviderError } = await import('@moderado/contracts');
+    expect(isRetryableProviderError(caught)).toBe(false);
+    if (code === 'quota_exceeded') {
+      expect(caught).toMatchObject({ retryAfterSeconds: 17 });
+      expect(String(caught)).toContain('17 seconds');
+    }
+  });
+
+  it('converts an HTTP-date Retry-After header into a delay in seconds', async () => {
+    const retryAt = new Date(Date.now() + 60_000).toUTCString();
+    nextHandler = (_req, res) => {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': retryAt });
+      res.end(JSON.stringify({ error: { code: 'quota_exceeded' } }));
+    };
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    let caught: unknown;
+    try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }], maxTokens: 10 })) {} }
+    catch (error) { caught = error; }
+    expect(caught).toMatchObject({ gatewayCode: 'quota_exceeded' });
+    expect((caught as { retryAfterSeconds?: number }).retryAfterSeconds).toBeGreaterThanOrEqual(59);
+    expect((caught as { retryAfterSeconds?: number }).retryAfterSeconds).toBeLessThanOrEqual(60);
+  });
+
   it('discovers live models from GET /v1/models', async () => {
     nextHandler = (req, res) => {
       expect(req.method).toBe('GET');

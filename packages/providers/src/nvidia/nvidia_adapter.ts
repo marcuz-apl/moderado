@@ -1,6 +1,8 @@
 import {
   AuthenticationError,
   ChatCompletionChunk,
+  GATEWAY_ERROR_CODES,
+  GatewayError,
   IProviderAdapter,
   ModelInventoryEntry,
   ModelInventoryEntrySchema,
@@ -28,10 +30,12 @@ export class NvidiaAdapter implements IProviderAdapter {
   private cachedInventory: ModelInventoryEntry[] | null = null;
   private cacheTimestamp = 0;
   private readonly cacheTtlMs = 15 * 60 * 1000;
+  private readonly isModeradoCloud: boolean;
 
   constructor(config: NvidiaAdapterConfig = {}) {
     this.id = config.providerId || 'nvidia';
     this.name = config.providerName || 'NVIDIA NIM';
+    this.isModeradoCloud = this.id === 'moderado-cloud';
     this.apiKey = config.apiKey || process.env.NVIDIA_API_KEY || '';
     this.baseUrl = (config.baseUrl || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
   }
@@ -161,6 +165,15 @@ export class NvidiaAdapter implements IProviderAdapter {
       payload.max_tokens = options.maxTokens;
     }
 
+    if (this.isModeradoCloud) {
+      this.validateGatewayRequest(options, wireMessages, payload);
+    }
+
+    const body = JSON.stringify(payload);
+    if (this.isModeradoCloud && Buffer.byteLength(body, 'utf8') > 32 * 1024) {
+      throw new ProviderError('Moderado Cloud request exceeds the 32768-byte limit', 'ERR_GATEWAY_INVALID_REQUEST', 400);
+    }
+
     let response: Response;
     try {
       response = await fetch(url, {
@@ -169,7 +182,7 @@ export class NvidiaAdapter implements IProviderAdapter {
           ...this.getHeaders(),
           Accept: 'text/event-stream',
         },
-        body: JSON.stringify(payload),
+        body,
         signal: options.signal,
       });
     } catch (err: any) {
@@ -188,10 +201,53 @@ export class NvidiaAdapter implements IProviderAdapter {
     }
 
     // Node.js Response.body is a ReadableStream<Uint8Array> which is an AsyncIterable in modern Node
-    yield* parseSseStream(response.body as any);
+    yield* parseSseStream(response.body as any, { moderadoCloud: this.isModeradoCloud });
+  }
+
+  private validateGatewayRequest(
+    options: ProviderChatOptions,
+    wireMessages: Record<string, unknown>[],
+    payload: Record<string, unknown>
+  ): void {
+    if (!Number.isInteger(options.maxTokens) || options.maxTokens! < 1 || options.maxTokens! > 2048) {
+      throw new ProviderError('Moderado Cloud requires max_tokens between 1 and 2048', 'ERR_GATEWAY_INVALID_REQUEST', 400);
+    }
+    if (wireMessages.length < 1 || wireMessages.length > 32 || wireMessages.some((message) =>
+      typeof message.content !== 'string' || (message.role === 'tool' && typeof message.tool_call_id !== 'string')
+    )) {
+      throw new ProviderError('Moderado Cloud accepts 1 to 32 text-only messages', 'ERR_GATEWAY_INVALID_REQUEST', 400);
+    }
+    const tools = payload.tools;
+    if (Array.isArray(tools) && tools.length > 16) {
+      throw new ProviderError('Moderado Cloud accepts at most 16 tools', 'ERR_GATEWAY_INVALID_REQUEST', 400);
+    }
+    if (Buffer.byteLength(JSON.stringify({ messages: wireMessages, tools }), 'utf8') > 4096) {
+      throw new ProviderError('Moderado Cloud messages and tools exceed the 4096-byte limit', 'ERR_GATEWAY_INVALID_REQUEST', 400);
+    }
   }
 
   private async handleHttpError(response: Response, action: string): Promise<never> {
+    if (this.isModeradoCloud) {
+      let code: string | undefined;
+      try {
+        const body: unknown = await response.json();
+        if (body && typeof body === 'object' && 'error' in body && body.error && typeof body.error === 'object'
+          && 'code' in body.error && typeof body.error.code === 'string') {
+          code = body.error.code;
+        }
+      } catch {
+        // Return a status-based, sanitized error when the Gateway body is invalid.
+      }
+      code ??= response.status === 401 ? 'unauthorized'
+        : response.status === 403 ? 'scope_denied'
+          : response.status === 400 ? 'invalid_request'
+            : response.status === 404 ? 'model_unavailable'
+              : response.status === 429 ? 'quota_exceeded'
+                : response.status === 503 ? 'service_unavailable' : 'provider_error';
+      if (!GATEWAY_ERROR_CODES.includes(code)) code = 'provider_error';
+      const retrySeconds = parseRetryAfter(response.headers.get('Retry-After'));
+      throw new GatewayError(code, response.status, retrySeconds);
+    }
     let errorText = '';
     try {
       errorText = await response.text();
@@ -249,4 +305,11 @@ export class NvidiaAdapter implements IProviderAdapter {
       response.status
     );
   }
+}
+
+function parseRetryAfter(value: string | null): number | undefined {
+  if (!value) return undefined;
+  if (/^\d+$/.test(value)) return Number(value);
+  const retryAt = Date.parse(value);
+  return Number.isNaN(retryAt) ? undefined : Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
 }

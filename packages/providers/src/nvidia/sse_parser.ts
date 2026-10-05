@@ -1,4 +1,4 @@
-import { AuthenticationError, ChatCompletionChunk, ChatUsageSchema, MalformedResponseError, ModelUnavailableError, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
+import { AuthenticationError, ChatCompletionChunk, ChatUsageSchema, GatewayFallbackStatusSchema, MalformedResponseError, ModelUnavailableError, ProviderError, RateLimitError, ToolCallChunk } from '@moderado/contracts';
 
 export function classifyInjectedStreamError(raw: unknown): ProviderError {
   const error = typeof raw === 'object' && raw !== null ? raw as Record<string, unknown> : {};
@@ -13,10 +13,12 @@ export function classifyInjectedStreamError(raw: unknown): ProviderError {
 }
 
 export async function* parseSseStream(
-  byteStream: AsyncIterable<Uint8Array>
+  byteStream: AsyncIterable<Uint8Array>,
+  options: { moderadoCloud?: boolean } = {},
 ): AsyncIterable<ChatCompletionChunk> {
   const decoder = new TextDecoder('utf8');
   let buffer = '';
+  let eventName = '';
 
   for await (const chunk of byteStream) {
     buffer += decoder.decode(chunk, { stream: true });
@@ -28,6 +30,12 @@ export async function* parseSseStream(
       const trimmed = line.trim();
       if (!trimmed || trimmed.startsWith(':')) {
         // Empty line or SSE comment (heartbeat)
+        if (!trimmed) eventName = '';
+        continue;
+      }
+
+      if (trimmed.startsWith('event:')) {
+        eventName = trimmed.slice(6).trim();
         continue;
       }
 
@@ -37,11 +45,33 @@ export async function* parseSseStream(
           return;
         }
 
+        if (eventName === 'moderado_status' && !options.moderadoCloud) continue;
+
         let parsed: any;
         try {
           parsed = JSON.parse(dataStr);
         } catch {
           throw new MalformedResponseError('Provider sent an unparseable SSE data line');
+        }
+
+        if (eventName === 'moderado_status') {
+          const requiredFields = ['from_model', 'to_model', 'reason'];
+          const allowedFields = [...requiredFields, 'from_provider', 'to_provider'];
+          if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) ||
+              Object.keys(parsed).some(field => !allowedFields.includes(field)) ||
+              !requiredFields.every(field => Object.hasOwn(parsed, field))) {
+            throw new MalformedResponseError('Invalid Gateway status event');
+          }
+          const status = GatewayFallbackStatusSchema.safeParse({
+            fromProvider: parsed?.from_provider,
+            fromModel: parsed?.from_model,
+            toProvider: parsed?.to_provider,
+            toModel: parsed?.to_model,
+            reason: parsed?.reason,
+          });
+          if (!status.success) throw new MalformedResponseError('Invalid Gateway status event');
+          yield { gatewayStatus: status.data };
+          continue;
         }
 
         if (parsed && typeof parsed === 'object' && parsed.error) {

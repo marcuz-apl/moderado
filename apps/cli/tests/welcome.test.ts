@@ -13,6 +13,7 @@ import {
   renderWelcomePopupLayer,
   renderFullWelcomeScreen,
   renderWelcomeCard,
+  renderGatewayFallbackUpdate,
   renderQueuedCommandsBox,
   renderHelpPopupBox,
   renderExitMessage,
@@ -100,6 +101,11 @@ const runComposerTurn = async (
 };
 
 describe('OpenCode-style Welcome TUI', () => {
+  it('renders Gateway fallback destination and a safe reason in the chat status row', () => {
+    const output = stripAnsi(renderGatewayFallbackUpdate({ type: 'gateway_status', fromModel: 'free/old', toModel: 'free/new', reason: 'rate_limited_or_unavailable', timestamp: 0 }, 100));
+    expect(output).toContain('free/new');
+    expect(output).toContain('rate limited or unavailable');
+  });
   it('renders the ASCII logo and command hint', () => {
     expect(MODERADO_ASCII_LOGO.length).toBe(5);
     const plainHint = stripAnsi(COMMAND_HINT);
