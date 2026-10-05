@@ -1,7 +1,14 @@
 import type { ModelClassification, ModelInventoryEntry } from '@moderado/contracts';
 import { isFreeModelEntry } from './model_discovery.js';
 
-export const MODERADO_CLOUD_BASE_URL = 'https://api.mod.alfazen.org/v1';
+export const MODERADO_CLOUD_PRODUCTION_BASE_URL = 'https://api.mod.alfazen.org/v1';
+export const MODERADO_CLOUD_DEVELOPMENT_BASE_URL = 'http://127.0.0.1:8787/v1';
+
+export function resolveModeradoCloudBaseUrl(mode?: string): string {
+  return mode === 'development' ? MODERADO_CLOUD_DEVELOPMENT_BASE_URL : MODERADO_CLOUD_PRODUCTION_BASE_URL;
+}
+
+export const MODERADO_CLOUD_BASE_URL = MODERADO_CLOUD_PRODUCTION_BASE_URL;
 
 export const CONNECT_PROVIDER_PRESET_IDS = [
   'nvidia-nim', 'moderado-cloud', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',

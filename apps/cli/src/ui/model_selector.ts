@@ -10,6 +10,7 @@ import {
 } from './popup.js';
 import { loadConfig, saveConfig, resolveApiKey, freeModelPolicyFor, type ProviderFreePolicy } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
+import { ProviderError } from '@moderado/contracts';
 
 export interface ModelSelectionResult {
   modelId?: string;
@@ -80,10 +81,31 @@ export function buildCompatibleModelMenuItems(
   providerName: string,
   models: CompatibleModelEntry[],
   currentModel?: string,
-  freePolicy?: ProviderFreePolicy
+  freePolicy?: ProviderFreePolicy,
+  options: { listModelsDirectly?: boolean; autoLabel?: string; catalogError?: string; noAvailableModels?: boolean } = {}
 ): PopupListItem[] {
   const items: PopupListItem[] = [];
-  if (freePolicy?.freeCatalog && models.length > 0 && models.every(model => isFreeCompatibleModel(model, freePolicy))) {
+  if (options.listModelsDirectly) {
+    items.push({
+      label: options.autoLabel ?? 'Auto',
+      value: 'model:auto',
+      tag: 'Free',
+      description: 'Use Moderado Cloud automatic free routing.',
+    });
+    if (options.catalogError) {
+      items.push({ label: 'Model list unavailable', value: 'catalog-status', tag: 'Check connection', description: options.catalogError });
+    } else if (options.noAvailableModels) {
+      items.push({
+        label: 'No available Cloud models',
+        value: 'catalog-status',
+        tag: 'No routes',
+        description: 'No free routes are enabled for this Cloud account. Ask your Cloud admin to enable a route.',
+      });
+    }
+    items.push(...models
+      .filter((model) => model.id !== 'auto')
+      .map((model) => ({ ...compatibleModelPopupItem(model, providerName, freePolicy), value: `model:${model.id}` })));
+  } else if (freePolicy?.freeCatalog && models.length > 0 && models.every(model => isFreeCompatibleModel(model, freePolicy))) {
     // A provider that declares its whole catalog free (Agnes AI) has nothing to
     // filter on, so it offers one entry listing everything rather than a
     // free-vs-paid split that would put every model on the same side.
@@ -109,7 +131,7 @@ export function buildCompatibleModelMenuItems(
     items.push({
       label: 'Keep Current Model',
       value: 'keep',
-      tag: currentModel,
+      tag: options.autoLabel && currentModel === 'auto' ? options.autoLabel : currentModel,
       description: 'Close the window without switching models.',
     });
   }
@@ -151,22 +173,38 @@ export async function selectCompatibleModelOverlay(
   // preset, never a provider id hardcoded at the call site.
   const freePolicy = freeModelPolicyFor(providerId);
   let models: CompatibleModelEntry[] = [];
+  let discoveryError: string | undefined;
   try {
     layerPromptBox(drawFrame, `\x1b[36mQuerying ${providerName} model catalog...\x1b[0m`);
     const provider = new NvidiaAdapter({ apiKey, baseUrl, providerId, providerName });
     models = (await provider.discoverModels(signal))
       .map((model) => ({ id: model.id, pricing: model.pricing }))
       .sort((a, b) => a.id.localeCompare(b.id));
-  } catch {
+  } catch (error) {
     // Explicit model entry remains available when a provider does not expose /models.
+    if (providerId === 'moderado-cloud') {
+      discoveryError = error instanceof ProviderError
+        ? `${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
+        : 'Could not load the model list. Check Gateway connectivity and retry /model.';
+    }
   }
+
+  const cloudRoutes = models.filter((model) => model.id !== 'auto');
+  const cloudOptions = providerId === 'moderado-cloud'
+    ? {
+      listModelsDirectly: true,
+      autoLabel: 'auto:free',
+      ...(discoveryError ? { catalogError: discoveryError } : cloudRoutes.length === 0 ? { noAvailableModels: true } : {}),
+    }
+    : undefined;
 
   const picked = await selectListPopup(
     `${providerName} Free Models`,
-    buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy),
+    buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy, cloudOptions),
     { drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close' }
   );
-  if (picked === null || picked === 'keep' || picked === 'cancel') return currentModel;
+  if (picked === null || picked === 'keep' || picked === 'cancel' || picked === 'catalog-status') return currentModel;
+  if (picked.startsWith('model:')) return picked.slice('model:'.length);
   if (picked === 'browse' || picked === 'free') {
     const visibleModels = models.filter((model) => isFreeCompatibleModel(model, freePolicy));
     return (await selectListPopup(

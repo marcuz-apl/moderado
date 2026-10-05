@@ -70,16 +70,33 @@ describe('provider connection setup', () => {
   });
 
   it('builds a Moderado Cloud profile from a key and manages the Gateway URL', () => {
-    expect(buildModeradoCloudConnection('mrd_test-key')).toEqual({
-      id: 'moderado-cloud',
-      displayName: 'Moderado Cloud',
-      kind: 'openai-compatible',
-      baseUrl: 'https://api.mod.alfazen.org/v1',
-      apiKey: 'mrd_test-key',
-      defaultModel: 'auto',
-    });
-    expect(() => buildModeradoCloudConnection('sk_wrong')).toThrow('mrd_');
-    expect(() => buildModeradoCloudConnection('mrd_')).toThrow('mrd_');
+    const previous = process.env.MODERADO_CLOUD_ENV;
+    delete process.env.MODERADO_CLOUD_ENV;
+    try {
+      expect(buildModeradoCloudConnection('mrd_test-key')).toEqual({
+        id: 'moderado-cloud',
+        displayName: 'Moderado Cloud',
+        kind: 'openai-compatible',
+        baseUrl: 'https://api.mod.alfazen.org/v1',
+        apiKey: 'mrd_test-key',
+        defaultModel: 'auto',
+      });
+      expect(() => buildModeradoCloudConnection('sk_wrong')).toThrow('mrd_');
+      expect(() => buildModeradoCloudConnection('mrd_')).toThrow('mrd_');
+    } finally {
+      if (previous !== undefined) process.env.MODERADO_CLOUD_ENV = previous;
+    }
+  });
+
+  it('targets the local Gateway when login runs in development mode', () => {
+    const previous = process.env.MODERADO_CLOUD_ENV;
+    process.env.MODERADO_CLOUD_ENV = 'development';
+    try {
+      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://127.0.0.1:8787/v1');
+    } finally {
+      if (previous === undefined) delete process.env.MODERADO_CLOUD_ENV;
+      else process.env.MODERADO_CLOUD_ENV = previous;
+    }
   });
 
   it('builds a Moderado Cloud profile from a browser token with expiry metadata', () => {

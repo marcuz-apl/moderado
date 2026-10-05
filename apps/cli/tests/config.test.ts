@@ -22,10 +22,12 @@ import { MemoryCredentialStore } from '../src/credentials.js';
 describe('CLI Configuration Storage', () => {
   let tempDir: string;
   const origKey = process.env.NVIDIA_API_KEY;
+  const origCloudEnv = process.env.MODERADO_CLOUD_ENV;
 
   beforeEach(() => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-config-test-'));
     delete process.env.NVIDIA_API_KEY;
+    delete process.env.MODERADO_CLOUD_ENV;
   });
 
   afterEach(() => {
@@ -34,6 +36,8 @@ describe('CLI Configuration Storage', () => {
     } else {
       delete process.env.NVIDIA_API_KEY;
     }
+    if (origCloudEnv !== undefined) process.env.MODERADO_CLOUD_ENV = origCloudEnv;
+    else delete process.env.MODERADO_CLOUD_ENV;
     fs.rmSync(tempDir, { recursive: true, force: true });
   });
 
@@ -128,6 +132,16 @@ describe('CLI Configuration Storage', () => {
     }, tempDir);
     expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
       .toBe('https://api.mod.alfazen.org/v1');
+  });
+
+  it('loads the local Gateway URL for saved Cloud profiles in development mode', () => {
+    process.env.MODERADO_CLOUD_ENV = 'development';
+    saveConnection({
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+      baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+    }, tempDir);
+    expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
+      .toBe('http://127.0.0.1:8787/v1');
   });
 
   it('persists OAuth credential expiry and refuses expired credentials', async () => {

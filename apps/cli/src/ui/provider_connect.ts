@@ -1,4 +1,4 @@
-import { freeModelPolicyFor, MODERADO_CLOUD_BASE_URL, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
+import { freeModelPolicyFor, resolveModeradoCloudBaseUrl, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
@@ -163,7 +163,7 @@ export function buildModeradoCloudConnection(apiKey: string, credentialExpiresAt
   const connection = buildConnection({
     kind: 'openai-compatible',
     displayName: 'Moderado Cloud',
-    baseUrl: MODERADO_CLOUD_BASE_URL,
+    baseUrl: resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV),
     apiKey: key,
     defaultModel: 'auto',
   });

@@ -125,6 +125,10 @@ after expiry. On Windows, credentials are stored in Windows Credential Manager.
 On other platforms, the current credential store is memory-only, so log in again
 after starting a new CLI process.
 
+For local Gateway development, set `MODERADO_CLOUD_ENV=development` before
+starting the CLI. This targets `http://127.0.0.1:8787/v1`; without that setting,
+the CLI uses the production Gateway at `https://api.mod.alfazen.org/v1`.
+
 Run `moderado doctor` to inspect local setup without exposing secrets. Add
 `--connectivity` only when you want an optional live model-catalog check.
 `npm test` never performs live provider calls.

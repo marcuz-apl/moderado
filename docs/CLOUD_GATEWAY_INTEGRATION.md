@@ -22,7 +22,7 @@ CLI already supports custom OpenAI-compatible endpoints, `/v1/models`, `/v1/chat
 
 ## Contract facts / limits
 
-- Gateway: `https://api.mod.alfazen.org/v1`; local development: `http://127.0.0.1:8787/v1`.
+- Gateway: `https://api.mod.alfazen.org/v1`; local development: `http://127.0.0.1:8787/v1` when `MODERADO_CLOUD_ENV=development` (production is the default).
 - Account UI: `https://mod.alfazen.org/authorize`; token exchange: `https://mod.alfazen.org/oauth/token`.
 - OAuth access keys last 30 days; manual keys can have account-selected expiry and scope. Full key material is only shown once.
 - `auto` only advances after an explicit upstream 429/503 before output. Pinned models do not fail over.

@@ -66,6 +66,43 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     ]));
   });
 
+  it('lists Moderado Cloud routes directly and labels auto routing as auto:free', () => {
+    const items = buildCompatibleModelMenuItems('Moderado Cloud', [
+      { id: 'auto' }, { id: 'vendor/route-one' }, { id: 'vendor/route-two' },
+    ], 'auto', { freeCatalog: true }, { listModelsDirectly: true, autoLabel: 'auto:free' });
+
+    expect(items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'auto:free', value: 'model:auto' }),
+      expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one', tag: 'Free' }),
+      expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two', tag: 'Free' }),
+    ]));
+    expect(items.find((item) => item.label === 'Browse available models')).toBeUndefined();
+  });
+
+  it('shows a sanitized catalog diagnostic when no Cloud routes can be loaded', () => {
+    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', { freeCatalog: true }, {
+      listModelsDirectly: true,
+      autoLabel: 'auto:free',
+      catalogError: 'Could not load models (HTTP 401). Check the API key and retry /model.',
+    });
+
+    expect(items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Model list unavailable', value: 'catalog-status', tag: 'Check connection' }),
+    ]));
+  });
+
+  it('explains when the Gateway has no enabled model routes', () => {
+    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', { freeCatalog: true }, {
+      listModelsDirectly: true,
+      autoLabel: 'auto:free',
+      noAvailableModels: true,
+    });
+
+    expect(items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'No available Cloud models', value: 'catalog-status' }),
+    ]));
+  });
+
   it('puts curated popular free models ahead of dynamic catalog actions', () => {
     const items = buildOverlayMenuItems([
       'nvidia/nemotron-3-ultra-120b-a12b',

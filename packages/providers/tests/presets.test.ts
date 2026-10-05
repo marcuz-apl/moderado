@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, isFreeModelOption } from '../src/presets.js';
+import { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, isFreeModelOption, resolveModeradoCloudBaseUrl } from '../src/presets.js';
 
 describe('shared provider presets', () => {
   it('keeps the built-in presets available to other hosts', () => {
@@ -19,6 +19,12 @@ describe('shared provider presets', () => {
       requiresApiKey: true,
       freeCatalog: true,
     });
+  });
+
+  it('selects the local Gateway only in development mode', () => {
+    expect(resolveModeradoCloudBaseUrl('development')).toBe('http://127.0.0.1:8787/v1');
+    expect(resolveModeradoCloudBaseUrl('production')).toBe('https://api.mod.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl(undefined)).toBe('https://api.mod.alfazen.org/v1');
   });
 
   it('does not grant a provider-specific free declaration to another provider', () => {

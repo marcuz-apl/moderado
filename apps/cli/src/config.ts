@@ -3,10 +3,10 @@ import { z } from 'zod';
 import path from 'node:path';
 import os from 'node:os';
 import { McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
-import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, MODERADO_CLOUD_BASE_URL } from '@moderado/providers';
+import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, resolveModeradoCloudBaseUrl } from '@moderado/providers';
 import type { ConnectProviderPresetId, ConnectProvidersConfig, ProviderConnectionKind } from '@moderado/providers';
 import { credentialReference, CredentialStore, resolveCredential } from './credentials.js';
-export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLoopbackBaseUrl, MODERADO_CLOUD_BASE_URL } from '@moderado/providers';
+export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLoopbackBaseUrl, MODERADO_CLOUD_BASE_URL, resolveModeradoCloudBaseUrl } from '@moderado/providers';
 export type { ConnectProviderPresetId, ConnectProvidersConfig, CustomConnectProvider, ProviderConnectionKind, ProviderPresetMeta, ProviderFreePolicy } from '@moderado/providers';
 
 export interface ModeradoConfig {
@@ -127,7 +127,7 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
       id: item.id,
       displayName: item.displayName,
       kind,
-      baseUrl: item.id === 'moderado-cloud' ? MODERADO_CLOUD_BASE_URL : item.baseUrl,
+      baseUrl: item.id === 'moderado-cloud' ? resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV) : item.baseUrl,
       credentialReference: typeof item.credentialReference === 'string' ? item.credentialReference : undefined,
       credentialExpiresAt: typeof item.credentialExpiresAt === 'number' && Number.isFinite(item.credentialExpiresAt) ? item.credentialExpiresAt : undefined,
       apiKey: typeof item.apiKey === 'string' ? item.apiKey : undefined,
