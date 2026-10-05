@@ -7,12 +7,12 @@ import { createDefaultToolRegistry, ToolRegistry, canonicalizeRoot, createMcpToo
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult, type UsageEvent } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
-import { getActiveConnection, loadConfig, ModeradoConfig, ProviderConnection, removeMcpServer, resolveApiKey, resolveConnectionCredential, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
+import { getActiveConnection, loadConfig, ModeradoConfig, ProviderConnection, removeMcpServer, requiresCredentialReference, resolveApiKey, resolveConnectionCredential, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
 import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
-import { connectProviderInteractive, isAuthenticationFailure, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
+import { isAuthenticationFailure, loginModeradoCloudInteractive, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
@@ -68,7 +68,7 @@ export function createReviewToolRegistry(): IToolRegistry {
 }
 
 export const STANDARD_SLASH_COMMANDS = [
-  '/connect',
+  '/login',
   '/model',
   '/init',
   '/btw',
@@ -194,7 +194,7 @@ export function formatTurnFailureAnswer(
   const cleanDetail = rawDetail
     .replace(/^(?:NVIDIA NIM|OpenAI|OpenRouter|[a-zA-Z0-9_-]+)\s*(?:request failed|rate limit exceeded|service or model unavailable)?\s*(?:\([^)]*\))?\s*(?:during\s*streamChat)?:\s*/i, '')
     .trim();
-  return `⚠️ **Model Error (${errorEvent?.code || 'ERR_INFERENCE_FAILED'}):**\n${cleanDetail || 'Model returned no response.'}\n\n👉 **Suggestion:** The model \`${modelId}\` encountered an error. Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
+  return `⚠️ **Model Error (${errorEvent?.code || 'ERR_INFERENCE_FAILED'}):**\n${cleanDetail || 'Model returned no response.'}\n\n👉 **Suggestion:** The model \`${modelId}\` encountered an error. Switch models with \`/model\` or log in with \`/login\`${altSuggestion}.`;
 }
 
 export function resolveTurnAssistantAnswer(
@@ -735,7 +735,7 @@ export async function executeBtwQuery(
   if (!provider || !currentModel) {
     await drawFrame(renderBoxLines('By The Way (/btw)', [
       'No model or provider connected.',
-      'Connect a provider with /connect or select a model with /model first.',
+      'Log in to Moderado Cloud with /login or select a model with /model first.',
       '',
       'Press Esc or Enter to return.',
     ], 72));
@@ -811,6 +811,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let config = loadConfig();
   let activeConnection = getActiveConnection(config);
   if (activeConnection) activeConnection = await resolveConnectionCredential(activeConnection, credentialStore);
+  if (activeConnection?.id === 'moderado-cloud' && !activeConnection.apiKey) activeConnection = undefined;
   if (!activeConnection && resolveApiKey()) {
     activeConnection = { id: 'nvidia-nim', displayName: 'NVIDIA NIM', kind: 'nvidia-nim',
       baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: resolveApiKey(), defaultModel: config.defaultModel };
@@ -891,7 +892,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       isFirst = false;
     } else {
       const turn = await promptInteractiveTurn({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
         onExit: exitMessage,
@@ -928,12 +929,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
         return selection.modelId;
       },
-      onConnect: async (drawFrame) => {
-        const connection = await connectProviderInteractive({ signal, drawFrame, savedConnections: config.connections, connectProviders: config.connectProviders, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
+      onLogin: async (drawFrame) => {
+        const connection = await loginModeradoCloudInteractive({ signal, drawFrame });
         if (!connection) return currentModel;
-        const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
+        const runtimeConnection = requiresCredentialReference(connection) ? await storeConnectionCredential(connection, credentialStore) : connection;
         saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
-        return currentModel ?? 'No model connected — use /connect';
+        return currentModel ?? 'No model connected — use /login';
       },
       onClear: () => {
         commandQueue.clear();
@@ -1150,7 +1151,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
@@ -1165,7 +1166,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
@@ -1196,7 +1197,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       }
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1229,7 +1230,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1261,7 +1262,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({ model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
+      process.stdout.write(renderFullWelcomeScreen({ model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
       process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
       continue;
     }
@@ -1273,7 +1274,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     if (trimmed === '/help') {
       lastQuestion = trimmed;
       lastAnswer = 'Available slash commands:\n' +
-        '  /connect   - Connect a model provider\n' +
+        '  /login     - Log in to Moderado Cloud\n' +
         '  /model     - Switch active AI model\n' +
         '  /init      - Scaffold AGENTS.md from workspace scan\n' +
         '  /mcp       - Manage local MCP servers\n' +
@@ -1291,7 +1292,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1324,7 +1325,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       sessionStore.save(activeSession);
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1344,7 +1345,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       sessionStore.save(activeSession);
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        model: currentModel ?? 'No model connected — use /login', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1401,10 +1402,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
 
     if (!provider) {
-      process.stdout.write('\nNo provider is connected. Let\'s connect one before sending this task.\n');
-      const connection = await connectProviderInteractive({ signal, savedConnections: config.connections, connectProviders: config.connectProviders, resolveSavedConnection: (saved) => resolveConnectionCredential(saved, credentialStore) });
-      if (!connection) { process.stdout.write('No provider connected. Use /connect whenever you are ready.\n\n'); continue; }
-      const runtimeConnection = process.platform === 'win32' ? await storeConnectionCredential(connection, credentialStore) : connection;
+      process.stdout.write('\nNo model is connected. Log in to Moderado Cloud before sending this task.\n');
+      const connection = await loginModeradoCloudInteractive({ signal });
+      if (!connection) { process.stdout.write('No provider connected. Use /login whenever you are ready.\n\n'); continue; }
+      const runtimeConnection = requiresCredentialReference(connection) ? await storeConnectionCredential(connection, credentialStore) : connection;
       saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
     }
 
@@ -1441,7 +1442,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         const displayAnswer = streamedAnswer || lastAnswer;
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen({
-          model: currentModel ?? 'No model connected — use /connect',
+          model: currentModel ?? 'No model connected — use /login',
           tokens: Math.round(sessionTokens),
           cost: costLabel(),
           usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
@@ -1622,7 +1623,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         recordTurnUsage();
         turnUsage = undefined;
         usageRecorded = false;
-        const secured = process.platform === 'win32' ? await storeConnectionCredential(replacement, credentialStore) : replacement;
+        const secured = requiresCredentialReference(replacement) ? await storeConnectionCredential(replacement, credentialStore) : replacement;
         saveConnection(secured); config = loadConfig(); activateConnection(secured);
         result = await runAgent();
       }
@@ -1685,12 +1686,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const cleanErr = rawErr
         .replace(/^(?:NVIDIA NIM|OpenAI|OpenRouter|[a-zA-Z0-9_-]+)\s*(?:request failed|rate limit exceeded|service or model unavailable)?\s*(?:\([^)]*\))?\s*(?:during\s*streamChat)?:\s*/i, '')
         .trim();
-      lastAnswer = `⚠️ **Error:** ${cleanErr || rawErr}\n\n👉 **Suggestion:** Switch models with \`/model\` or switch providers with \`/connect\`${altSuggestion}.`;
+      lastAnswer = `⚠️ **Error:** ${cleanErr || rawErr}\n\n👉 **Suggestion:** Switch models with \`/model\` or log in with \`/login\`${altSuggestion}.`;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       lastOutputTokenRate = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect',
+        model: currentModel ?? 'No model connected — use /login',
         tokens: Math.round(sessionTokens),
         cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,

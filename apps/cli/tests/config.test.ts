@@ -13,6 +13,8 @@ import {
   setMcpServerEnabled,
   removeMcpServer,
   migrateLegacyCredentials,
+  requiresCredentialReference,
+  storeConnectionCredential,
 } from '../src/config.js';
 import { MemoryCredentialStore } from '../src/credentials.js';
 
@@ -100,6 +102,41 @@ describe('CLI Configuration Storage', () => {
       kind: 'openai-compatible',
       defaultModel: 'openrouter/free',
     });
+  });
+
+  it('stores a Moderado Cloud key by credential reference and omits it from config', async () => {
+    const store = new MemoryCredentialStore();
+    const connection = await storeConnectionCredential({
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+      baseUrl: 'https://api.mod.alfazen.org/v1', apiKey: 'mrd_test-secret', defaultModel: 'auto',
+    }, store);
+    saveConnection(connection, tempDir);
+    const raw = fs.readFileSync(getConfigPath(tempDir), 'utf8');
+    expect(raw).not.toContain('mrd_test-secret');
+    expect(loadConfig(tempDir).connections?.['moderado-cloud']).toMatchObject({
+      credentialReference: 'moderado/provider/moderado-cloud',
+      defaultModel: 'auto',
+    });
+    expect(await store.get('moderado/provider/moderado-cloud')).toBe('mrd_test-secret');
+  });
+
+  it('always loads the managed Moderado Cloud Gateway URL', () => {
+    saveConnection({
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:8787/v1', defaultModel: 'auto',
+    }, tempDir);
+    expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
+      .toBe('https://api.mod.alfazen.org/v1');
+  });
+
+  it('requires a credential reference for Moderado Cloud on every platform', () => {
+    const cloud = { id: 'moderado-cloud' };
+    const other = { id: 'openrouter' };
+    expect(requiresCredentialReference(cloud, 'linux')).toBe(true);
+    expect(requiresCredentialReference(cloud, 'darwin')).toBe(true);
+    expect(requiresCredentialReference(cloud, 'win32')).toBe(true);
+    expect(requiresCredentialReference(other, 'linux')).toBe(false);
+    expect(requiresCredentialReference(other, 'win32')).toBe(true);
   });
 
   it('uses legacy NVIDIA credentials as an implicit NVIDIA connection', () => {

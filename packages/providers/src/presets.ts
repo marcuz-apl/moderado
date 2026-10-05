@@ -1,8 +1,10 @@
 import type { ModelClassification, ModelInventoryEntry } from '@moderado/contracts';
 import { isFreeModelEntry } from './model_discovery.js';
 
+export const MODERADO_CLOUD_BASE_URL = 'https://api.mod.alfazen.org/v1';
+
 export const CONNECT_PROVIDER_PRESET_IDS = [
-  'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
+  'nvidia-nim', 'moderado-cloud', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
 ] as const;
 
 export type ConnectProviderPresetId = typeof CONNECT_PROVIDER_PRESET_IDS[number];
@@ -98,6 +100,16 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     // Every hosted NIM endpoint runs on build.nvidia.com trial credits and the
     // catalog advertises no `pricing`, so without this the free list is empty
     // for the default provider.
+    freeCatalog: true,
+    requiresApiKey: true,
+  },
+  {
+    id: 'moderado-cloud',
+    label: 'Moderado Cloud',
+    description: 'Use your Moderado Cloud account and its configured model pool.',
+    kind: 'openai-compatible',
+    baseUrl: MODERADO_CLOUD_BASE_URL,
+    defaultModel: 'auto',
     freeCatalog: true,
     requiresApiKey: true,
   },

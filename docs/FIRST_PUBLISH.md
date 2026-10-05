@@ -1,7 +1,7 @@
 # First Public Release via npmjs.com + GitHub Actions
 
 A historical field log of how Moderado published `moderado@0.3.0` for the first time
-(2026-09-22). The current release is `moderado@0.3.7`; use the README and
+(2026-09-22). The current published release is `moderado@0.3.10`; use the README and
 `docs/RELEASING.md` for current installation and release procedures. The normal path is now CI,
 but the first publish could not be, for reasons explained below.
 

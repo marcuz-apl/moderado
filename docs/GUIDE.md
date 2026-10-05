@@ -3,7 +3,8 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. Everything below applies to Moderado v0.3.10.
+quick start. This guide reflects the current source; the latest published
+release is Moderado v0.3.10.
 
 ---
 

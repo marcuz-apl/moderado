@@ -83,12 +83,8 @@ npm install -g moderado@0.3.10
 scoop bucket add moderado https://github.com/marcuz-apl/scoop-moderado
 scoop install moderado
 
-# winget: the `MarcuzApl.Moderado` submission (winget-pkgs#444475) is
-# still awaiting a community moderator, so `winget install
-# MarcuzApl.Moderado` does not resolve yet. Install the current release
-# directly from its manifest:
-#   curl -LO https://github.com/marcuz-apl/moderado/releases/download/v0.3.10/Moderado.yaml
-#   winget install --manifest .\Moderado.yaml
+# Windows Package Manager
+winget install --id MarcuzApl.Moderado --exact
 
 # or simply take the standalone binary (no Node.js required):
 #   https://github.com/marcuz-apl/moderado/releases/download/v0.3.10/moderado-win-x64.exe

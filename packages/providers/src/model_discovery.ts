@@ -9,7 +9,7 @@ export const SPIKE_PROVIDER_ENDPOINTS = {} as const;
 /**
  * Fetch the OpenAI-compatible `/models` listing from any provider endpoint.
  * Mirrors `NvidiaAdapter.discoverModels` but without per-instance caching —
- * `/connect` calls it once per setup flow.
+ * `/model` calls it when browsing a compatible provider's catalog.
  */
 export async function fetchProviderModels(
   baseUrl: string,

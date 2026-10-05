@@ -1,4 +1,4 @@
-import { freeModelPolicyFor, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
+import { freeModelPolicyFor, MODERADO_CLOUD_BASE_URL, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
@@ -147,7 +147,34 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
   };
 }
 
-/** Interactive setup used by /connect and by the first attempted prompt. */
+/** Build a manual-key Moderado Cloud profile, optionally targeting a private Gateway. */
+export function buildModeradoCloudConnection(apiKey: string): ProviderConnection {
+  const key = apiKey.trim();
+  if (!/^mrd_.+/.test(key)) throw new Error('Enter a non-empty Moderado Cloud key starting with mrd_.');
+  return buildConnection({
+    kind: 'openai-compatible',
+    displayName: 'Moderado Cloud',
+    baseUrl: MODERADO_CLOUD_BASE_URL,
+    apiKey: key,
+    defaultModel: 'auto',
+  });
+}
+
+export async function loginModeradoCloudInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+  let prompt = 'Moderado Cloud API key (mrd_…)';
+  while (!options.signal?.aborted) {
+    const apiKey = await askPopupText(prompt, options, true);
+    if (!apiKey) return undefined;
+    try {
+      return buildModeradoCloudConnection(apiKey);
+    } catch (error) {
+      prompt = `Invalid key: ${error instanceof Error ? error.message : String(error)} Try again`;
+    }
+  }
+  return undefined;
+}
+
+/** Interactive provider picker for direct BYOK and local compatible endpoints. */
 export async function connectProviderInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
   const choices = buildProviderPresets(options.connectProviders);
   const selectedValue = options.drawFrame

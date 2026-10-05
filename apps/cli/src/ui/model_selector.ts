@@ -53,9 +53,9 @@ let cachedInventory: { id: string }[] | null = null;
 export function buildModelConnectionRequiredItems(): PopupListItem[] {
   return [
     {
-      label: 'Connect NVIDIA NIM first',
-      value: 'connect',
-      description: 'Use /connect to add an NVIDIA NIM API key, then choose a model here.',
+      label: 'Log in to Moderado Cloud first',
+      value: 'login',
+      description: 'Use /login to enter your Moderado Cloud API key, then choose a free model here.',
     },
     {
       label: 'Close Window',
