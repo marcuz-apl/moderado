@@ -94,10 +94,10 @@ pnpm add -g moderado, npx -y moderado@latest --help), and prebuilt
 dependency-free binaries (moderado-win-x64.exe, moderado-macos-arm64,
 moderado-linux-x64) are attached to the
 GitHub Release v0.3.10 at https://github.com/marcuz-apl/moderado/releases/tag/v0.3.10.
-The curl installer (`scripts/install.sh`, Linux x64 + macOS arm64), Homebrew,
-Scoop, and winget are available. On Windows, run
-`winget install --id MarcuzApl.Moderado --exact`. See docs/DISTRIBUTION.md in
-the repository.
+  The curl installer (`scripts/install.sh`, Linux x64 + macOS arm64), Homebrew,
+  and Scoop are available. The winget submission is awaiting moderator
+  approval; until it merges, Windows users can install the standalone binary.
+  See docs/DISTRIBUTION.md in the repository.
 To build from source instead:
 
 ```bash

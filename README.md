@@ -83,8 +83,8 @@ npm install -g moderado@0.3.10
 scoop bucket add moderado https://github.com/marcuz-apl/scoop-moderado
 scoop install moderado
 
-# Windows Package Manager
-winget install --id MarcuzApl.Moderado --exact
+# winget submission #444475 has passed validation and is awaiting moderator
+# approval. Until it merges, install the standalone Windows binary below.
 
 # or simply take the standalone binary (no Node.js required):
 #   https://github.com/marcuz-apl/moderado/releases/download/v0.3.10/moderado-win-x64.exe
