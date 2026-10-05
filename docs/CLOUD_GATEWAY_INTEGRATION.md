@@ -31,4 +31,4 @@ CLI already supports custom OpenAI-compatible endpoints, `/v1/models`, `/v1/chat
 
 ## Implementation status (2026-10-05)
 
-The implementation is on branch `cloud-login-0.4.0-local` as follow-up work after the pushed `v0.4.0` tag. It implements the items above without adding runtime dependencies. The 0.4.0 tag remains unchanged; npm metadata is aligned to the 0.4.1 follow-up. Full repository verification is recorded in [HANDOFF.md](../HANDOFF.md).
+The implementation is pushed to `master` as follow-up work after the pushed `v0.4.0` tag. It implements the items above without adding runtime dependencies. The 0.4.0 tag remains unchanged; npm metadata is aligned to the current 0.4.2 source version. Full repository verification is recorded in [HANDOFF.md](../HANDOFF.md).

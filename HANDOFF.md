@@ -1,14 +1,14 @@
 # Active CLI Baseline
 
 Updated: 2026-10-05
-Branch: `master` at `934f6e1` (`v0.4.1+2610057`); immutable tag `v0.4.0` remains at `dd982e4`.
-Status: **The v0.4.1 Cloud Gateway completion source is pushed to `origin/master`.** The v0.4.0 source tag verification workflow passed (run `37267416050`), but v0.4.0 has not been published. npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10. No v0.4.1 tag or release has been created.
+Branch: `master`; Cloud completion commit `934f6e1` (`v0.4.1+2610057`), current canonical source version `v0.4.2+2610058`; immutable tag `v0.4.0` remains at `dd982e4`.
+Status: **The Cloud Gateway completion source and handoff are pushed to `origin/master`.** The v0.4.0 source tag verification workflow passed (run `37267416050`), but v0.4.0 has not been published. npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10. No v0.4.1 or v0.4.2 tag or release has been created.
 
 ## Current task: Cloud Gateway integration completion
 
 The implementation follows [docs/CLOUD_GATEWAY_INTEGRATION.md](docs/CLOUD_GATEWAY_INTEGRATION.md) and the stable v1 contract in `D:\projects\moderado-cloud\docs\CONTRACT.md`. `/login` now supports manual `mrd_` keys and browser PKCE; the CLI fixes the Gateway URL at `https://api.mod.alfazen.org/v1`. `/model` uses authenticated Cloud routes. Cloud `auto` is sent to the Gateway, while selected route IDs remain pinned. The adapter enforces v1 message/token/tool/body bounds, reports sanitized Gateway errors including `Retry-After`, and displays validated streamed fallback status. BYOK streams ignore Gateway-only status events. Browser credentials expire after 30 days and can be reauthorized through `/login`; Windows uses Credential Manager, while non-Windows credentials remain memory-only between CLI processes. Existing BYOK/local profiles remain independent.
 
-Verification with 0.4.1 metadata: `npm run build` and `npm run typecheck` pass; `npm test` passes (61 files / 480 tests); `npm run verify:package` passes (`moderado-0.4.1.tgz`); and `git diff --check` passes. The source push is complete. Do not create/move tags or publish without a separate release request. Smallest next action: decide whether to prepare a v0.4.1 release verification run.
+Verification with 0.4.1 metadata: `npm run build` and `npm run typecheck` pass; `npm test` passes (61 files / 480 tests); `npm run verify:package` passes (`moderado-0.4.1.tgz`); and `git diff --check` passes. A docs-only hook bump advanced the canonical version to 0.4.2, and package metadata is being aligned. Do not create/move tags or publish without a separate release request. Smallest next action: verify the aligned package version and push the metadata correction.
 
 ## Release record (v0.3.10)
 
