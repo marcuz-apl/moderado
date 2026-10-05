@@ -1,16 +1,16 @@
 # Active CLI Baseline
 
 Updated: 2026-10-05
-Branch: `cloud-login-0.4.0-local`; its Cloud changes are pushed to `origin/master`. The local `master` branch remains stale and has a separate local-only docs commit.
-Status: **Cloud Gateway URL auto-detection and the request token-cap fix are pushed to `origin/master`.** No release tag or package publication was requested. npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10.
+Branch: `master` (tracks `origin/master`).
+Status: **Removing the Cloud Gateway's aggregate 4096-byte messages/tools limit.** The Gateway keeps its independent 32 KiB HTTP body cap, 1–32 message limit, 16-tool limit, and 2048 output-token limit. No release tag or package publication was requested; npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10.
 
-## Current task: Cloud route picker and development URL
+## Current task: Cloud request-size compatibility
 
-`/model` displays `auto:free` (sent to the Gateway as contract model ID `auto`) and each route returned by authenticated `GET /v1/models` as a direct choice. Discovery errors now appear as a sanitized status entry; a successful empty response explains that the Cloud admin must enable a route. Saved Cloud profiles now use their configured Gateway URL: loopback HTTP is local development, remote HTTPS is used as configured, and the production Gateway is the default. `MODERADO_CLOUD_BASE_URL` selects a URL before first login; `MODERADO_CLOUD_ENV=development|production` remains an explicit override.
+The Gateway no longer applies a separate aggregate byte limit to messages and tools. Its complete request body remains capped at 32 KiB while reading. The Gateway does not enforce exact input-token counts; the selected provider enforces its model context window. CLI 0.4.3 sends the full prompt and tool schemas again, and locally enforces only the matching 32 KiB body cap.
 
-The Cloud adapter now caps integer `maxTokens` above 2048 to the Gateway contract limit. This fixes chat's 4096-token agent default that produced `ERR_GATEWAY_INVALID_REQUEST`; other providers are unchanged. Regression coverage verifies an outgoing `max_tokens: 2048` for a 4096-token request.
+The adapter also caps integer `maxTokens` above 2048. The root build refreshes vendored runtime modules so packaged CLI requests include current adapter code. These Cloud changes do not alter other providers.
 
-Verification after the token-cap fix and before the master fast-forward: `npm run build`, `npm run typecheck`, `npm test` (62 files / 493 tests), and `git diff --check` pass. The CLI package version matches `VERSION` at 0.4.3. No implementation work remains; do not publish a release without a separate request.
+Gateway verification: `npm test` (104 passed, 1 skipped); focused foundation tests pass. CLI verification: provider adapter tests and `npm run typecheck` pass. `VERSION` remains 0.4.3. Cross-repository changes are not yet committed/pushed. Next action: run complete CLI/package verification, review both diffs, then commit and push the authorized changes.
 
 ## Previous task: Cloud Gateway integration completion
 

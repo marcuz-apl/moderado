@@ -8,6 +8,11 @@ import { createNpmEnvironment, getInstalledCliInvocation, getNpmInvocation, getP
 describe('npm package preparation', () => {
   const roots: string[] = [];
 
+  it('refreshes vendored runtime modules as part of the root build', async () => {
+    const rootPackage = JSON.parse(await readFile(join(import.meta.dirname, '../../../package.json'), 'utf8'));
+    expect(rootPackage.scripts.build).toContain('npm run prepare:package');
+  });
+
   afterEach(async () => {
     await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
   });

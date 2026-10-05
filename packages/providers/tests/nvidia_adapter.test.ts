@@ -44,7 +44,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(adapter.name).toBe('OpenRouter');
   });
 
-  it('enforces Gateway request limits without changing OpenAI-compatible profiles', async () => {
+  it('enforces Gateway token, message-count, and tool-count limits without changing OpenAI-compatible profiles', async () => {
     const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
     const valid = { modelId: 'auto', messages: [{ role: 'user' as const, content: 'Hi' }], maxTokens: 1 };
     await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: undefined })) {} })
@@ -61,20 +61,45 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     await expect(async () => { for await (const _ of gateway.streamChat({
       ...valid, tools: Array.from({ length: 17 }, (_, i) => ({ name: `t${i}`, description: '', parameters: {} })),
     })) {} }).rejects.toThrow(/16.*tools/);
-    await expect(async () => { for await (const _ of gateway.streamChat({
-      ...valid, messages: [{ role: 'user', content: 'é'.repeat(2049) }],
-    })) {} }).rejects.toThrow(/messages.*4096/);
-    await expect(async () => { for await (const _ of gateway.streamChat({
-      ...valid,
-      messages: [{ role: 'user', content: 'm'.repeat(2100) }],
-      tools: [{ name: 'tool', description: 't'.repeat(2100), parameters: {} }],
-    })) {} }).rejects.toThrow(/messages and tools.*4096/);
 
     const compatible = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'openrouter' });
     nextHandler = (_req, res) => { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end('data: [DONE]\n\n'); };
     for await (const _ of compatible.streamChat({ modelId: 'x', messages: [{ role: 'user', content: 'Hi' }] })) {}
   });
 
+  it('sends Cloud requests larger than the former 4096-byte combined limit unchanged', async () => {
+    let sentPayload: Record<string, any> | undefined;
+    nextHandler = (req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => { body += chunk; });
+      req.on('end', () => {
+        sentPayload = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      });
+    };
+    const gateway = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const systemMessage = 'You are Moderado. '.repeat(180);
+    const userMessage = 'What is the weather in Calgary today? '.repeat(100);
+    const toolDescription = 'Tool description '.repeat(150);
+    const parameterDescription = 'Parameter description '.repeat(80);
+
+    for await (const _ of gateway.streamChat({
+      modelId: 'auto',
+      messages: [{ role: 'system', content: systemMessage }, { role: 'user', content: userMessage }],
+      tools: [{ name: 'web_search', description: toolDescription, parameters: {
+        type: 'object', properties: { query: { type: 'string', description: parameterDescription } }, required: ['query'],
+      } }],
+      maxTokens: 512,
+    })) {}
+
+    expect(Buffer.byteLength(JSON.stringify({ messages: sentPayload?.messages, tools: sentPayload?.tools }), 'utf8')).toBeGreaterThan(4096);
+    expect(sentPayload?.messages[0].content).toBe(systemMessage);
+    expect(sentPayload?.messages[1].content).toBe(userMessage);
+    expect(sentPayload?.tools[0].function.description).toBe(toolDescription);
+    expect(sentPayload?.tools[0].function.parameters.properties.query.description).toBe(parameterDescription);
+  });
   it('caps the default agent output limit to the Gateway maximum', async () => {
     let sentMaxTokens: unknown;
     nextHandler = (req, res) => {

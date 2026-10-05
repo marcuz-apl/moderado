@@ -26,7 +26,7 @@ CLI already supports custom OpenAI-compatible endpoints, `/v1/models`, `/v1/chat
 - Account UI: `https://mod.alfazen.org/authorize`; token exchange: `https://mod.alfazen.org/oauth/token`.
 - OAuth access keys last 30 days; manual keys can have account-selected expiry and scope. Full key material is only shown once.
 - `auto` only advances after an explicit upstream 429/503 before output. Pinned models do not fail over.
-- Requests are text-only, at most 32 KiB, and messages/tools are bounded to 4096 encoded bytes. `max_tokens` is required and capped at 2048; the CLI caps larger agent output limits to the Gateway maximum before sending.
+- Requests are text-only and bounded to a 32 KiB request body; there is no separate aggregate byte limit for messages and tools. `max_tokens` is required and capped at 2048; the CLI caps larger agent output limits to the Gateway maximum before sending.
 - Private beta quotas currently include 8 requests/account/key per UTC day and 80 globally per UTC day. Treat these as server policy; never advertise them as permanent.
 
 ## Implementation status (2026-10-05)

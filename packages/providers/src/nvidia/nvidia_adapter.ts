@@ -226,9 +226,6 @@ export class NvidiaAdapter implements IProviderAdapter {
     if (Array.isArray(tools) && tools.length > 16) {
       throw new ProviderError('Moderado Cloud accepts at most 16 tools', 'ERR_GATEWAY_INVALID_REQUEST', 400);
     }
-    if (Buffer.byteLength(JSON.stringify({ messages: wireMessages, tools }), 'utf8') > 4096) {
-      throw new ProviderError('Moderado Cloud messages and tools exceed the 4096-byte limit', 'ERR_GATEWAY_INVALID_REQUEST', 400);
-    }
   }
 
   private async handleHttpError(response: Response, action: string): Promise<never> {

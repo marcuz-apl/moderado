@@ -16,7 +16,7 @@
 - OAuth authorize/token endpoints are fixed to `https://mod.alfazen.org/authorize` and `/oauth/token`.
 - OAuth access credentials expire after 30 days; no refresh token exists.
 - Manual and OAuth keys must not enter plain config or logs.
-- Gateway requests: text-only, 1–32 messages, max_tokens 1–2048, at most 16 tools, messages/tools each <=4096 UTF-8 bytes, total JSON <=32KiB.
+- Gateway requests: text-only, 1–32 messages, max_tokens 1–2048, at most 16 tools, complete request body <=32KiB; no separate aggregate messages/tools byte limit.
 - Never client-failover a pinned route or retry ambiguous/post-output failures.
 - Tests must use offline fake servers.
 
