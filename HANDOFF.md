@@ -1,8 +1,8 @@
 # Active CLI Baseline
 
 Updated: 2026-10-05
-Branch: `cloud-login-0.4.0-local` at `1b88c75` (`v0.4.2+261005a`), matching `origin/master`; Cloud completion commit `934f6e1` (`v0.4.1+2610057`); immutable tag `v0.4.0` remains at `dd982e4`.
-Status: **Cloud Gateway URL auto-detection and request token-cap fix are local changes on `cloud-login-0.4.0-local`; not yet pushed or released.** The prior Cloud Gateway completion is pushed to `origin/master`. The v0.4.0 source tag verification workflow passed (run `37267416050`), but v0.4.0 has not been published. npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10. No v0.4.1 or v0.4.2 tag or release has been created.
+Branch: `cloud-login-0.4.0-local`; its Cloud changes are pushed to `origin/master`. The local `master` branch remains stale and has a separate local-only docs commit.
+Status: **Cloud Gateway URL auto-detection and the request token-cap fix are pushed to `origin/master`.** No release tag or package publication was requested. npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10.
 
 ## Current task: Cloud route picker and development URL
 
@@ -10,7 +10,7 @@ Status: **Cloud Gateway URL auto-detection and request token-cap fix are local c
 
 The Cloud adapter now caps integer `maxTokens` above 2048 to the Gateway contract limit. This fixes chat's 4096-token agent default that produced `ERR_GATEWAY_INVALID_REQUEST`; other providers are unchanged. Regression coverage verifies an outgoing `max_tokens: 2048` for a 4096-token request.
 
-Verification after the token-cap fix: `npm run build`, `npm run typecheck`, `npm test` (62 files / 493 tests), and `git diff --check` pass. The CLI package version matches `VERSION` at 0.4.3. Next action: commit and push the Cloud token-cap fix to the current branch; do not publish a release without a separate request.
+Verification after the token-cap fix and before the master fast-forward: `npm run build`, `npm run typecheck`, `npm test` (62 files / 493 tests), and `git diff --check` pass. The CLI package version matches `VERSION` at 0.4.3. No implementation work remains; do not publish a release without a separate request.
 
 ## Previous task: Cloud Gateway integration completion
 
