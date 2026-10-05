@@ -163,7 +163,7 @@ export function buildModeradoCloudConnection(apiKey: string, credentialExpiresAt
   const connection = buildConnection({
     kind: 'openai-compatible',
     displayName: 'Moderado Cloud',
-    baseUrl: resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV),
+    baseUrl: resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV, process.env.MODERADO_CLOUD_BASE_URL),
     apiKey: key,
     defaultModel: 'auto',
   });

@@ -127,7 +127,9 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
       id: item.id,
       displayName: item.displayName,
       kind,
-      baseUrl: item.id === 'moderado-cloud' ? resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV) : item.baseUrl,
+      baseUrl: item.id === 'moderado-cloud'
+        ? resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV, process.env.MODERADO_CLOUD_BASE_URL ?? item.baseUrl)
+        : item.baseUrl,
       credentialReference: typeof item.credentialReference === 'string' ? item.credentialReference : undefined,
       credentialExpiresAt: typeof item.credentialExpiresAt === 'number' && Number.isFinite(item.credentialExpiresAt) ? item.credentialExpiresAt : undefined,
       apiKey: typeof item.apiKey === 'string' ? item.apiKey : undefined,

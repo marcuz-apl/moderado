@@ -125,13 +125,22 @@ describe('CLI Configuration Storage', () => {
     expect(await store.get('moderado/provider/moderado-cloud')).toBe('mrd_test-secret');
   });
 
-  it('always loads the managed Moderado Cloud Gateway URL', () => {
+  it('infers a local Gateway from a saved loopback URL', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
       baseUrl: 'http://127.0.0.1:8787/v1', defaultModel: 'auto',
     }, tempDir);
     expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
-      .toBe('https://api.mod.alfazen.org/v1');
+      .toBe('http://127.0.0.1:8787/v1');
+  });
+
+  it('preserves a remote HTTPS Gateway URL from the saved Cloud profile', () => {
+    saveConnection({
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+      baseUrl: 'https://moderado.example.net/v1/', defaultModel: 'auto',
+    }, tempDir);
+    expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
+      .toBe('https://moderado.example.net/v1');
   });
 
   it('loads the local Gateway URL for saved Cloud profiles in development mode', () => {

@@ -99,6 +99,17 @@ describe('provider connection setup', () => {
     }
   });
 
+  it('uses a configured loopback Gateway URL for a new Cloud login', () => {
+    const previous = process.env.MODERADO_CLOUD_BASE_URL;
+    process.env.MODERADO_CLOUD_BASE_URL = 'http://localhost:8787/v1/';
+    try {
+      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://localhost:8787/v1');
+    } finally {
+      if (previous === undefined) delete process.env.MODERADO_CLOUD_BASE_URL;
+      else process.env.MODERADO_CLOUD_BASE_URL = previous;
+    }
+  });
+
   it('builds a Moderado Cloud profile from a browser token with expiry metadata', () => {
     expect(buildModeradoCloudConnection('mrd_oauth-token', Date.now() + 2_592_000_000)).toMatchObject({
       id: 'moderado-cloud',

@@ -21,10 +21,14 @@ describe('shared provider presets', () => {
     });
   });
 
-  it('selects the local Gateway only in development mode', () => {
-    expect(resolveModeradoCloudBaseUrl('development')).toBe('http://127.0.0.1:8787/v1');
-    expect(resolveModeradoCloudBaseUrl('production')).toBe('https://api.mod.alfazen.org/v1');
+  it('uses a configured Gateway URL, inferring the default environment from loopback hosts', () => {
+    expect(resolveModeradoCloudBaseUrl(undefined, 'http://localhost:8787/v1')).toBe('http://localhost:8787/v1');
+    expect(resolveModeradoCloudBaseUrl(undefined, 'http://127.0.0.1:8787/v1')).toBe('http://127.0.0.1:8787/v1');
+    expect(resolveModeradoCloudBaseUrl(undefined, 'https://cloud.moderado.example/v1')).toBe('https://cloud.moderado.example/v1');
     expect(resolveModeradoCloudBaseUrl(undefined)).toBe('https://api.mod.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl('development')).toBe('http://127.0.0.1:8787/v1');
+    expect(resolveModeradoCloudBaseUrl('production', 'http://localhost:8787/v1')).toBe('https://api.mod.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl(undefined, 'http://nas.lan:8787/v1')).toBe('https://api.mod.alfazen.org/v1');
   });
 
   it('does not grant a provider-specific free declaration to another provider', () => {

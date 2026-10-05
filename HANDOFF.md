@@ -1,14 +1,14 @@
 # Active CLI Baseline
 
-Updated: 2026-10-05 18:51 UTC
+Updated: 2026-10-05
 Branch: `cloud-login-0.4.0-local` at `1b88c75` (`v0.4.2+261005a`), matching `origin/master`; Cloud completion commit `934f6e1` (`v0.4.1+2610057`); immutable tag `v0.4.0` remains at `dd982e4`.
-Status: **Ready for review; model picker and Gateway environment updates are uncommitted.** The prior Cloud Gateway completion is pushed to `origin/master`. The v0.4.0 source tag verification workflow passed (run `37267416050`), but v0.4.0 has not been published. npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10. No v0.4.1 or v0.4.2 tag or release has been created.
+Status: **Local changes configure Gateway URL auto-detection and the Cloud model picker; not yet pushed or released.** The prior Cloud Gateway completion is pushed to `origin/master`. The v0.4.0 source tag verification workflow passed (run `37267416050`), but v0.4.0 has not been published. npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10. No v0.4.1 or v0.4.2 tag or release has been created.
 
 ## Current task: Cloud route picker and development URL
 
-`/model` displays `auto:free` (sent to the Gateway as contract model ID `auto`) and each route returned by authenticated `GET /v1/models` as a direct choice. Discovery errors now appear as a sanitized status entry; a successful empty response explains that the Cloud admin must enable a route. Set `MODERADO_CLOUD_ENV=development` before launching the CLI to target `http://127.0.0.1:8787/v1`; production defaults to `https://api.mod.alfazen.org/v1`. Saved Cloud profiles are normalized to the selected environment URL.
+`/model` displays `auto:free` (sent to the Gateway as contract model ID `auto`) and each route returned by authenticated `GET /v1/models` as a direct choice. Discovery errors now appear as a sanitized status entry; a successful empty response explains that the Cloud admin must enable a route. Saved Cloud profiles now use their configured Gateway URL: loopback HTTP is local development, remote HTTPS is used as configured, and the production Gateway is the default. `MODERADO_CLOUD_BASE_URL` selects a URL before first login; `MODERADO_CLOUD_ENV=development|production` remains an explicit override.
 
-Verification after these changes: `npm run build`, `npm run typecheck`, `npm test` (62 files / 490 tests), `npm run verify:package` (`moderado-0.4.2.tgz`), and `git diff --check` pass. Changes are local and uncommitted. Next action: run the rebuilt CLI's `/model` picker to read its catalog status; if it reports an empty route pool, enable routes in the Cloud Admin Panel; if it reports a request error, use the displayed HTTP status and safe error message to diagnose the Gateway or key.
+Verification for the current changes: `npm run build`, `npm run typecheck`, `npm test` (62 files / 492 tests), and `git diff --check` pass. Changes are local and uncommitted. Next action: configure `MODERADO_CLOUD_BASE_URL` to a loopback URL for local first login, or leave it unset for the default production Gateway; saved HTTPS NAS/VPS URLs remain as configured.
 
 ## Previous task: Cloud Gateway integration completion
 

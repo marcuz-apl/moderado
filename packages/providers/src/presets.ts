@@ -4,8 +4,21 @@ import { isFreeModelEntry } from './model_discovery.js';
 export const MODERADO_CLOUD_PRODUCTION_BASE_URL = 'https://api.mod.alfazen.org/v1';
 export const MODERADO_CLOUD_DEVELOPMENT_BASE_URL = 'http://127.0.0.1:8787/v1';
 
-export function resolveModeradoCloudBaseUrl(mode?: string): string {
-  return mode === 'development' ? MODERADO_CLOUD_DEVELOPMENT_BASE_URL : MODERADO_CLOUD_PRODUCTION_BASE_URL;
+export function resolveModeradoCloudBaseUrl(mode?: string, gatewayUrl?: string): string {
+  if (mode === 'development') return MODERADO_CLOUD_DEVELOPMENT_BASE_URL;
+  if (mode === 'production') return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+  if (!gatewayUrl) return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+
+  try {
+    const url = new URL(gatewayUrl);
+    const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+    if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback))) {
+      return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+    }
+    return url.toString().replace(/\/+$/, '');
+  } catch {
+    return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+  }
 }
 
 export const MODERADO_CLOUD_BASE_URL = MODERADO_CLOUD_PRODUCTION_BASE_URL;
