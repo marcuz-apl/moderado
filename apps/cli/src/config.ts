@@ -3,10 +3,10 @@ import { z } from 'zod';
 import path from 'node:path';
 import os from 'node:os';
 import { McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
-import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl } from '@moderado/providers';
+import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, MODERADO_CLOUD_BASE_URL } from '@moderado/providers';
 import type { ConnectProviderPresetId, ConnectProvidersConfig, ProviderConnectionKind } from '@moderado/providers';
 import { credentialReference, CredentialStore, resolveCredential } from './credentials.js';
-export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLoopbackBaseUrl } from '@moderado/providers';
+export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLoopbackBaseUrl, MODERADO_CLOUD_BASE_URL } from '@moderado/providers';
 export type { ConnectProviderPresetId, ConnectProvidersConfig, CustomConnectProvider, ProviderConnectionKind, ProviderPresetMeta, ProviderFreePolicy } from '@moderado/providers';
 
 export interface ModeradoConfig {
@@ -125,7 +125,7 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
       id: item.id,
       displayName: item.displayName,
       kind,
-      baseUrl: item.baseUrl,
+      baseUrl: item.id === 'moderado-cloud' ? MODERADO_CLOUD_BASE_URL : item.baseUrl,
       credentialReference: typeof item.credentialReference === 'string' ? item.credentialReference : undefined,
       apiKey: typeof item.apiKey === 'string' ? item.apiKey : undefined,
       defaultModel: typeof item.defaultModel === 'string' ? item.defaultModel : undefined,
@@ -231,6 +231,10 @@ export async function storeConnectionCredential(connection: ProviderConnection, 
   const reference = credentialReference(connection.id);
   await store.set(reference, connection.apiKey.trim());
   return { ...connection, credentialReference: reference };
+}
+
+export function requiresCredentialReference(connection: Pick<ProviderConnection, 'id'>, platform: NodeJS.Platform = process.platform): boolean {
+  return platform === 'win32' || connection.id === 'moderado-cloud';
 }
 
 export async function resolveConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {

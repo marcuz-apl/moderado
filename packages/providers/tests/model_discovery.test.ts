@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { fetchOpenRouterFreeModels, fetchProviderFreeModels, isFreeModelEntry, partitionFreeModels } from '../src/model_discovery.js';
+import { fetchOpenRouterFreeModels, fetchProviderFreeModels, fetchProviderModels, isFreeModelEntry, partitionFreeModels } from '../src/model_discovery.js';
 import type { ModelInventoryEntry } from '@moderado/contracts';
 
 const entry = (id: string, promptPrice = '0'): ModelInventoryEntry => ({
@@ -44,6 +44,16 @@ describe('model discovery', () => {
     const fetchImpl: typeof fetch = async () => jsonResponse({ data: [entry('free-model'), entry('paid-model', '0.01')] });
     const models = await fetchProviderFreeModels('https://provider.test/v1', undefined, { fetchImpl });
     expect(models.map((model) => model.id)).toEqual(['free-model']);
+  });
+  it('preserves authenticated Gateway route IDs during model discovery', async () => {
+    let authorization = '';
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      authorization = new Headers(init?.headers).get('Authorization') ?? '';
+      return jsonResponse({ data: [entry('vendor/specific-route'), entry('auto')] });
+    };
+    const models = await fetchProviderModels('https://api.mod.alfazen.org/v1', 'mrd_test-key', { fetchImpl });
+    expect(authorization).toBe('Bearer mrd_test-key');
+    expect(models.map((model) => model.id)).toEqual(['vendor/specific-route', 'auto']);
   });
   it('throws a ProviderError on HTTP failure', async () => {
     const fetchImpl: typeof fetch = async () => new Response('no', { status: 503 });

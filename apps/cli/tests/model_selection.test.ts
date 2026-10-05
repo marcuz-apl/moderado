@@ -16,8 +16,8 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
 
     expect(items).toEqual([
       expect.objectContaining({
-        label: 'Connect NVIDIA NIM first',
-        description: expect.stringContaining('/connect'),
+        label: 'Log in to Moderado Cloud first',
+        description: expect.stringContaining('/login'),
       }),
       expect.objectContaining({ label: 'Close Window' }),
     ]);
@@ -54,6 +54,15 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     expect(items).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'Browse available models', tag: '2 Free' }),
       expect.objectContaining({ label: 'Enter a model ID', tag: 'Manual' }),
+    ]));
+  });
+
+  it('offers the full Moderado Cloud route inventory as free models', () => {
+    const items = buildCompatibleModelMenuItems('Moderado Cloud', [
+      { id: 'vendor/route-one' }, { id: 'vendor/route-two' },
+    ], 'auto', { freeCatalog: true });
+    expect(items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Browse available models', tag: '2 Free' }),
     ]));
   });
 

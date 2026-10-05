@@ -22,9 +22,9 @@ it('never labels paid output or an unknown aggregator model as free', () => {
 });
 
 it('places command suggestions before the input rather than beneath it', () => {
-  const lines = stripAnsi(renderWelcomeCard({ model: 'test', tokens: 0, cost: 'unknown', workspace: '.', mode: 'Execute', autoApprove: false, input: '/co' })).split('\n');
-  const input = lines.findIndex(line => line.includes('❯ /co'));
-  const suggestions = lines.findIndex(line => line.includes('/connect'));
+  const lines = stripAnsi(renderWelcomeCard({ model: 'test', tokens: 0, cost: 'unknown', workspace: '.', mode: 'Execute', autoApprove: false, input: '/lo' })).split('\n');
+  const input = lines.findIndex(line => line.trim().endsWith('/lo'));
+  const suggestions = lines.findIndex(line => line.includes('/login'));
   expect(suggestions).toBeGreaterThanOrEqual(0);
   expect(suggestions).toBeLessThan(input);
 });

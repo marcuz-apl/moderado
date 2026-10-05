@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildConnection, findReusableConnection, isAuthenticationFailure, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { buildConnection, buildModeradoCloudConnection, findReusableConnection, isAuthenticationFailure, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
 
 const openRouter = {
   id: 'openrouter',
@@ -11,7 +11,7 @@ const openRouter = {
 };
 
 describe('provider connection setup', () => {
-  it('offers NVIDIA NIM, OpenRouter, and Agnes AI presets', () => {
+  it('offers NVIDIA NIM, Moderado Cloud, OpenRouter, and Agnes AI presets', () => {
     expect(PROVIDER_PRESETS.map((preset) => preset.value)).toEqual([
       'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
     ]);
@@ -59,6 +59,19 @@ describe('provider connection setup', () => {
       baseUrl: 'https://integrate.api.nvidia.com/v1',
       apiKey: 'nvapi-test',
     });
+  });
+
+  it('builds a Moderado Cloud profile from a key and manages the Gateway URL', () => {
+    expect(buildModeradoCloudConnection('mrd_test-key')).toEqual({
+      id: 'moderado-cloud',
+      displayName: 'Moderado Cloud',
+      kind: 'openai-compatible',
+      baseUrl: 'https://api.mod.alfazen.org/v1',
+      apiKey: 'mrd_test-key',
+      defaultModel: 'auto',
+    });
+    expect(() => buildModeradoCloudConnection('sk_wrong')).toThrow('mrd_');
+    expect(() => buildModeradoCloudConnection('mrd_')).toThrow('mrd_');
   });
 
   it('normalizes an OpenAI-compatible endpoint and requires a model', () => {

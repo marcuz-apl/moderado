@@ -570,7 +570,8 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     // 1. Valid standard commands
     expect(findSlashCommandAdvice('/exit')).toEqual({ isSlashCommand: true, isValid: true });
     expect(findSlashCommandAdvice('/model')).toEqual({ isSlashCommand: true, isValid: true });
-    expect(findSlashCommandAdvice('/connect')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/login')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/connect').isValid).toBe(false);
     expect(findSlashCommandAdvice('/clear')).toEqual({ isSlashCommand: true, isValid: true });
     expect(findSlashCommandAdvice('/session list')).toEqual({ isSlashCommand: true, isValid: true });
     expect(findSlashCommandAdvice('/workflow git')).toEqual({ isSlashCommand: true, isValid: true });

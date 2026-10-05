@@ -1,8 +1,13 @@
 # Active CLI Baseline
 
-Updated: 2026-09-30
-Branch: master (`4006a9d`, tag `v0.3.10`, `v0.3.10+260930d`)
-Status: **0.3.10 is released.** Published to npm as `latest`, the GitHub Release `v0.3.10` carries all 11 assets, and Homebrew, Scoop, and the in-flight winget PR are all on 0.3.10. This is a patch release carrying the standalone-binary version fix: the 0.3.9 binaries work correctly but reported `moderado --version` as `v0.1.0`, because `pkg` snapshots the filesystem so `VERSION` and `package.json` are absent at runtime. Verified against the real CI-built artifact: `v0.3.10+260930d`.
+Updated: 2026-10-04
+Branch: `cloud-login-0.4.0-local` (0.4.0 Cloud Gateway update based on `master` at `e5c2e19`; latest published release `v0.3.10`)
+Status: **0.3.10 is live on npm, GitHub Releases, Homebrew, and Scoop. winget PR #444475 passed validation but is still open awaiting moderator approval, so the package is not yet searchable. Preparing the 0.4.0 Cloud Gateway CLI update.** The 0.3.10 release includes the standalone-binary version fix and its real Windows artifact reports `v0.3.10+260930d`.
+
+
+## Current task: Cloud Gateway integration
+
+Handoff: [docs/CLOUD_GATEWAY_INTEGRATION.md](docs/CLOUD_GATEWAY_INTEGRATION.md). The chat UI now uses `/login` for Moderado Cloud: it prompts only for an `mrd_` key and always manages the Gateway URL as `https://api.mod.alfazen.org/v1`; `/connect` is retired from slash command suggestions and dispatch. `/model` uses the authenticated Cloud inventory and exposes its free routes through the existing compatible-provider selector. Existing saved BYOK/local profiles remain loadable and independent. Cloud keys use credential references and never persist in plaintext; non-Windows uses the existing memory-only store, so users re-enter the key in a new CLI process. Browser authorization, Gateway-specific request limits, visible fallback handling, and error mapping remain. `npm test` passes (60 files / 448 tests); `npm run build`, `npm run typecheck`, and `git diff --check` pass. Next: implement offline-tested browser authorization with PKCE/state and loopback callback, then continue through the Gateway contract requirements.
 
 ## Release record (v0.3.10)
 
@@ -17,10 +22,9 @@ Status: **0.3.10 is released.** Published to npm as `latest`, the GitHub Release
    - `moderado-linux-x64` `b017f640f21939e766d0386c3f0e2bde55237b441aecbc28ebe0d606d40d7689`
    - `moderado-macos-arm64` `d6fbdcb748eb01e40e3d93ab96dd282ba73bf2a748d7088c04a5e13171f87054`
 6. Homebrew tap → 0.3.10 (`e968625`); Scoop bucket → 0.3.10 (`f7d2e9d`).
-7. winget PR #444475 updated **in place** from 0.3.9 to 0.3.10
-   (`d997c44`), so moderation yields the corrected version and no second PR
-   competes for the same `PackageIdentifier`. Still awaiting a community
-   moderator.
+7. winget PR #444475 was updated **in place** from 0.3.9 to 0.3.10
+   (`d997c44`) and passed validation, but remains open pending moderator
+   approval. The package is not yet available by ID in winget.
 
 ### Channel state after v0.3.10
 
@@ -31,7 +35,7 @@ Status: **0.3.10 is released.** Published to npm as `latest`, the GitHub Release
 | curl installer | 0.3.10 | tracks latest |
 | Homebrew tap | **0.3.10** | `e968625` |
 | Scoop bucket | **0.3.10** | `f7d2e9d` |
-| winget | 0.3.10 in #444475 | awaiting moderator |
+| winget | **0.3.10** | PR #444475 open; awaiting moderator approval |
 
 
 ### Alfazen commit hook bug found and fixed
@@ -50,12 +54,11 @@ synthetic stale message — it now yields `v0.3.10+260930d`.
 
 ### Next
 
-1. Wait for the winget moderator; `winget install MarcuzApl.Moderado` works once
-   #444475 merges. A single polite follow-up after ~2 weeks is reasonable.
-
-3. Scope v0.4.0: granular pattern-based approval policies first, then
-   `moderado run --plan`, custom Markdown slash commands, and
-   `--continue`/`--session`/`--fork`.
+1. Verify and push the 0.4.0 Cloud Gateway update. Do not tag or publish
+   until the release verification workflow passes and publication is explicitly
+   requested.
+2. Continue Cloud Gateway work with browser authorization, request limits,
+   visible fallback handling, and Gateway error mapping.
 
 ## Release record (v0.3.9)
 

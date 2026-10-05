@@ -178,7 +178,7 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: '/connect', desc: 'Connect a model provider' },
+  { name: '/login', desc: 'Log in to Moderado Cloud with an API key' },
   { name: '/model', desc: 'Switch active AI model' },
   { name: '/init', desc: 'Scaffold AGENTS.md from workspace scan' },
   { name: '/btw', desc: 'Ask an ephemeral side question (no session pollution)' },
@@ -421,7 +421,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
     '\x1b[1m/init\x1b[0m       Scaffold AGENTS.md from workspace scan',
     '\x1b[1m/model\x1b[0m      Switch active AI model (Free, Paid, or Custom)',
-    '\x1b[1m/connect\x1b[0m    Connect NVIDIA NIM or another compatible provider',
+    '\x1b[1m/login\x1b[0m      Log in to Moderado Cloud with an API key',
     '\x1b[1m/btw\x1b[0m        Ask an ephemeral side question (no session pollution)',
     '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
     '\x1b[1m/session\x1b[0m   Create, resume, undo, redo, share, export, or compact sessions',
@@ -531,8 +531,8 @@ export interface PromptInteractiveTurnOptions {
    * UI and returns the new model id, or undefined if cancelled.
    */
   onModelSelect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
-  /** Called when user issues /connect. Returns the model label to display. */
-  onConnect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
+  /** Called when user issues /login. Returns the model label to display. */
+  onLogin?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
   onExit?: () => string;
@@ -840,7 +840,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/connect') {
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/login') {
           setInput('');
           unbindComposerInput();
 
@@ -849,8 +849,8 @@ export async function promptInteractiveTurn(
             stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
           };
 
-          if (options.onConnect) {
-            const newModel = await options.onConnect(drawFrame);
+          if (options.onLogin) {
+            const newModel = await options.onLogin(drawFrame);
             if (newModel) currentModel = newModel;
           }
 
