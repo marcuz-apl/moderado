@@ -288,3 +288,22 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 ## Blockers
 
 - None. Publish workflow failure 35665118071 (E404, no credentials) is the expected pre-bootstrap outcome, superseded by the manual first publish.
+
+## Release record (v0.4.8)
+
+1. Release tag `v0.4.8` points to `d5e263e`; release verification run `37513672522` passed all jobs.
+2. Publish run `37514489475` succeeded. npm `moderado@0.4.8` is live as `latest`; GitHub Release has 11 assets.
+3. Verified the actual npm tarball and Windows binary report `v0.4.8`; Windows binary SHA-256 matches its release sidecar.
+4. Homebrew tap updated to `0.4.8` at `marcuz-apl/homebrew-moderado` commit `72cbaba`; Scoop bucket updated at `marcuz-apl/scoop-moderado` commit `952c93f`.
+5. Distribution documentation and installation instructions were updated in the root README, CLI README, and release/distribution docs.
+6. `npm run build`, `npm test` (513 tests), `npm run typecheck`, and `npm run verify:package` passed before tagging.
+
+### Channel state after v0.4.8
+
+| Channel | Version | Status |
+|---|---|---|
+| npm `latest` | **0.4.8** | live |
+| GitHub Release | **v0.4.8** | 11 assets |
+| curl installer | 0.4.8 | tracks latest |
+| Homebrew tap | **0.4.8** | `72cbaba` |
+| Scoop bucket | **0.4.8** | `952c93f` |
