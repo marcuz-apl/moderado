@@ -13,8 +13,6 @@ import {
 } from '@moderado/contracts';
 import { parseSseStream } from './sse_parser.js';
 
-const MODERADO_CLOUD_MAX_OUTPUT_TOKENS = 2048;
-
 export interface NvidiaAdapterConfig {
   apiKey?: string;
   baseUrl?: string;
@@ -106,10 +104,6 @@ export class NvidiaAdapter implements IProviderAdapter {
 
   async *streamChat(options: ProviderChatOptions): AsyncIterable<ChatCompletionChunk> {
     const url = `${this.baseUrl}/chat/completions`;
-    const maxTokens = this.isModeradoCloud && Number.isInteger(options.maxTokens)
-      ? Math.min(options.maxTokens!, MODERADO_CLOUD_MAX_OUTPUT_TOKENS)
-      : options.maxTokens;
-
     // Map contracts ChatMessage to OpenAI/NIM wire payload
     const wireMessages = options.messages.map((msg) => {
       if (msg.role === 'assistant') {
@@ -166,18 +160,11 @@ export class NvidiaAdapter implements IProviderAdapter {
     if (options.temperature !== undefined) {
       payload.temperature = options.temperature;
     }
-    if (maxTokens !== undefined) {
-      payload.max_tokens = maxTokens;
-    }
-
-    if (this.isModeradoCloud) {
-      this.validateGatewayRequest({ ...options, maxTokens }, wireMessages, payload);
+    if (options.maxTokens !== undefined) {
+      payload.max_tokens = options.maxTokens;
     }
 
     const body = JSON.stringify(payload);
-    if (this.isModeradoCloud && Buffer.byteLength(body, 'utf8') > 32 * 1024) {
-      throw new ProviderError('Moderado Cloud request exceeds the 32768-byte limit', 'ERR_GATEWAY_INVALID_REQUEST', 400);
-    }
 
     let response: Response;
     try {
@@ -207,25 +194,6 @@ export class NvidiaAdapter implements IProviderAdapter {
 
     // Node.js Response.body is a ReadableStream<Uint8Array> which is an AsyncIterable in modern Node
     yield* parseSseStream(response.body as any, { moderadoCloud: this.isModeradoCloud });
-  }
-
-  private validateGatewayRequest(
-    options: ProviderChatOptions,
-    wireMessages: Record<string, unknown>[],
-    payload: Record<string, unknown>
-  ): void {
-    if (!Number.isInteger(options.maxTokens) || options.maxTokens! < 1 || options.maxTokens! > MODERADO_CLOUD_MAX_OUTPUT_TOKENS) {
-      throw new ProviderError('Moderado Cloud requires max_tokens between 1 and 2048', 'ERR_GATEWAY_INVALID_REQUEST', 400);
-    }
-    if (wireMessages.length < 1 || wireMessages.length > 32 || wireMessages.some((message) =>
-      typeof message.content !== 'string' || (message.role === 'tool' && typeof message.tool_call_id !== 'string')
-    )) {
-      throw new ProviderError('Moderado Cloud accepts 1 to 32 text-only messages', 'ERR_GATEWAY_INVALID_REQUEST', 400);
-    }
-    const tools = payload.tools;
-    if (Array.isArray(tools) && tools.length > 16) {
-      throw new ProviderError('Moderado Cloud accepts at most 16 tools', 'ERR_GATEWAY_INVALID_REQUEST', 400);
-    }
   }
 
   private async handleHttpError(response: Response, action: string): Promise<never> {

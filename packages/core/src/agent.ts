@@ -276,16 +276,10 @@ export class AgentLoop {
       baseHistory = [systemPromptMessage, ...baseHistory];
     }
 
-    if (options.provider.id === 'moderado-cloud' && baseHistory.length > 30) {
-      let firstRecentTurn = baseHistory.length - 29;
-      while (firstRecentTurn < baseHistory.length && baseHistory[firstRecentTurn]?.role !== 'user') firstRecentTurn++;
-      baseHistory = [baseHistory[0]!, ...baseHistory.slice(firstRecentTurn)];
-    }
-
     // Layer 4: Truncate oversized tool outputs from older turns in history to prevent token ballooning
     const messages: ChatMessage[] = [
       ...baseHistory.map((msg, idx) => {
-        if (msg.role === 'tool' && idx < baseHistory.length - 1 && typeof msg.content === 'string' && msg.content.length > 1500) {
+        if (options.provider.id !== 'moderado-cloud' && msg.role === 'tool' && idx < baseHistory.length - 1 && typeof msg.content === 'string' && msg.content.length > 1500) {
           return {
             ...msg,
             content: msg.content.slice(0, 1500) + '\n... [earlier tool output truncated for token efficiency]',
@@ -370,7 +364,9 @@ export class AgentLoop {
                   ...(options.skills?.length ? [LOAD_SKILL_DECLARATION] : []),
                   ...(options.allowSubagentDelegation === false ? [] : [SUBAGENT_DECLARATION]),
                 ],
-          maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+          ...(options.provider.id === 'moderado-cloud' && options.maxOutputTokens === undefined
+            ? {}
+            : { maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS }),
           signal,
         });
 

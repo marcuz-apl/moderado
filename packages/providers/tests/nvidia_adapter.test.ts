@@ -44,27 +44,28 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(adapter.name).toBe('OpenRouter');
   });
 
-  it('enforces Gateway token, message-count, and tool-count limits without changing OpenAI-compatible profiles', async () => {
+  it('sends Cloud inference requests without client-side token, message, or body limits', async () => {
     const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
-    const valid = { modelId: 'auto', messages: [{ role: 'user' as const, content: 'Hi' }], maxTokens: 1 };
-    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: undefined })) {} })
-      .rejects.toThrow(/max_tokens/);
-    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: 0 })) {} })
-      .rejects.toThrow(/max_tokens/);
-    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, maxTokens: 1.5 })) {} })
-      .rejects.toThrow(/max_tokens/);
-    await expect(async () => { for await (const _ of gateway.streamChat({ ...valid, messages: [] })) {} })
-      .rejects.toThrow(/1.*32.*messages/);
-    await expect(async () => { for await (const _ of gateway.streamChat({
-      ...valid, messages: Array.from({ length: 33 }, () => ({ role: 'user' as const, content: 'x' })),
-    })) {} }).rejects.toThrow(/1.*32.*messages/);
-    await expect(async () => { for await (const _ of gateway.streamChat({
-      ...valid, tools: Array.from({ length: 17 }, (_, i) => ({ name: `t${i}`, description: '', parameters: {} })),
-    })) {} }).rejects.toThrow(/16.*tools/);
+    let sentPayload: Record<string, any> | undefined;
+    nextHandler = (req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => { body += chunk; });
+      req.on('end', () => {
+        sentPayload = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      });
+    };
+    const manyMessages = Array.from({ length: 33 }, (_, i) => ({ role: 'user' as const, content: `message ${i}` }));
+    const largeMessage = 'x'.repeat(33 * 1024);
+    const manyTools = Array.from({ length: 17 }, (_, i) => ({ name: `tool_${i}`, description: '', parameters: {} }));
+    for await (const _ of gateway.streamChat({ modelId: 'auto', messages: [...manyMessages, { role: 'user', content: largeMessage }], tools: manyTools, maxTokens: 4096 })) {}
+    expect(sentPayload?.max_tokens).toBe(4096);
+    expect(sentPayload?.messages).toHaveLength(34);
+    expect(sentPayload?.messages.at(-1).content).toBe(largeMessage);
+    expect(sentPayload?.tools).toHaveLength(17);
 
-    const compatible = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'openrouter' });
-    nextHandler = (_req, res) => { res.writeHead(200, { 'Content-Type': 'text/event-stream' }); res.end('data: [DONE]\n\n'); };
-    for await (const _ of compatible.streamChat({ modelId: 'x', messages: [{ role: 'user', content: 'Hi' }] })) {}
   });
 
   it('sends Cloud requests larger than the former 4096-byte combined limit unchanged', async () => {
@@ -100,7 +101,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(sentPayload?.tools[0].function.description).toBe(toolDescription);
     expect(sentPayload?.tools[0].function.parameters.properties.query.description).toBe(parameterDescription);
   });
-  it('caps the default agent output limit to the Gateway maximum', async () => {
+  it('preserves the requested output limit for Cloud', async () => {
     let sentMaxTokens: unknown;
     nextHandler = (req, res) => {
       let body = '';
@@ -120,7 +121,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
       maxTokens: 4096,
     })) {}
 
-    expect(sentMaxTokens).toBe(2048);
+    expect(sentMaxTokens).toBe(4096);
   });
 
   it.each([

@@ -550,9 +550,15 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(turn2.messages.length).toBeGreaterThan(turn1.messages.length);
   });
 
-  it('limits Cloud conversation history to 32 messages while retaining the system prompt and newest turn', async () => {
+  it('preserves Cloud conversation history without a Gateway message cap', async () => {
     Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
     provider.queueTextResponse('Calgary weather answer.');
+    let sentMessages: typeof provider.recordedCalls[number]['messages'] = [];
+    const streamChat = provider.streamChat.bind(provider);
+    provider.streamChat = async function* (options) {
+      sentMessages = [...options.messages];
+      yield* streamChat(options);
+    };
     const conversationHistory = [
       { role: 'system' as const, content: 'old system' },
       ...Array.from({ length: 20 }, (_, index) => [
@@ -565,12 +571,50 @@ describe('AgentLoop (Core Execution Engine)', () => {
       workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler, conversationHistory,
     });
 
-    const sentMessages = provider.recordedCalls[0]?.messages ?? [];
-    expect(sentMessages.length).toBeLessThanOrEqual(32);
+    expect(sentMessages.length).toBe(42);
     expect(sentMessages[0]).toMatchObject({ role: 'system' });
     expect(sentMessages).toContainEqual({ role: 'user', content: 'What is the weather in Calgary today?' });
     expect(sentMessages.some(message => message.role === 'user' && message.content === 'old question 19')).toBe(true);
-    expect(sentMessages.some(message => message.role === 'user' && message.content === 'old question 0')).toBe(false);
+    expect(sentMessages.some(message => message.role === 'user' && message.content === 'old question 0')).toBe(true);
+  });
+
+  it('preserves Cloud history on follow-up requests after tool calls', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    const sentMessageCounts: number[] = [];
+    let followUpMessages: typeof provider.recordedCalls[number]['messages'] = [];
+    const streamChat = provider.streamChat.bind(provider);
+    provider.streamChat = async function* (options) {
+      sentMessageCounts.push(options.messages.length);
+      if (sentMessageCounts.length === 2) followUpMessages = [...options.messages];
+      yield* streamChat(options);
+    };
+    provider.queueToolCallResponse('list_files', { path: '.' });
+    provider.queueTextResponse('Here are the files.');
+    const conversationHistory = [
+      { role: 'system' as const, content: 'old system' },
+      ...Array.from({ length: 15 }, (_, index) => [
+        { role: 'user' as const, content: `old question ${index}` },
+        { role: 'assistant' as const, content: `old answer ${index}` },
+      ]).flat(),
+    ];
+
+    await loop.run('List the workspace files.', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler, conversationHistory,
+    });
+
+    expect(provider.recordedCalls).toHaveLength(2);
+    expect(sentMessageCounts).toEqual([32, 34]);
+    expect(followUpMessages[0]).toMatchObject({ role: 'system' });
+    expect(followUpMessages.at(-1)).toMatchObject({ role: 'tool' });
+  });
+
+  it('does not set the generic default output token limit for Cloud', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    provider.queueTextResponse('Answer.');
+
+    await loop.run('Answer this.', { workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler });
+
+    expect(provider.recordedCalls[0].maxTokens).toBeUndefined();
   });
 
   it('emits reasoning_delta events when provider streams reasoning chunks', async () => {
@@ -708,6 +752,23 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(toolMsg?.content).toContain('earlier tool output truncated for token efficiency');
   });
 
+  it('preserves older Cloud tool output without truncation', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    const longToolOutput = 'Cloud result '.repeat(500);
+    provider.queueTextResponse('Next answer.');
+
+    await loop.run('Continue.', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler,
+      conversationHistory: [
+        { role: 'tool', content: longToolOutput },
+        { role: 'assistant', content: 'Previous answer' },
+      ],
+    });
+
+    const toolMessage = provider.recordedCalls[0].messages.find(message => message.role === 'tool');
+    expect(toolMessage?.content).toBe(longToolOutput);
+  });
+
   it('strips conversational filler and preambles from model output (Layer 4)', () => {
     const rawWithPreamble = 'Sure! Here is the answer:\nGit stash temporarily stashes changes.\nHope this helps! Let me know if you need anything else.';
     expect(cleanConversationalFiller(rawWithPreamble)).toBe('Git stash temporarily stashes changes.');
@@ -752,4 +813,3 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(result.finalMessage).toBe('The answer is 42.');
   });
 });
-
