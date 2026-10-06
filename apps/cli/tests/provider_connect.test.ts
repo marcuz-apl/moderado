@@ -48,8 +48,8 @@ describe('provider connection setup', () => {
   });
 
   it('identifies expiring Moderado OAuth credentials for browser reauthorization', () => {
-    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', credentialExpiresAt: Date.now(), displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://api.mod.alfazen.org/v1' })).toBe(true);
-    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://api.mod.alfazen.org/v1' })).toBe(false);
+    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', credentialExpiresAt: Date.now(), displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://mod.alfazen.org/v1' })).toBe(true);
+    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://mod.alfazen.org/v1' })).toBe(false);
   });
 
   it('renders credential entry as a popup, masking secrets', () => {
@@ -77,7 +77,7 @@ describe('provider connection setup', () => {
         id: 'moderado-cloud',
         displayName: 'Moderado Cloud',
         kind: 'openai-compatible',
-        baseUrl: 'https://api.mod.alfazen.org/v1',
+        baseUrl: 'https://mod.alfazen.org/v1',
         apiKey: 'mrd_test-key',
         defaultModel: 'auto',
       });
@@ -106,7 +106,7 @@ describe('provider connection setup', () => {
     const previous = process.env.MODERADO_CLOUD_ENV;
     process.env.MODERADO_CLOUD_ENV = 'development';
     try {
-      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://127.0.0.1:8787/v1');
+      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://127.0.0.1:4788/v1');
     } finally {
       if (previous === undefined) delete process.env.MODERADO_CLOUD_ENV;
       else process.env.MODERADO_CLOUD_ENV = previous;
@@ -115,9 +115,9 @@ describe('provider connection setup', () => {
 
   it('uses a configured loopback Gateway URL for a new Cloud login', () => {
     const previous = process.env.MODERADO_CLOUD_BASE_URL;
-    process.env.MODERADO_CLOUD_BASE_URL = 'http://localhost:8787/v1/';
+    process.env.MODERADO_CLOUD_BASE_URL = 'http://localhost:4788/v1/';
     try {
-      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://localhost:8787/v1');
+      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://localhost:4788/v1');
     } finally {
       if (previous === undefined) delete process.env.MODERADO_CLOUD_BASE_URL;
       else process.env.MODERADO_CLOUD_BASE_URL = previous;

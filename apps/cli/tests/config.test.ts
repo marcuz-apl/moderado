@@ -113,7 +113,7 @@ describe('CLI Configuration Storage', () => {
     const store = new MemoryCredentialStore();
     const connection = await storeConnectionCredential({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://api.mod.alfazen.org/v1', apiKey: 'mrd_test-secret', defaultModel: 'auto',
+      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_test-secret', defaultModel: 'auto',
     }, store);
     saveConnection(connection, tempDir);
     const raw = fs.readFileSync(getConfigPath(tempDir), 'utf8');
@@ -128,10 +128,10 @@ describe('CLI Configuration Storage', () => {
   it('infers a local Gateway from a saved loopback URL', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'http://127.0.0.1:8787/v1', defaultModel: 'auto',
+      baseUrl: 'http://127.0.0.1:4788/v1', defaultModel: 'auto',
     }, tempDir);
     expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
-      .toBe('http://127.0.0.1:8787/v1');
+      .toBe('http://127.0.0.1:4788/v1');
   });
 
   it('preserves a remote HTTPS Gateway URL from the saved Cloud profile', () => {
@@ -147,17 +147,17 @@ describe('CLI Configuration Storage', () => {
     process.env.MODERADO_CLOUD_ENV = 'development';
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+      baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
     }, tempDir);
     expect(loadConfig(tempDir).connections?.['moderado-cloud']?.baseUrl)
-      .toBe('http://127.0.0.1:8787/v1');
+      .toBe('http://127.0.0.1:4788/v1');
   });
 
   it('persists OAuth credential expiry and refuses expired credentials', async () => {
     const store = new MemoryCredentialStore();
     const connection = await storeConnectionCredential({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://api.mod.alfazen.org/v1', apiKey: 'mrd_expired', defaultModel: 'auto',
+      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_expired', defaultModel: 'auto',
       credentialExpiresAt: Date.now() - 1000,
     }, store);
     saveConnection(connection, tempDir);
@@ -182,10 +182,10 @@ describe('CLI Configuration Storage', () => {
   it('loads a saved public Gateway as the active connection without credentials', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+      baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
     }, tempDir);
     expect(getActiveConnection(loadConfig(tempDir))).toMatchObject({
-      id: 'moderado-cloud', baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+      id: 'moderado-cloud', baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
     });
     expect(getActiveConnection(loadConfig(tempDir))?.apiKey).toBeUndefined();
   });

@@ -1,34 +1,32 @@
-﻿# Moderado Cloud Gateway integration handoff
+﻿# Moderado Gateway integration handoff
 
-Date: 2026-10-04
-Cloud contract: [`moderado-cloud/docs/CONTRACT.md`](../../moderado-cloud/docs/CONTRACT.md), stable v1.
+Date: 2026-10-06
+Gateway contract: [`moderado-gateway/docs/CONTRACT.md`](../../moderado-gateway/docs/CONTRACT.md), stable v1.
 
 ## Goal
 
-Let Moderado CLI use the owner-configured, zero-price model pool through the Cloud Gateway, while preserving direct BYOK and local providers. This is a CLI-owned integration; do not change the Cloud wire contract without coordinating with `moderado-cloud`.
+Let Moderado CLI use configured routes through the public Gateway, while preserving direct BYOK and local providers. This is a CLI-owned integration; coordinate wire contract changes with `moderado-gateway`.
 
 ## Existing support
 
-CLI already supports custom OpenAI-compatible endpoints, `/v1/models`, `/v1/chat/completions`, provider credential references, and streaming. A Gateway can likely be used today as a custom endpoint with a manually created `mrd_…` API key. The CLI login flow manages the Gateway base URL automatically and does not ask users to configure it.
+CLI supports keyless Gateway inference through `/v1/models` and `/v1/chat/completions`; account authorization is optional and uses the website OAuth flow. The CLI login flow manages the Gateway base URL automatically and does not ask users to configure it.
 
 ## CLI work
 
-1. Add `/login` for a named **Moderado Cloud** connection/profile. Offer a manual `mrd_…` key or browser authorization and set the base URL to `https://api.mod.alfazen.org/v1` internally. Retire `/connect` from the chat UI. Keep existing saved BYOK/local profiles independent.
+1. Use `/login` for the **Moderado Gateway** profile. Offer keyless access or optional browser authorization/manual `mrd_…` key for account features. Production uses `https://mod.alfazen.org/v1`; local development uses `http://127.0.0.1:4788/v1`. Keep existing saved BYOK/local profiles independent.
 2. For browser auth, use `client_id=moderado-cli`, random state, PKCE S256, an exact loopback callback, then exchange at `https://mod.alfazen.org/oauth/token`. Verify state and bind the exact callback/client ID; reject redirects during token exchange. The exchanged access key expires in 30 days; there is no refresh token, so `/login` must allow reauthorization. Avoid logging or writing key material to plain config; use existing credential storage where available.
-3. Fetch the authenticated Gateway inventory from `GET /v1/models`. Preserve route IDs as model identifiers and let `/model` browse the Gateway's available free routes. Send `auto` to the Gateway so it follows the Admin pool; a pinned route never silently switches. Keep local/BYOK profiles independent.
-4. Parse and surface streaming `event: moderado_status` fallback metadata before model output. Tell the user the destination route and a safe reason, and allow choosing/pinning another returned route without changing the Admin pool. The CLI currently uses streaming chat requests only; if a non-stream path is added later, it must also parse `moderado_fallback`.
-5. Match the v1 request subset: text-only messages, required `max_tokens` (1–2048), tools/tool results, streaming, and usage option. Client executes tool calls. Show actionable errors, including `quota_exceeded` with `Retry-After`, `hosted_routes_unavailable`, scope denial, and unavailable model. Do not retry an ambiguous or post-output failure in a way that duplicates work.
-6. Add offline fake-server tests for PKCE/state, token expiry/re-auth, model discovery, request validation, streaming status events, fallback display, and error mapping. No live provider calls in tests.
+3. Fetch the Gateway inventory from unauthenticated `GET /v1/models`. Preserve route IDs as model identifiers and let `/model` browse configured routes. Send `auto` to the Gateway so it follows configured routing; a pinned route targets its selected route. Keep local/BYOK profiles independent.
+4. The current Gateway contract does not promise fallback status events; routing decisions happen in the Gateway and providers. Keep client request handling compatible with the published contract and surface typed errors without exposing upstream details.
+5. Forward supported OpenAI-compatible request fields to the selected provider; the Gateway rewrites only the public model ID. The provider/model determines accepted fields, payload sizes, and limits. The CLI executes tool calls.
+6. Keep provider discovery, OAuth, and error handling covered by offline fake-server tests. Tests must not make live provider calls.
 
 ## Contract facts / limits
 
-- Gateway defaults to `https://api.mod.alfazen.org/v1`. A configured loopback URL is treated as local development; a remote HTTPS URL (including a NAS/VPS URL) is preserved. `MODERADO_CLOUD_BASE_URL` configures the URL before first login. `MODERADO_CLOUD_ENV=development|production` remains an explicit override.
+- Gateway defaults to `https://mod.alfazen.org/v1`. The unified website/Gateway service runs on `127.0.0.1:4788` in local development; remote HTTPS URLs are preserved. `MODERADO_CLOUD_BASE_URL` configures the URL before first login. `MODERADO_CLOUD_ENV=development|production` remains an explicit override. Legacy `api.mod.alfazen.org` and loopback port `8787` URLs migrate to the current defaults.
 - Account UI: `https://mod.alfazen.org/authorize`; token exchange: `https://mod.alfazen.org/oauth/token`.
 - OAuth access keys last 30 days; manual keys can have account-selected expiry and scope. Full key material is only shown once.
-- `auto` only advances after an explicit upstream 429/503 before output. Pinned models do not fail over.
-- Requests are text-only and bounded to a 32 KiB request body; there is no separate aggregate byte limit for messages and tools. `max_tokens` is required and capped at 2048; the CLI caps larger agent output limits to the Gateway maximum before sending.
-- Private beta quotas currently include 8 requests/account/key per UTC day and 80 globally per UTC day. Treat these as server policy; never advertise them as permanent.
+- Configured routes dispatch regardless of price, approval, freshness, enabled, or global-switch metadata. The Gateway applies no Moderado account, usage, request-size, token, or response caps; providers may enforce their own limits and prices.
 
-## Implementation status (2026-10-05)
+## Implementation status
 
-The implementation is pushed to `master` as follow-up work after the pushed `v0.4.0` tag. It implements the items above without adding runtime dependencies. The 0.4.0 tag remains unchanged; npm metadata is aligned to the current 0.4.2 source version. Full repository verification is recorded in [HANDOFF.md](../HANDOFF.md).
+The CLI integration supports public, keyless Gateway inference and optional browser authorization for account features. The Gateway runs locally with the website service on port `4788`; the public base URL is `https://mod.alfazen.org/v1`.

@@ -117,7 +117,7 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
   it('keeps a saved keyless Cloud Gateway active for chat setup', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+      baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
     }, tempDir);
     const connection = getActiveConnection(loadConfig(tempDir));
     expect(connection).toMatchObject({ id: 'moderado-cloud', defaultModel: 'auto' });

@@ -89,17 +89,17 @@ export function buildCompatibleModelMenuItems(
     items.push({
       label: options.autoLabel ?? 'Auto',
       value: 'model:auto',
-      tag: 'Free',
-      description: 'Use Moderado Cloud automatic free routing.',
+      tag: 'Gateway',
+      description: 'Let the Gateway choose a configured route.',
     });
     if (options.catalogError) {
       items.push({ label: 'Model list unavailable', value: 'catalog-status', tag: 'Check connection', description: options.catalogError });
     } else if (options.noAvailableModels) {
       items.push({
-        label: 'No available Cloud models',
+        label: 'No available Gateway routes',
         value: 'catalog-status',
         tag: 'No routes',
-        description: 'No free routes are enabled for this Cloud account. Ask your Cloud admin to enable a route.',
+        description: 'The Gateway has no configured routes.',
       });
     }
     items.push(...models
@@ -193,13 +193,13 @@ export async function selectCompatibleModelOverlay(
   const cloudOptions = providerId === 'moderado-cloud'
     ? {
       listModelsDirectly: true,
-      autoLabel: 'auto:free',
+      autoLabel: 'auto',
       ...(discoveryError ? { catalogError: discoveryError } : cloudRoutes.length === 0 ? { noAvailableModels: true } : {}),
     }
     : undefined;
 
   const picked = await selectListPopup(
-    `${providerName} Free Models`,
+    providerId === 'moderado-cloud' ? `${providerName} Models` : `${providerName} Free Models`,
     buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy, cloudOptions),
     { drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close' }
   );

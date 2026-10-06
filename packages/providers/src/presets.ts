@@ -1,8 +1,8 @@
 import type { ModelClassification, ModelInventoryEntry } from '@moderado/contracts';
 import { isFreeModelEntry } from './model_discovery.js';
 
-export const MODERADO_CLOUD_PRODUCTION_BASE_URL = 'https://api.mod.alfazen.org/v1';
-export const MODERADO_CLOUD_DEVELOPMENT_BASE_URL = 'http://127.0.0.1:8787/v1';
+export const MODERADO_CLOUD_PRODUCTION_BASE_URL = 'https://mod.alfazen.org/v1';
+export const MODERADO_CLOUD_DEVELOPMENT_BASE_URL = 'http://127.0.0.1:4788/v1';
 
 export function resolveModeradoCloudBaseUrl(mode?: string, gatewayUrl?: string): string {
   if (mode === 'development') return MODERADO_CLOUD_DEVELOPMENT_BASE_URL;
@@ -15,6 +15,8 @@ export function resolveModeradoCloudBaseUrl(mode?: string, gatewayUrl?: string):
     if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback))) {
       return MODERADO_CLOUD_PRODUCTION_BASE_URL;
     }
+    if (url.hostname === 'api.mod.alfazen.org') return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+    if (loopback && url.port === '8787') url.port = '4788';
     return url.toString().replace(/\/+$/, '');
   } catch {
     return MODERADO_CLOUD_PRODUCTION_BASE_URL;
@@ -130,8 +132,7 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     kind: 'openai-compatible',
     baseUrl: MODERADO_CLOUD_BASE_URL,
     defaultModel: 'auto',
-    freeCatalog: true,
-    requiresApiKey: true,
+    requiresApiKey: false,
   },
   {
     id: 'openrouter',

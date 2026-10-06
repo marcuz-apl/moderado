@@ -112,13 +112,13 @@ Maintainers can install a verified release artifact directly with
 `npm install -g ./moderado-<version>.tgz`. See
 [docs/RELEASING.md](../../docs/RELEASING.md) for the review procedure.
 
-### Log in to Moderado Cloud
+### Connect to the Moderado Gateway
 
-Run `/login` in the TUI and choose browser authorization or enter a Moderado
-Cloud `mrd_` API key. The CLI manages the Gateway URL automatically. After
-login, `/model` lists the available Cloud routes: `auto` follows the Cloud
-admin's model pool, while selecting a route pins requests to that route. Existing
-BYOK and local provider profiles remain independent.
+Run `/login` in the TUI and choose the public Gateway for keyless inference.
+Browser authorization or a Moderado Cloud `mrd_` API key is optional for account
+features. `/model` lists configured Gateway routes: `auto` follows Gateway
+routing, while selecting a route pins requests to it. Existing BYOK and local
+provider profiles remain independent.
 
 Cloud OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
@@ -126,7 +126,7 @@ On other platforms, the current credential store is memory-only, so log in again
 after starting a new CLI process.
 
 Cloud connections use their configured Gateway URL. Loopback URLs such as
-`http://127.0.0.1:8787/v1` are treated as local development; HTTPS URLs for a
+`http://127.0.0.1:4788/v1` are treated as local development; HTTPS URLs for a
 NAS, VPS, or other remote host are used as configured. To set the URL before
 first login, define `MODERADO_CLOUD_BASE_URL`. `MODERADO_CLOUD_ENV=development`
 and `MODERADO_CLOUD_ENV=production` remain available as explicit overrides.
@@ -142,7 +142,7 @@ Run `moderado` to open the TUI immediately. A fresh installation does not requir
 an API key or a preselected model. The welcome card shows **No model connected —
 use `/login`** until you add one.
 
-Use `/login` for Moderado Cloud and `/model` to browse its available free routes.
+Use `/login` for the public Moderado Gateway and `/model` to browse configured routes.
 Cloud `auto` follows the Gateway's configured pool; choosing a route in `/model`
 pins it for subsequent requests. Existing direct BYOK and local profiles remain
 available separately.

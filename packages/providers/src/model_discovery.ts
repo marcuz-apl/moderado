@@ -11,8 +11,8 @@ export const SPIKE_PROVIDER_ENDPOINTS = {} as const;
 function isModeradoGatewayUrl(baseUrl: string): boolean {
   try {
     const parsed = new URL(baseUrl);
-    return parsed.hostname === 'api.mod.alfazen.org'
-      || (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') && parsed.port === '8787';
+    return parsed.hostname === 'mod.alfazen.org'
+      || (parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost') && parsed.port === '4788';
   } catch {
     return false;
   }

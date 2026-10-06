@@ -1,37 +1,40 @@
-# Moderado Project Handoff
+﻿# Moderado Project Handoff
 
-Updated: 2026-10-06 04:16 UTC
-Branch: root repo `master`; Cloud repo `master`
-Status: **Transparent Gateway inference changes are committed and pushed to both origin/master branches. No deployment or package release was performed.**
+Updated: 2026-10-06 14:54 UTC
+Branch: Moderado `master` at `97f783c`; Gateway `master` at `99c203d`
+Status: **Gateway client sync is ready for review; changes are uncommitted.**
 
 ## Summary
 
-The Cloud Gateway now exposes model listing and inference without Moderado API-key authentication or Gateway policy caps. It dispatches configured routes regardless of price, approval, freshness, enabled, or global-switch metadata and passes inference fields to the provider apart from the model ID rewrite. Provider/model limits and costs remain external. The CLI supports keyless public Gateway connections and retains account login as an option.
+The public Gateway now shares one service with the website on port `4788`. This Moderado update aligns the CLI production URL, local development URL, keyless model discovery, and model-picker pricing labels with the latest Gateway contract. Existing saved legacy URLs are rewritten when loaded.
 
 ## Completed
 
-- Moderado commit `f0adf1e` (`v0.4.5+2610065 feat(cli): connect to the public Gateway without credentials`) pushed to `origin/master`.
-- Moderado-Cloud commit `a86fb59` (`v0.1.13+2610066 feat(gateway): remove Gateway inference policy gates`) pushed to `origin/master`.
-- Added `migrations/0008_gateway_usage.sql` for content-free reporting that does not block inference. Account view reports total Gateway requests, not account-attributed requests.
-- Updated active contracts and operations docs; older provider-eligibility recommendations are marked historical/superseded.
+- Moderado `97f783c` and Gateway `99c203d` are the source revisions inspected for this sync.
+- Updated Moderado defaults to `https://mod.alfazen.org/v1` and `http://127.0.0.1:4788/v1`; saved profiles using the old production hostname or loopback port `8787` migrate during config loading.
+- Removed the Gateway preset's key requirement and free-catalog declaration; the model picker describes configured routes without implying unknown prices are free.
+- Updated CLI docs and `docs/CLOUD_GATEWAY_INTEGRATION.md` to reflect the unified local service and transparent routing contract.
+
+## In progress
+
+- Run focused offline provider and CLI model-picker tests.
+- The health check at `http://127.0.0.1:4788/health` timed out, and `Get-NetTCPConnection` showed no listener on port `4788`.
 
 ## Working tree
 
-- Both repositories were clean immediately after push; verify current state with `git status --short --branch`.
+- Moderado has 14 modified files for this sync; no commit or push was made. Gateway repo was clean at `99c203d`.
 
 ## Checks
 
-- Moderado `npm test` — PASS (62 files, 506 tests).
-- Moderado `npm run typecheck` — PASS.
-- Moderado-Cloud `npm test` — PASS (109 passed, 1 Windows-only skip).
-- `git diff --check` — PASS in both repositories.
+- `npm run typecheck` — PASS after the client sync.
+- `git diff --check` — PASS.
+- Tests were not run for this sync.
 
 ## Decisions and context
 
-- Inference and model listing are unauthenticated. Any network-reachable client can consume configured provider credentials and paid capacity. Website account and Admin Panel authentication remain separate.
-- Fixed HTTPS provider endpoints and encrypted credentials remain. The Gateway requires an actual configured route and usable provider credential to dispatch.
-- The Gateway still has separate authenticated account/admin endpoints; account API keys do not gate or scope inference.
-- No deployment, live provider call, tag, or package publication was requested or performed.
+- Inference and model listing are unauthenticated. Any network client that can reach the Gateway can consume configured provider credentials and paid capacity.
+- Production clients use `https://mod.alfazen.org/v1`; local development uses `http://127.0.0.1:4788/v1` (`MODERADO_CLOUD_ENV=development`).
+- No deployment, live provider call, tag, or package publication was performed.
 
 ## Blockers
 
@@ -39,12 +42,12 @@ None.
 
 ## Next action
 
-1. If desired, deploy the two pushed repositories separately after reviewing the private-network exposure and runtime configuration.
+1. Run the focused offline provider and CLI model-picker tests; start the Gateway locally when development inference is needed.
 
 ## Resume notes
 
-- Root workspace: `D:\projects\moderado`; Cloud workspace: `D:\projects\moderado-cloud`.
-- Current behavior and risks are documented in Cloud `docs/CONTRACT.md`, `docs/ARCHITECTURE.md`, and `docs/OPERATIONS.md`.
+- Root workspace: `D:\projects\moderado`; Gateway workspace: `D:\projects\moderado-gateway`.
+- Gateway behavior is documented in `D:\projects\moderado-gateway\docs\CONTRACT.md`, `README.md`, and `docs\OPERATIONS.md`.
 ## Release record (v0.3.10)
 
 1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.

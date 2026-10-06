@@ -66,23 +66,23 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     ]));
   });
 
-  it('lists Moderado Cloud routes directly and labels auto routing as auto:free', () => {
+  it('lists Moderado Gateway routes directly without claiming they are free', () => {
     const items = buildCompatibleModelMenuItems('Moderado Cloud', [
       { id: 'auto' }, { id: 'vendor/route-one' }, { id: 'vendor/route-two' },
-    ], 'auto', { freeCatalog: true }, { listModelsDirectly: true, autoLabel: 'auto:free' });
+    ], 'auto', undefined, { listModelsDirectly: true, autoLabel: 'auto' });
 
     expect(items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'auto:free', value: 'model:auto' }),
-      expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one', tag: 'Free' }),
-      expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two', tag: 'Free' }),
+      expect.objectContaining({ label: 'auto', value: 'model:auto', tag: 'Gateway' }),
+      expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one', tag: 'Price unknown' }),
+      expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two', tag: 'Price unknown' }),
     ]));
     expect(items.find((item) => item.label === 'Browse available models')).toBeUndefined();
   });
 
   it('shows a sanitized catalog diagnostic when no Cloud routes can be loaded', () => {
-    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', { freeCatalog: true }, {
+    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', undefined, {
       listModelsDirectly: true,
-      autoLabel: 'auto:free',
+      autoLabel: 'auto',
       catalogError: 'Could not load models (HTTP 401). Check the API key and retry /model.',
     });
 
@@ -92,14 +92,14 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
   });
 
   it('explains when the Gateway has no enabled model routes', () => {
-    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', { freeCatalog: true }, {
+    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', undefined, {
       listModelsDirectly: true,
-      autoLabel: 'auto:free',
+      autoLabel: 'auto',
       noAvailableModels: true,
     });
 
     expect(items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'No available Cloud models', value: 'catalog-status' }),
+      expect.objectContaining({ label: 'No available Gateway routes', value: 'catalog-status' }),
     ]));
   });
 

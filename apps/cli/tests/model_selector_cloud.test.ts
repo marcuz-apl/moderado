@@ -20,7 +20,7 @@ vi.mock('../src/ui/popup.js', async (importOriginal) => {
 
 import { selectCompatibleModelOverlay } from '../src/ui/model_selector.js';
 
-describe('Moderado Cloud model picker discovery', () => {
+describe('Moderado Gateway model picker discovery', () => {
   let server: ReturnType<typeof createServer>;
   let baseUrl: string;
   let responseStatus: number;
@@ -52,7 +52,7 @@ describe('Moderado Cloud model picker discovery', () => {
   });
 
   const pickerOptions = (currentModel = 'auto') => ({
-    apiKey: 'mrd_test-key',
+    apiKey: undefined,
     baseUrl,
     providerId: 'moderado-cloud',
     providerName: 'Moderado Cloud',
@@ -60,21 +60,21 @@ describe('Moderado Cloud model picker discovery', () => {
     drawFrame: vi.fn(),
   });
 
-  it('loads authenticated routes and returns the exact selected route ID', async () => {
+  it('loads routes without a key and returns the exact selected route ID', async () => {
     pickerState.selected = 'model:vendor/route-one';
     const selected = await selectCompatibleModelOverlay(pickerOptions());
 
     expect(requestPath).toBe('/v1/models');
-    expect(authorization).toBe('Bearer mrd_test-key');
+    expect(authorization).toBeUndefined();
     expect(pickerState.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ label: 'auto:free', value: 'model:auto' }),
+      expect.objectContaining({ label: 'auto', value: 'model:auto' }),
       expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one' }),
       expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two' }),
     ]));
     expect(selected).toBe('vendor/route-one');
   });
 
-  it('maps the visible auto:free choice to the Gateway model ID auto', async () => {
+  it('maps the visible auto choice to the Gateway model ID auto', async () => {
     pickerState.selected = 'model:auto';
     await expect(selectCompatibleModelOverlay(pickerOptions())).resolves.toBe('auto');
   });
@@ -101,7 +101,7 @@ describe('Moderado Cloud model picker discovery', () => {
 
     expect(pickerState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        label: 'No available Cloud models',
+        label: 'No available Gateway routes',
         description: expect.stringContaining('enable a route'),
       }),
     ]));
