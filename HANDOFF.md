@@ -1,35 +1,50 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-06
-Branch: root repo `master` at `abca2d7`; Cloud repo `master` at `753ea00`
-Status: **Cloud Gateway daily and concurrency request quotas have been removed in local source and the local Gateway was restarted. Provider free-tier eligibility, zero-price routing, request-size/output-token/timeout bounds, and sign-in abuse protection remain. No Cloud deployment or commit was made.**
+Updated: 2026-10-06 04:16 UTC
+Branch: root repo `master`; Cloud repo `master`
+Status: **Transparent Gateway inference changes are committed and pushed to both origin/master branches. No deployment or package release was performed.**
 
-## Current task: private Gateway without Moderado request quotas
+## Summary
 
-Cloud changes in `D:\projects\moderado-cloud` remove account/key/model/global daily and concurrency request checks, remove the related route listing filters, and update account usage display plus PRD, contract, architecture, and website docs. The quota reservation table remains for content-free usage/outcome records. The local Gateway on port 8787 was restarted from this source; `/health` returned `ready`. Existing tests were not run, per session instruction; `node --check` on changed JS files and `git diff --check` passed. `apps/gateway/test/quota.test.js` still contains assertions for the old caps and should be updated before a future test run.
+The Cloud Gateway now exposes model listing and inference without Moderado API-key authentication or Gateway policy caps. It dispatches configured routes regardless of price, approval, freshness, enabled, or global-switch metadata and passes inference fields to the provider apart from the model ID rewrite. Provider/model limits and costs remain external. The CLI supports keyless public Gateway connections and retains account login as an option.
 
-Cloud modified files: `PRD.md`, `apps/gateway/src/index.js`, `apps/gateway/src/providers.js`, `apps/gateway/src/quota.js`, `apps/web/public/app.js`, `apps/web/src/index.js`, `apps/web/src/page.js`, `docs/ARCHITECTURE.md`, and `docs/CONTRACT.md`. Root Moderado source changes already in progress: `apps/cli/src/commands/chat.ts`, `packages/core/src/agent.ts`, `packages/core/tests/agent.test.ts`. Both repositories have uncommitted local changes; no deployment, commit, or release was performed.
+## Completed
 
-## Recent CLI baseline (2026-10-05)
+- Moderado commit `f0adf1e` (`v0.4.5+2610065 feat(cli): connect to the public Gateway without credentials`) pushed to `origin/master`.
+- Moderado-Cloud commit `a86fb59` (`v0.1.13+2610066 feat(gateway): remove Gateway inference policy gates`) pushed to `origin/master`.
+- Added `migrations/0008_gateway_usage.sql` for content-free reporting that does not block inference. Account view reports total Gateway requests, not account-attributed requests.
+- Updated active contracts and operations docs; older provider-eligibility recommendations are marked historical/superseded.
 
-Updated: 2026-10-05
-Branch: `master` (tracks `origin/master`).
-Status: **Removing the Cloud Gateway's aggregate 4096-byte messages/tools limit.** The Gateway keeps its independent 32 KiB HTTP body cap, 1–32 message limit, 16-tool limit, and 2048 output-token limit. No release tag or package publication was requested; npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10.
+## Working tree
 
-## Previous task: Cloud request-size compatibility
+- Both repositories were clean immediately after push; verify current state with `git status --short --branch`.
 
-The Gateway no longer applies a separate aggregate byte limit to messages and tools. Its complete request body remains capped at 32 KiB while reading. The Gateway does not enforce exact input-token counts; the selected provider enforces its model context window. CLI 0.4.3 sends the full prompt and tool schemas again, and locally enforces only the matching 32 KiB body cap.
+## Checks
 
-The adapter also caps integer `maxTokens` above 2048. The root build refreshes vendored runtime modules so packaged CLI requests include current adapter code. These Cloud changes do not alter other providers.
+- Moderado `npm test` — PASS (62 files, 506 tests).
+- Moderado `npm run typecheck` — PASS.
+- Moderado-Cloud `npm test` — PASS (109 passed, 1 Windows-only skip).
+- `git diff --check` — PASS in both repositories.
 
-Gateway verification: `npm test` (104 passed, 1 skipped); focused foundation tests pass. CLI verification: provider adapter tests and `npm run typecheck` pass. `VERSION` remains 0.4.3. Cross-repository changes are not yet committed/pushed. Next action: run complete CLI/package verification, review both diffs, then commit and push the authorized changes.
+## Decisions and context
 
-## Previous task: Cloud Gateway integration completion
+- Inference and model listing are unauthenticated. Any network-reachable client can consume configured provider credentials and paid capacity. Website account and Admin Panel authentication remain separate.
+- Fixed HTTPS provider endpoints and encrypted credentials remain. The Gateway requires an actual configured route and usable provider credential to dispatch.
+- The Gateway still has separate authenticated account/admin endpoints; account API keys do not gate or scope inference.
+- No deployment, live provider call, tag, or package publication was requested or performed.
 
-The implementation follows [docs/CLOUD_GATEWAY_INTEGRATION.md](docs/CLOUD_GATEWAY_INTEGRATION.md) and the stable v1 contract in `D:\projects\moderado-cloud\docs\CONTRACT.md`. `/login` now supports manual `mrd_` keys and browser PKCE; the CLI fixes the Gateway URL at `https://api.mod.alfazen.org/v1`. `/model` uses authenticated Cloud routes. Cloud `auto` is sent to the Gateway, while selected route IDs remain pinned. The adapter enforces v1 message/token/tool/body bounds, reports sanitized Gateway errors including `Retry-After`, and displays validated streamed fallback status. BYOK streams ignore Gateway-only status events. Browser credentials expire after 30 days and can be reauthorized through `/login`; Windows uses Credential Manager, while non-Windows credentials remain memory-only between CLI processes. Existing BYOK/local profiles remain independent.
+## Blockers
 
-Verification at that milestone passed with 0.4.2 metadata. Package metadata matches the canonical version. The source push is complete. Do not create/move tags or publish without a separate release request.
+None.
 
+## Next action
+
+1. If desired, deploy the two pushed repositories separately after reviewing the private-network exposure and runtime configuration.
+
+## Resume notes
+
+- Root workspace: `D:\projects\moderado`; Cloud workspace: `D:\projects\moderado-cloud`.
+- Current behavior and risks are documented in Cloud `docs/CONTRACT.md`, `docs/ARCHITECTURE.md`, and `docs/OPERATIONS.md`.
 ## Release record (v0.3.10)
 
 1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.
