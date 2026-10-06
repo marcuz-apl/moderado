@@ -132,6 +132,9 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     kind: 'openai-compatible',
     baseUrl: MODERADO_CLOUD_BASE_URL,
     defaultModel: 'auto',
+    // Moderado Cloud only exposes free routes; the Gateway model catalog does
+    // not include per-route pricing metadata to identify them individually.
+    freeCatalog: true,
     requiresApiKey: false,
   },
   {
@@ -245,9 +248,11 @@ export function isFreeModelOption(
   // A reported nonzero price outranks any blanket preset declaration.
   if (entry.pricing && Object.values(entry.pricing).some(price => price.trim() === '' || !Number.isFinite(Number(price)) || Number(price) !== 0)) return false;
   if (isFreeModelEntry(entry)) return true;
+  // A provider's explicit whole-catalog guarantee is scoped to that provider
+  // and outranks generic model-id classifications from other catalogs.
+  if (policy?.freeCatalog) return true;
   const curated = classification.source !== 'heuristic';
   if (curated && classification.accessTier !== 'free_trial' && classification.accessTier !== 'local') return false;
-  if (policy?.freeCatalog) return true;
   if (isDeclaredFreeModelId(entry.id, policy)) return true;
   if (!curated) return false;
   return classification.accessTier === 'free_trial' || classification.accessTier === 'local';

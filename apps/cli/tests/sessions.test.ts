@@ -56,6 +56,7 @@ describe('SessionStore', () => {
 
   it('labels cost as unknown until both reported usage and pricing are available', () => {
     expect(formatSessionCost({ promptTokens: 0, completionTokens: 0, totalTokens: 0, costKnown: false, available: false })).toBe('Cost unknown');
+    expect(formatSessionCost({ promptTokens: 0, completionTokens: 0, totalTokens: 0, costKnown: true, costUsd: 0, available: false })).toBe('$0.00');
     expect(formatSessionCost({ promptTokens: 100, completionTokens: 50, totalTokens: 150, costKnown: true, costUsd: 0, available: true })).toBe('$0.00');
     expect(formatSessionCost({ promptTokens: 100, completionTokens: 50, totalTokens: 150, costKnown: true, costUsd: 0.001234, available: true })).toBe('$0.001234');
   });
@@ -82,6 +83,13 @@ describe('SessionStore', () => {
     expect(next).toMatchObject({ totalTokens: 170, estimated: true, available: true, costKnown: false });
     expect(next.costUsd).toBeUndefined();
     expect(formatSessionCost(next)).toBe('Cost unknown');
+  });
+
+  it('knows a declared zero-cost turn is free even when token usage is estimated', () => {
+    const usage = accumulateSessionUsage(createSession('C:/repo').usage,
+      { promptTokens: 40, completionTokens: 10, totalTokens: 50 }, true,
+      { prompt: '0', completion: '0' });
+    expect(usage).toMatchObject({ estimated: true, available: true, costKnown: true, costUsd: 0 });
   });
 
   it('exports redacted Markdown and compacts older messages deterministically', () => {

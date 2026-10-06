@@ -1,69 +1,69 @@
-﻿# Moderado Project Handoff
+# Moderado Project Handoff
 
-Updated: 2026-10-06 17:36 UTC
-Branch: Moderado `master` at `d4680a4`; Gateway `master` at `99c203d`
-Status: **Release documentation distinguishes 0.3.10 from upcoming 0.4.8; Gateway model IDs now omit provider prefixes; changes are being pushed. Winget PR #444475 remains untouched.**
+Updated: 2026-10-06 18:38 UTC
+Branch: `master` at `f1a4fc5`
+Status: **Welcome/chat layout, model-switch recovery, and accurate zero-cost reporting for free routes and search are implemented.**
 
 ## Summary
 
-The Moderado CLI exposes separate connection paths: `/login` for the Moderado Gateway and `/connect` for direct providers. This restores the provider picker available in CLI 0.3.10 while preserving Gateway login. The current `/login` fix retains an existing Gateway Base URL when reauthenticating and shows the resolved URL in the login choices. Local Gateway `/v1/models` was reachable at `http://127.0.0.1:4788/v1/models` during diagnosis.
+Token/cost details appear at the far left of the welcome window�s Plan/Execute row. In chat, process usage precedes token/cost details on that row; long process text is shortened to preserve the details and mode label. Live updates repaint both portions. The model tag remains before auto-approve on the following row. The `/model` return path now resumes stdin before restoring raw mode, preventing a paused input stream after selection flows. Chat cost calculation now recognizes provider-declared free models when catalogs omit per-model pricing, while retaining advertised pricing for metered models. Direct web-search-only sessions report $0.00; model costs in sessions that also use web search continue to follow model pricing. Moderado Cloud declares its complete Gateway catalog free, so `/login` route labels show Free when pricing metadata is absent. The provider guarantee outranks generic paid model classifications, and free turns remain known-zero with estimated or multi-route usage. Existing unknown-usage sessions are repaired on startup when their stored provider matches the active free catalog.
 
 ## Completed
 
-- Restored `/connect` in standard slash-command validation, autocomplete, TUI dispatch, help, and no-provider guidance.
-- Reconnected the existing provider picker to active connection switching, saved profiles, and the existing credential-store behavior.
-- Clarified README and Gateway integration documentation to distinguish `/login` from direct `/connect` providers.
-- Updated existing command and welcome tests to expect `/connect` as supported.
-- Fixed Gateway re-login to use the saved Base URL unless environment overrides are set; added the resolved Base URL to the login option descriptions and documented the behavior.
-- Added PowerShell instructions to force development or production and clear the overrides to return to the saved Gateway URL.
-- Updated root and CLI READMEs, Guide, Distribution, First Publish, and Releasing docs to distinguish self-contained 0.3.10 from upcoming Gateway-integrated 0.4.8. Removed Winget as a documented installation/release channel; retained the existing PR without changes.
-- Updated the Gateway `/v1/models` catalog to return provider model IDs without provider prefixes where unique, while preserving unique IDs for collisions and accepting legacy provider-prefixed inference IDs. The local Gateway was restarted and returned healthy status with unprefixed IDs.
+- Updated static/live row rendering and model-switch input recovery in `apps/cli/src/ui/welcome.ts` and `apps/cli/src/commands/chat.ts`.
+- Added regression coverage for mode visibility, narrow rows, and model-switch input recovery in `apps/cli/tests/welcome.test.ts`.
+- Updated slash-command cycling expectation to match `/connect`, `/login`, `/model` order.
+- Chat now records `$0.00` for models covered by the active provider's free policy when the provider does not publish explicit pricing. Added an integration regression test using NVIDIA's price-free catalog metadata.
+- Direct web-search-only sessions mark cost as `$0.00` before the searching frame renders; cost formatting supports a known zero even when no model token usage exists. Regression coverage checks the live frame and persisted session.
+- Declared Moderado Cloud's model catalog free and added picker coverage for Free route labels. Zero cost is retained when token usage is estimated or a free turn switches among multiple routes; explicit nonzero prices still take precedence. Previously unknown same-provider session costs are migrated to zero.
 
 ## In progress
 
-- Focused CLI tests remain unrun.
+- None.
 
 ## Working tree
 
-- CLI documentation and Gateway code/docs are pending commits and pushes in their separate repositories.
+- Modified `apps/cli/src/ui/welcome.ts`, `apps/cli/src/commands/chat.ts`, `apps/cli/tests/welcome.test.ts`, and `HANDOFF.md`.
 
 ## Checks
 
-- `npm run typecheck` — PASS after the Gateway URL preservation change.
-- `git diff --check` — PASS.
-- Gateway `node --check` on modified runtime files — PASS.
-- Tests — NOT RUN.
+- `npm test -- apps/cli/tests/welcome.test.ts` � PASS (51 tests).
+- `npm test -- apps/cli/tests/chat_usage.test.ts` � PASS (3 tests; includes free-catalog, estimated Moderado Cloud, and live web-search zero-cost regressions).
+- `npm test -- apps/cli/tests/sessions.test.ts` � PASS (7 tests).
+- `npm test -- apps/cli/tests/model_selector_cloud.test.ts apps/cli/tests/model_selection.test.ts` � PASS (16 tests).
+- `npm test -- packages/providers/tests/presets.test.ts` � PASS (5 tests).
+- `npm run typecheck` � PASS.
+- `git diff --check` � PASS.
 
 ## Decisions and context
 
-- `/login` selects the public Gateway or account login; `/connect` selects direct provider/local/custom endpoints.
-- The Gateway remains the source of its configured route pool. Direct-provider connections use their own catalogs and credentials.
+- Explicitly resume stdin after `/model` returns because keypress decoder setup is one-time and does not guarantee that a paused stream resumes.
+- Clip process usage as needed to keep token/cost details and mode visible within terminal width.
 
 ## Blockers
 
-None.
+- None.
 
 ## Next action
 
-1. Run the focused CLI command and provider-connection tests before committing.
+1. Review the final working-tree changes.
 
 ## Resume notes
 
-- Root workspace: `D:\projects\moderado`.
-- Direct provider connection setup is implemented in `apps/cli/src/ui/provider_connect.ts` and is wired by `apps/cli/src/commands/chat.ts`.
+- Focused suite: `npm test -- apps/cli/tests/welcome.test.ts`.
 ## Release record (v0.3.10)
 
 1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.
-2. Verification run `36774093914` — all six jobs green.
+2. Verification run `36774093914` � all six jobs green.
 3. Downloaded the CI artifact and ran the actual Windows binary: reports
    `v0.3.10+260930d`. `manifest.json` revision `4006a9d`.
-4. Publish run `36774560319` (`confirm: PUBLISH`) succeeded. npm `latest` →
+4. Publish run `36774560319` (`confirm: PUBLISH`) succeeded. npm `latest` ?
    0.3.10; GitHub Release with 11 assets.
 5. Checksums (verified against the release sidecars):
    - `moderado-win-x64.exe` `54263b4801995d99147fb1a720dd52f104c38c4ba76ea6e74d0d2b5cbafeff0f`
    - `moderado-linux-x64` `b017f640f21939e766d0386c3f0e2bde55237b441aecbc28ebe0d606d40d7689`
    - `moderado-macos-arm64` `d6fbdcb748eb01e40e3d93ab96dd282ba73bf2a748d7088c04a5e13171f87054`
-6. Homebrew tap → 0.3.10 (`e968625`); Scoop bucket → 0.3.10 (`f7d2e9d`).
+6. Homebrew tap ? 0.3.10 (`e968625`); Scoop bucket ? 0.3.10 (`f7d2e9d`).
 7. winget PR #444475 was updated **in place** from 0.3.9 to 0.3.10
    (`d997c44`) and passed validation, but remains open pending moderator
    approval. The package is not yet available by ID in winget.
@@ -92,7 +92,7 @@ bump was treated as a plain `build`.
 
 Fixed in `.githooks/pre-commit` by stripping all leading stamps:
 `s/^(v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z] )+//`. Verified against a
-synthetic stale message — it now yields `v0.3.10+260930d`.
+synthetic stale message � it now yields `v0.3.10+260930d`.
 
 ### Release follow-up (historical)
 
@@ -107,7 +107,7 @@ synthetic stale message — it now yields `v0.3.10+260930d`.
 1. Committed the documentation corrections as `cbbf47d` (`v0.3.9+2609305`); the Alfazen hook advanced only the build suffix.
 2. Pushed `master`, tagged `v0.3.9`, and pushed the tag. The tag satisfies the CI gate `test "$GITHUB_REF_NAME" = "$(cut -d+ -f1 VERSION)"`.
 3. Verification run `36746258969` passed all four jobs (438 tests, `verify:package`, three native binaries, merged metadata, generated manifests).
-4. Publish run `36746585342` (`confirm: PUBLISH`, `tag: v0.3.9`) succeeded: npm `latest` → 0.3.9 with sigstore provenance (log index 3022283679), and the GitHub Release with 11 assets.
+4. Publish run `36746585342` (`confirm: PUBLISH`, `tag: v0.3.9`) succeeded: npm `latest` ? 0.3.9 with sigstore provenance (log index 3022283679), and the GitHub Release with 11 assets.
 5. Smoke-tested the **published** tarball via `npm pack moderado@0.3.9` into an isolated prefix: `--help`, `--version` (reports `v0.3.9`), `skills` (4 built-ins + 23 user skills), and `doctor` (exit 0, no secrets) all pass. Only `zod` was installed alongside it.
 6. Pointed `README.md`, `apps/cli/README.md`, `docs/DISTRIBUTION.md`, and the `install.sh` usage comment at v0.3.9.
 
@@ -118,12 +118,12 @@ synthetic stale message — it now yields `v0.3.10+260930d`.
 | npm `latest` | **0.3.9** | none |
 | GitHub Release | **v0.3.9** (11 assets) | none |
 | curl installer | 0.3.9 (tracks latest) | none |
-| Homebrew tap | **0.3.9** | done — `a82ccc1` |
-| Scoop bucket | **0.3.9** | done — `f0e47d9` |
+| Homebrew tap | **0.3.9** | done � `a82ccc1` |
+| Scoop bucket | **0.3.9** | done � `f0e47d9` |
 | winget | 0.3.9 PR open | blocked on a community moderator; see below |
 
 
-The Homebrew and Scoop repos were verified live and were both still pinned at 0.3.0 — older than the 0.3.7 the runbook previously claimed. Both were bumped to 0.3.9 by copying the canonical manifests from the v0.3.9 GitHub Release, after confirming all three binary checksums matched the published `.sha256` sidecars byte for byte:
+The Homebrew and Scoop repos were verified live and were both still pinned at 0.3.0 � older than the 0.3.7 the runbook previously claimed. Both were bumped to 0.3.9 by copying the canonical manifests from the v0.3.9 GitHub Release, after confirming all three binary checksums matched the published `.sha256` sidecars byte for byte:
 
 | Binary | SHA-256 |
 |---|---|
@@ -136,8 +136,8 @@ The Homebrew and Scoop repos were verified live and were both still pinned at 0.
 Closed the stale 0.3.0 PR #439175 and opened
 [microsoft/winget-pkgs#444475](https://github.com/microsoft/winget-pkgs/pull/444475)
 for 0.3.9 (`MERGEABLE`). It adds the three required manifests under
-`manifests/m/MarcuzApl/Moderado/0.3.9/` — version, installer (portable, x64),
-and defaultLocale (en-US) — with `InstallerSha256` taken from the v0.3.9
+`manifests/m/MarcuzApl/Moderado/0.3.9/` � version, installer (portable, x64),
+and defaultLocale (en-US) � with `InstallerSha256` taken from the v0.3.9
 release sidecar.
 
 Microsoft's 10-stage validation pipeline is the authoritative check, and a
@@ -179,9 +179,9 @@ still carry the bug** and are only correct once re-released.
 
 - Removed the `codex/vscode-extension` branch locally and on `origin`; pruned the remote-tracking ref. The tip commit `193ba46` is retained only as the tag `backup/codex-vscode-extension`. No VS Code extension code was ever merged into `master`, so no product code was reverted.
 - Cleaned the workspace of untracked leftovers from that branch: `apps/vscode/` (stale `dist/` + `node_modules/`), `.vscode/` (an `extensions.json` recommending the abandoned extension), and `artifacts/vsix/`. All three were gitignored build output, so the removal changed no tracked file.
-- Repaired a UTF-8 mojibake corruption (`U+FFFD`) in `docs/GUIDE.md` and `apps/cli/README.md` — the apostrophe in "workspace's `package.json`" had been replaced with a replacement character.
+- Repaired a UTF-8 mojibake corruption (`U+FFFD`) in `docs/GUIDE.md` and `apps/cli/README.md` � the apostrophe in "workspace's `package.json`" had been replaced with a replacement character.
 - Corrected stale documentation: `docs/GUIDE.md` claimed v0.3.7 while the project is at v0.3.9; both READMEs described "the 7 tools" when 12 are registered plus 2 core-owned plus dynamic MCP tools.
-- Added a §2 Tool Inventory table to `docs/TOOLS.md` listing all tools with their approval gate and source file, then renumbered the old §2 Tool Specifications to §3 and the error taxonomy to §4.
+- Added a �2 Tool Inventory table to `docs/TOOLS.md` listing all tools with their approval gate and source file, then renumbered the old �2 Tool Specifications to �3 and the error taxonomy to �4.
 - Added `docs/COMPETITIVE_ANALYSIS.md`: a verified survey of Cline CLI and OpenCode CLI from vendor documentation, Moderado's confirmed baseline read from source, a three-tier ranked gap list, and explicit non-goals. Linked from `README.md`, `docs/GUIDE.md`, `docs/TOOLS.md`, `apps/cli/README.md`, and `docs/CLI_CAPABILITY_ROADMAP.md`.
 - Added four compact built-in coding skills: code review, implementation planning, systematic debugging, and test-driven development.
 - User `SKILL.md` files are discovered but disabled by default. `/skills on NAME` and `moderado skills on NAME` persist selected user skills in `~/.moderado/config.json`; `off` reverses this without deleting files. An enabled user skill can override a built-in by name.
@@ -202,7 +202,7 @@ still carry the bug** and are only correct once re-released.
 - Keep a small built-in set on master. Enable user skills selectively before considering more of `alfazen-coding`.
 - Keep package version 0.3.9 through the provider refactor; its squash commit advances only the connected build suffix.
 - IDE extensions are out of product scope. `codex/vscode-extension` is deleted; keep only the `backup/codex-vscode-extension` tag until the owner confirms the work is unrecoverable-needed, then drop the tag.
-- Do not chase OpenCode/Cline parity. Themes, keybinds, formatters, web UI, server mode, kanban, hub daemon, scheduling, and a plugin/hook runtime stay out — they are presentation and orchestration surface, not agent capability.
+- Do not chase OpenCode/Cline parity. Themes, keybinds, formatters, web UI, server mode, kanban, hub daemon, scheduling, and a plugin/hook runtime stay out � they are presentation and orchestration surface, not agent capability.
 - Do not adopt Cline's auto-approve-by-default. The approval-first default is Moderado's identity.
 
 ## Next action
@@ -245,12 +245,12 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
    - Step 2 derives the tag from `cut -d+ -f1 VERSION` instead of hard-coding a version.
 
 4. **Verification & package preparation**:
-   - `npm run typecheck` â€” clean; `npm test` â€” 49 suites, 343 tests passing offline.
-   - `npm run verify:package` â€” vendored bundle, importer rewrite, tarball policy, isolated global install, and `moderado --help` smoke test all pass as `moderado-0.3.0.tgz`.
+   - `npm run typecheck` — clean; `npm test` — 49 suites, 343 tests passing offline.
+   - `npm run verify:package` — vendored bundle, importer rewrite, tarball policy, isolated global install, and `moderado --help` smoke test all pass as `moderado-0.3.0.tgz`.
    - Removed the superseded local `moderado-0.2.61.tgz` so a `npm publish apps/cli/*.tgz` glob cannot ship two versions.
 
 5. **Alfazen hook finding and the workaround used (owner decision still open)**:
-   - `.githooks/pre-commit` classifies `.git/COMMIT_EDITMSG`, which `git commit -m`/`-F` only refreshes *after* pre-commit has run. Every commit is therefore classified against the **previous** commit's subject; that previously mis-bumped the prep commit (`v0.2.61` â†’ `v0.2.62`).
+   - `.githooks/pre-commit` classifies `.git/COMMIT_EDITMSG`, which `git commit -m`/`-F` only refreshes *after* pre-commit has run. Every commit is therefore classified against the **previous** commit's subject; that previously mis-bumped the prep commit (`v0.2.61` → `v0.2.62`).
    - Reproduced deterministically against the real hooks: a `docs:` commit followed by a `release(minor):` commit committed with `-m` produced no minor bump.
    - Workaround used for this release: pre-seed `.git/COMMIT_EDITMSG` with the release subject before committing. The hook then computed `v0.3.0+260921I`, staged `VERSION`, and `commit-msg` restamped the subject exactly as designed.
    - Consequence to watch: any commit made immediately after a `release(minor):` subject will be mis-bumped to `v0.4.0` unless the hook is fixed. Recommended fix (needs owner approval, shared Alfazen infrastructure): classify the message Git is actually committing, e.g. move the bump into `prepare-commit-msg`.
@@ -260,7 +260,7 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
    - `packages/tools/tests/jail.test.ts` asserted that backslash-only UNC notation escapes the jail, which is only true on Windows. That assertion is now guarded by the same drive-letter check the neighbouring tests use, while the POSIX-absolute and WSL-UNC escape assertions still run on every platform.
    - `apps/cli/tests/npm_package.test.ts` no longer depends on the ambient `npm_execpath` and now passes the target platform explicitly, so the Windows invocation contracts are asserted on every runner instead of only on Windows.
    - Reproduced and re-verified in a fresh clone of the tag commit: without the build 24 suites fail exactly as CI reported, and with `npm run build` first the full 49 suites / 343 tests pass.
-   - macOS `/var` â†’ `/private/var` symlink resolution surfaced two further defects. [`packages/tools/src/tools/list_files.ts`](file:///d:/projects/moderado/packages/tools/src/tools/list_files.ts) computed workspace-relative paths against the *supplied* root while walking a canonicalized directory, so an existing-subdirectory query returned escaped paths (for example `../../private/var/...`) instead of `src/index.ts`; `listFiles` and `ListFilesTool` now canonicalize the walk root once and fall back to the supplied root when it cannot be resolved. The `/session share` assertion in [`apps/cli/tests/chat.test.ts`](file:///d:/projects/moderado/apps/cli/tests/chat.test.ts) now compares against the canonicalized root.
+   - macOS `/var` → `/private/var` symlink resolution surfaced two further defects. [`packages/tools/src/tools/list_files.ts`](file:///d:/projects/moderado/packages/tools/src/tools/list_files.ts) computed workspace-relative paths against the *supplied* root while walking a canonicalized directory, so an existing-subdirectory query returned escaped paths (for example `../../private/var/...`) instead of `src/index.ts`; `listFiles` and `ListFilesTool` now canonicalize the walk root once and fall back to the supplied root when it cannot be resolved. The `/session share` assertion in [`apps/cli/tests/chat.test.ts`](file:///d:/projects/moderado/apps/cli/tests/chat.test.ts) now compares against the canonicalized root.
    - The `binary-metadata` merge gate then failed with `ENOENT ... collected/win/manifest.json` because `upload-artifact` keeps the `artifacts/<version>/<target>/` nesting (it roots the archive at the glob's static prefix), while `merge-binaries --source` expects the manifest at the source root; the merge step now resolves each per-target source directory through the connected version.
    - Reproduced that macOS class of defect locally with a Windows junction root (`path !== realpath`): the query form returned `../reprow-.../src/index.ts` before the fix and `src/index.ts` after it.
 
@@ -271,19 +271,19 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 
 ## Checks
 
-- `npm run typecheck` â€” PASS (0 errors)
-- `npm run build` â€” PASS
-- `npm test` â€” PASS (50 test files, 347 tests passed; one earlier run flaked a timing-sensitive test under parallel load, two consecutive reruns green)
-- `npm run verify:package` â€” PASS (`Verified moderado-0.3.0.tgz`)
-- `git diff --check` â€” PASS (CRLF advisories only)
+- `npm run typecheck` — PASS (0 errors)
+- `npm run build` — PASS
+- `npm test` — PASS (50 test files, 347 tests passed; one earlier run flaked a timing-sensitive test under parallel load, two consecutive reruns green)
+- `npm run verify:package` — PASS (`Verified moderado-0.3.0.tgz`)
+- `git diff --check` — PASS (CRLF advisories only)
 
 ## Remaining release steps (owner-gated)
 
-**Smallest next action:** configure the npm trusted publisher (item 1) â€” it is the only gate blocking the automated release path.
+**Smallest next action:** configure the npm trusted publisher (item 1) — it is the only gate blocking the automated release path.
 
-1. Configure the npm trusted publisher at `https://www.npmjs.com/package/moderado/access` (Trusted Publisher â†’ GitHub Actions): repository `marcuz-apl/moderado`, workflow filename `publish.yml`, environment `release` (or blank). Package now exists.
-2. **Decision recorded â€” do NOT release 0.3.1 yet.** Everything since `v0.3.0` is docs + CI/distribution wiring that does not change the shipped CLI, so `0.3.0` already satisfies the public-release gate. Cutting `0.3.1` now would also stale in-flight winget PR #439175 and would have to be manual again (trusted publisher not yet configured). Recommended: release `0.3.1` later purely as a low-stakes validation of the full OIDC pipeline (sync `apps/cli/package.json` â†’ pre-flight â†’ tag `v0.3.1` â†’ green Verify run â†’ dispatch Publish with `confirm: PUBLISH`), ideally after #439175 merges; otherwise skip it and let the next `feat` commit take over as `v0.4.0`. `VERSION` reading `v0.3.1+2609225` while npm sits at `0.3.0` is normal between releases under Alfazen.
-3. Distribution follow-through: watch [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) to merge per-release tap/bucket bumps are manual copies (auto-push needs a cross-repo `TAP_PUSH_TOKEN` â€” owner decision, see `docs/DISTRIBUTION.md` Â§6).
+1. Configure the npm trusted publisher at `https://www.npmjs.com/package/moderado/access` (Trusted Publisher → GitHub Actions): repository `marcuz-apl/moderado`, workflow filename `publish.yml`, environment `release` (or blank). Package now exists.
+2. **Decision recorded — do NOT release 0.3.1 yet.** Everything since `v0.3.0` is docs + CI/distribution wiring that does not change the shipped CLI, so `0.3.0` already satisfies the public-release gate. Cutting `0.3.1` now would also stale in-flight winget PR #439175 and would have to be manual again (trusted publisher not yet configured). Recommended: release `0.3.1` later purely as a low-stakes validation of the full OIDC pipeline (sync `apps/cli/package.json` → pre-flight → tag `v0.3.1` → green Verify run → dispatch Publish with `confirm: PUBLISH`), ideally after #439175 merges; otherwise skip it and let the next `feat` commit take over as `v0.4.0`. `VERSION` reading `v0.3.1+2609225` while npm sits at `0.3.0` is normal between releases under Alfazen.
+3. Distribution follow-through: watch [winget-pkgs#439175](https://github.com/microsoft/winget-pkgs/pull/439175) to merge per-release tap/bucket bumps are manual copies (auto-push needs a cross-repo `TAP_PUSH_TOKEN` — owner decision, see `docs/DISTRIBUTION.md` §6).
 
 ## Blockers
 

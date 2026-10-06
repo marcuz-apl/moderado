@@ -68,8 +68,8 @@ describe('Moderado Gateway model picker discovery', () => {
     expect(authorization).toBeUndefined();
     expect(pickerState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'auto', value: 'model:auto' }),
-      expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one' }),
-      expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two' }),
+      expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one', tag: 'Free' }),
+      expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two', tag: 'Free' }),
     ]));
     expect(selected).toBe('vendor/route-one');
   });
@@ -102,7 +102,7 @@ describe('Moderado Gateway model picker discovery', () => {
     expect(pickerState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         label: 'No available Gateway routes',
-        description: expect.stringContaining('enable a route'),
+        description: expect.stringContaining('no configured routes'),
       }),
     ]));
   });

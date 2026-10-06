@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import readline from 'node:readline';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,7 +31,7 @@ import {
 import { handleMcpCommand } from '../src/commands/chat.js';
 
 type ComposerStdin = typeof process.stdin;
-type ComposerContext = { writes: string[]; rows: number };
+type ComposerContext = { writes: string[]; rows: number; resumeCount: () => number };
 
 interface ComposerPosition {
   row: number;
@@ -84,7 +85,7 @@ const runComposerTurn = async (
       ...extraOptions,
     });
     await new Promise((resolve) => setImmediate(resolve));
-    await drive(stdin, { writes, rows: 24 });
+    await drive(stdin, { writes, rows: 24, resumeCount: () => resume.mock.calls.length });
     const result = await turnPromise;
     return result.text;
   } finally {
@@ -145,15 +146,16 @@ describe('OpenCode-style Welcome TUI', () => {
     // Line 3: bottom dark-gray surface row
     expect(stripAnsi(lines[2])).toBe(expectedIndent + ' '.repeat(expectedWidth));
 
-    // Line 4: model name, tokens, cost, mode
+    // Line 4: tokens, cost, and mode
     const line4Plain = stripAnsi(lines[3]);
-    expect(line4Plain).toContain('moonshotai/kimi-k3');
     expect(line4Plain).toContain('0 tokens / $0.00');
     expect(line4Plain).toContain('Plan / [Execute] (Tab)');
 
-    // Line 5: working directory, auto-approve
+    // Line 5: working directory, model, auto-approve
     const line5Plain = stripAnsi(lines[4]);
     expect(line5Plain).toContain('d:\\projects\\moderado');
+    expect(line5Plain).toContain('moonshotai/kimi-k3');
+    expect(line5Plain).not.toContain('0 tokens / $0.00');
     expect(line5Plain).toContain('Auto-approve off (Shift+Tab)');
   });
 
@@ -174,6 +176,77 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(stripAnsi(lines[1])).toMatch(/^ ❯ refactor database layer\s+$/);
     expect(stripAnsi(lines[3])).toContain('[Plan] / Execute (Tab)');
     expect(stripAnsi(lines[4])).toContain('Auto-approve enabled (Shift+Tab)');
+  });
+
+  it('resumes stdin after returning from model selection', async () => {
+    let resumeCountAfterSelection = 0;
+    const emitKeypressEvents = vi.spyOn(readline, 'emitKeypressEvents').mockImplementation(() => {});
+    try {
+      const result = await runComposerTurn(async (stdin, context) => {
+        for (const character of '/model') {
+          stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+        }
+        stdin.emit('keypress', '\r', { name: 'return' });
+        await new Promise((resolve) => setImmediate(resolve));
+        resumeCountAfterSelection = context.resumeCount();
+
+        for (const character of 'hello') {
+          stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+        }
+        stdin.emit('keypress', '\r', { name: 'return' });
+      }, {
+        onModelSelect: async () => {
+          process.stdin.pause();
+          return 'selected-model';
+        },
+      });
+
+      expect(resumeCountAfterSelection).toBeGreaterThan(1);
+      expect(result).toBe('hello');
+    } finally {
+      emitKeypressEvents.mockRestore();
+    }
+  });
+
+  it('places process usage and token cost left of the mode on the composer row', () => {
+    const output = renderWelcomeCard({
+      model: 'model-tag',
+      tokens: 1500,
+      cost: '$0.00',
+      workspace: '/workspace/app',
+      mode: 'Execute',
+      autoApprove: true,
+      width: 100,
+      chatQuestion: 'Submitted question',
+      tokenUsage: {
+        usage: { promptTokens: 1234, completionTokens: 2345, totalTokens: 3579 },
+        estimated: false,
+        generationMs: 1000,
+        outputTokensPerSecond: 107,
+      },
+    });
+
+    const lines = output.split('\n').map(stripAnsi);
+    expect(lines[3]).toContain('Input 1234 | Output 2345 | Total 3579 | 107 tok/s | 1500 tokens / $0.00');
+    expect(lines[3]).toContain('Plan / [Execute] (Tab)');
+    expect(lines[4].indexOf('model-tag')).toBeLessThan(lines[4].indexOf('Auto-approve enabled (Shift+Tab)'));
+    expect(lines[4]).not.toContain('1500 tokens / $0.00');
+  });
+
+  it('keeps the mode visible on narrow rows with long process usage', () => {
+    const line = stripAnsi(renderWelcomeCard({
+      model: 'model-tag', tokens: 987654, cost: '$123.45', workspace: '.',
+      mode: 'Execute', autoApprove: true, width: 80, chatQuestion: 'Task',
+      tokenUsage: {
+        usage: { promptTokens: 123456, completionTokens: 234567, totalTokens: 358023 },
+        estimated: false, generationMs: 1000, outputTokensPerSecond: 1234,
+      },
+    }).split('\n')[3]);
+
+    expect(line).toContain('Input');
+    expect(line).toContain('987654 tokens / $123.45');
+    expect(line).toContain('Plan / [Execute] (Tab)');
+    expect(line.length).toBeLessThanOrEqual(79);
   });
 
   it('starts the interactive workspace with auto-approve enabled', async () => {
@@ -638,7 +711,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('selects and completes slash command candidates by index', () => {
     expect(selectCommandCandidate('/se', 0, 0)?.name).toBe('/session');
-    expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/model');
+    expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/login');
     expect(selectCommandCandidate('/', 0, -1)?.name).toBe('/exit');
   });
 
@@ -879,25 +952,40 @@ describe('token usage display', () => {
     const { formatTokenUsage, renderChatUsageUpdate } = await import('../src/ui/welcome.js');
     expect(formatTokenUsage(usageSnapshot)).toBe('Input ~100 | Output ~20 | Total ~120 | ~10 tok/s');
     expect(formatTokenUsage({ ...usageSnapshot, estimated: false, generationMs: 0 })).toBe('Input 100 | Output 20 | Total 120');
-    const update = renderChatUsageUpdate(usageSnapshot, 20);
-    expect(update.startsWith('\x1b7\x1b[11;1H\r\x1b[K')).toBe(true);
+    const update = renderChatUsageUpdate(usageSnapshot, 20, undefined, undefined, 24);
+    expect(update.startsWith('\x1b7\x1b[22;1H\r\x1b[K')).toBe(true);
     expect(update.endsWith('\x1b8')).toBe(true);
     expect(update).toContain('Input ~100 | Output');
     expect(update).not.toContain('\n');
+    expect(renderChatUsageUpdate(usageSnapshot, 120, undefined, '1500 tokens / $0.42'))
+      .toContain('Input ~100 | Output ~20 | Total ~120 | ~10 tok/s | 1500 tokens / $0.42');
+    const liveRow = stripAnsi(renderChatUsageUpdate(usageSnapshot, 80, undefined, '1500 tokens / $0.42', 24, 'Execute'));
+    expect(liveRow).toContain('Plan / [Execute] (Tab)');
+    const paintedRow = liveRow.split('\r')[1]?.replace('\x1b8', '') ?? '';
+    expect(paintedRow).toContain('1500 tokens / $0.42');
+    expect(paintedRow.length).toBeLessThanOrEqual(79);
   });
   it('replaces the thought row in the full screen', () => {
-    const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 0, cost: '$0', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
-    expect(screen).toContain('Input ~100');
+    const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 1500, cost: '$0.42', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
+    const lines = screen.split('\n');
+    const modeRow = lines.findIndex(line => line.includes('[Plan] / Execute (Tab)'));
+    expect(lines[modeRow]).toContain('Input ~100 | Output ~20 | Total … | 1500 tokens / $0.42');
+    expect(lines[modeRow].length).toBeLessThanOrEqual(79);
+    const questionRow = lines.findIndex(line => line.includes('❯ Hi'));
+    expect(lines[questionRow + 1]?.trim()).toBe('');
     expect(screen).not.toContain('Thought for');
   });
 });
-it('marks cumulative estimated usage in the composer', () => {
-  expect(stripAnsi(renderWelcomeCard({ model: 'test', tokens: 120, cost: 'unavailable', workspace: '.', mode: 'Plan', autoApprove: false, usageEstimated: true }))).toContain('~120 tokens');
+it('keeps cumulative token and cost details with process usage instead of the model tag', () => {
+  const composer = stripAnsi(renderWelcomeCard({ model: 'test', tokens: 120, cost: 'unavailable', workspace: '.', mode: 'Plan', autoApprove: false, usageEstimated: true, chatQuestion: 'Hi' })).split('\n');
+  expect(composer[3]).toContain('~120 tokens / unavailable');
+  expect(composer[4]).toContain('test');
+  expect(composer[4]).not.toContain('~120 tokens');
 });
 
 it('targets the exact usage row in the chat frame', async () => {
   const { renderChatUsageUpdate } = await import('../src/ui/welcome.js');
   const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 0, cost: '$0', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
-  const row = screen.split('\n').findIndex(line => line.includes('Input ~100')) + 1;
-  expect(renderChatUsageUpdate(usageSnapshot, 80)).toContain(`\x1b[${row};1H`);
+  const row = screen.split('\n').findIndex(line => line.includes('[Plan] / Execute (Tab)')) + 1;
+  expect(renderChatUsageUpdate(usageSnapshot, 80, undefined, undefined, 30)).toContain(`\x1b[${row};1H`);
 });

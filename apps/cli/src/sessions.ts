@@ -46,7 +46,8 @@ export function calculateSessionCost(usage: ChatUsage | undefined, pricing?: Rec
 /** Add one task snapshot once; estimates never produce a billing claim. */
 export function accumulateSessionUsage(previous: StoredSession['usage'], usage: ChatUsage, estimated: boolean, pricing?: Record<string, string>): StoredSession['usage'] {
   const isEstimated = Boolean(previous.estimated || estimated);
-  const cost = isEstimated ? { costKnown: false } : calculateSessionCost(usage, pricing);
+  const pricesAreZero = Number(pricing?.prompt) === 0 && Number(pricing?.completion) === 0;
+  const cost = pricesAreZero ? calculateSessionCost(usage, pricing) : isEstimated ? { costKnown: false } : calculateSessionCost(usage, pricing);
   const costKnown = cost.costKnown && (previous.totalTokens === 0 || previous.costKnown);
   return {
     promptTokens: previous.promptTokens + usage.promptTokens,
@@ -66,7 +67,7 @@ export function calculateOutputTokenRate(completionTokens: number, streamDuratio
 }
 
 export function formatSessionCost(usage: StoredSession['usage']): string {
-  if (!usage.available || !usage.costKnown || usage.costUsd === undefined) return 'Cost unknown';
+  if (!usage.costKnown || usage.costUsd === undefined) return 'Cost unknown';
   if (usage.costUsd === 0) return '$0.00';
   return `$${usage.costUsd < 0.01 ? usage.costUsd.toFixed(6) : usage.costUsd.toFixed(4)}`;
 }

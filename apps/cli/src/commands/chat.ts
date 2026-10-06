@@ -7,7 +7,7 @@ import { createDefaultToolRegistry, ToolRegistry, canonicalizeRoot, createMcpToo
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult, type UsageEvent } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
-import { getActiveConnection, loadConfig, ModeradoConfig, ProviderConnection, removeMcpServer, requiresCredentialReference, resolveApiKey, resolveConnectionCredential, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
+import { freeModelPolicyFor, getActiveConnection, loadConfig, ModeradoConfig, ProviderConnection, removeMcpServer, requiresCredentialReference, resolveApiKey, resolveConnectionCredential, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
 import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
@@ -20,7 +20,7 @@ import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatCo
 import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
-import { findModelPricing } from '../model_pricing.js';
+import { findModelPricing, isFreeModelOption } from '../model_pricing.js';
 import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
 import { buildWorkspaceMap } from '../repo_map.js';
 import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
@@ -844,6 +844,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       modelId: currentModel,
       mode: activeMode,
     });
+  if (
+    activeSession.usage.available &&
+    !activeSession.usage.costKnown &&
+    activeSession.providerId === activeConnection?.id &&
+    freeModelPolicyFor(activeConnection?.id)?.freeCatalog
+  ) {
+    activeSession.usage.costKnown = true;
+    activeSession.usage.costUsd = 0;
+    sessionStore.save(activeSession);
+  }
   let sessionTokens = activeSession.usage.totalTokens;
   let isFirst = true;
   if (config.typescriptLanguageServer) process.env.MODERADO_TYPESCRIPT_LANGUAGE_SERVER = config.typescriptLanguageServer;
@@ -1378,6 +1388,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     const liveSearchTool = tools.get('web_search');
     if (shouldFastRouteWebSearch(trimmed) && liveSearchTool) {
       const searchStartedAt = Date.now();
+      if (!provider && activeSession.usage.totalTokens === 0) {
+        activeSession.usage.costKnown = true;
+        activeSession.usage.costUsd = 0;
+      }
       lastQuestion = trimmed;
       lastAnswer = 'Searching the web...';
       lastThoughtTime = 0;
@@ -1464,7 +1478,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen({
           model: currentModel ?? 'No model connected — use /login or /connect',
-          tokens: Math.round(sessionTokens),
+          tokens: Math.round(sessionTokens + (usageRecorded ? 0 : turnUsage?.usage.totalTokens ?? 0)),
           cost: costLabel(),
           usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
           workspace: canonicalWorkspace,
@@ -1605,7 +1619,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
               requestAbort.abort();
             }
             if (budgetStopped || firstBudgetWarning || event.final || event.timestamp - lastUsagePaint >= 400) {
-              process.stdout.write(renderChatUsageUpdate(event, process.stdout.columns || 80, budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined));
+              process.stdout.write(renderChatUsageUpdate(event, process.stdout.columns || 80, budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined, `${Math.round(sessionTokens + event.usage.totalTokens)} tokens / ${costLabel()}`, process.stdout.rows || 24, activeMode));
               lastUsagePaint = event.timestamp;
             }
           }
@@ -1654,13 +1668,25 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         saveConnection(secured); config = loadConfig(); activateConnection(secured);
         result = await runAgent();
       }
-      if (turnUsage && !turnUsage.estimated) {
+      if (turnUsage) {
         let pricing: Record<string, string> | undefined;
+        const modelIds = new Set([...usedModels, result.selectedModel.id]);
+        const freePolicy = freeModelPolicyFor(activeConnection?.id);
+        let inventory: Awaited<ReturnType<NvidiaAdapter['discoverModels']>> = [];
         try {
-          if (usedModels.size <= 1) pricing = findModelPricing(await provider!.discoverModels(signal), result.selectedModel.id);
+          inventory = await provider!.discoverModels(signal);
         } catch {
           // A valid answer remains usable when the provider catalog is unavailable.
         }
+        const allModelsAreFree = [...modelIds].every((modelId) => isFreeModelOption(
+          inventory.find((entry) => entry.id === modelId) ?? { id: modelId },
+          modelId === result.selectedModel.id
+            ? result.selectedModel.classification
+            : router.classifyModel(modelId, args.profile.includes('local')),
+          freePolicy,
+        ));
+        if (allModelsAreFree) pricing = { prompt: '0', completion: '0' };
+        else if (!turnUsage.estimated && modelIds.size === 1) pricing = findModelPricing(inventory, result.selectedModel.id);
         recordTurnUsage(pricing);
       }
       recordTurnUsage();

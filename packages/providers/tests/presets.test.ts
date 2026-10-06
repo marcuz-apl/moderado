@@ -37,4 +37,12 @@ describe('shared provider presets', () => {
     expect(isFreeModelOption({ id: 'orcarouter/free' }, unknown, freeModelPolicyFor('orcarouter'))).toBe(true);
     expect(isFreeModelOption({ id: 'orcarouter/free' }, unknown, freeModelPolicyFor('openrouter'))).toBe(false);
   });
+
+  it('uses the Moderado Cloud free catalog for cost even when generic model classification says paid', () => {
+    const cloudFreePolicy = freeModelPolicyFor('moderado-cloud');
+    const genericPaidClassification = { modelId: 'openai/gpt-oss-20b', accessTier: 'paid', toolSupport: 'supported', source: 'official_metadata' } as const;
+
+    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b' }, genericPaidClassification, cloudFreePolicy)).toBe(true);
+    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b', pricing: { prompt: '0.001', completion: '0.002' } }, genericPaidClassification, cloudFreePolicy)).toBe(false);
+  });
 });
