@@ -1,9 +1,9 @@
 # First Public Release via npmjs.com + GitHub Actions
 
 A historical field log of how Moderado published `moderado@0.3.0` for the first time
-(2026-09-22). `moderado@0.3.10` is the current published, self-contained CLI;
-the upcoming `0.4.8` release integrates the Moderado Gateway and requires it for
-Gateway model routes and inference. Both versions use the `moderado` command.
+(2026-09-22). `moderado@0.4.8` is the current published CLI and integrates the
+Moderado Gateway for model routes and inference. The previous `0.3.10` release
+is self-contained. Both versions use the `moderado` command.
 Use the README and `docs/RELEASING.md` for current installation and release
 procedures. The normal path is now CI, but the first publish could not be, for
 reasons explained below.

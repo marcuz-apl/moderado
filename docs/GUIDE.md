@@ -3,11 +3,11 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. This guide reflects the upcoming v0.4.8 source. The latest
-published CLI release remains v0.3.10: it is self-contained and does not require
-the Gateway. In v0.4.8, `/login` requires the Gateway for model routes and
-inference; `/connect` remains available for direct provider connections. Both
-versions use the `moderado` command name.
+quick start. This guide reflects the current v0.4.8 release. Its `/login`
+command uses the Gateway for model routes and inference; `/connect` remains
+available for direct provider connections. The previous v0.3.10 release is
+self-contained and does not require the Gateway. Both versions use the
+`moderado` command name.
 
 ---
 

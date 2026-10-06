@@ -2,11 +2,10 @@
 
 Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
-Release context: `0.3.10` is the published self-contained CLI and does not need
-the Moderado Gateway. `0.4.8` is the upcoming Gateway-integrated CLI: `/login`
-uses the Gateway for model routes and inference, while `/connect` continues to
-support direct providers. Do not publish 0.4.8 until its documentation is ready.
-Windows installation for the 0.4.8 release will use npm and Scoop; no Winget
+Release context: `0.4.8` is the Gateway-integrated CLI release: `/login` uses
+the Gateway for model routes and inference, while `/connect` continues to
+support direct providers. `0.3.10` remains available as the previous
+self-contained CLI. Windows installation uses npm and Scoop; no Winget
 submission or package-index release is planned.
 
 ---
@@ -19,7 +18,7 @@ version, then run the local verification suite:
 ```bash
 # 0. Sync apps/cli/package.json (and package-lock.json) with the SemVer portion
 #    of VERSION, so the release tag and the published artifact agree.
-#    Example: VERSION "v0.4.0+<UTC-build>" -> "version": "0.4.0"
+#    For this release: VERSION "v0.4.8+<UTC-build>" -> "version": "0.4.8"
 cat VERSION
 
 # 1. Ensure clean build across all workspace packages
@@ -35,7 +34,7 @@ npm run typecheck
 npm run verify:package
 ```
 
-The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.0`), and
+The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.8`), and
 `npm run verify:package` produces `apps/cli/moderado-<package.json version>.tgz`.
 Both must carry the same `major.minor.patch`, otherwise the GitHub Release would
 attach an artifact whose version disagrees with its tag.
@@ -52,7 +51,7 @@ attach an artifact whose version disagrees with its tag.
 ## 2. Push Release Tag (Artifact Verification Gate)
 
 When ready for release, tag the verified commit with the SemVer portion of `VERSION`
-(`cut -d+ -f1 VERSION`; for this release `v0.4.0`):
+(`cut -d+ -f1 VERSION`; for this release `v0.4.8`):
 
 ```bash
 git tag "$(cut -d+ -f1 VERSION)"

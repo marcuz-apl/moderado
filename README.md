@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Source version](https://img.shields.io/badge/source-v0.4.8--upcoming-orange.svg)](file:///d:/projects/moderado/VERSION)
+[![Latest release](https://img.shields.io/github/v/release/marcuz-apl/moderado)](https://github.com/marcuz-apl/moderado/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -52,10 +52,10 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.3.10** | Published on npm and available in Scoop | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
-| **0.4.8** | Upcoming; not published yet | Gateway-integrated CLI. `/login` requires the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
+| **0.4.8** | Latest release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
+| **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
-Both versions use the command name `moderado`. While 0.3.10 remains the published npm version, pin it with `npm install -g moderado@0.3.10` to keep using the self-contained CLI. The npm `latest` tag and Scoop package will be updated for 0.4.8 as part of its release.
+Both versions use the command name `moderado`. Install the latest release with `npm install -g moderado`. To keep using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
 
 Chocolatey is deliberately out of scope; the full channel runbook lives in
 [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
@@ -65,10 +65,10 @@ Chocolatey is deliberately out of scope; the full channel runbook lives in
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.10
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.8
 
 # npm (requires Node.js >= 20)
-npm install -g moderado@0.3.10
+npm install -g moderado
 ```
 
 ### macOS
@@ -78,10 +78,10 @@ npm install -g moderado@0.3.10
 brew tap marcuz-apl/moderado && brew install moderado
 
 # curl installer (arm64), same checksum verification as Linux
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.3.10
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.8
 
 # npm (requires Node.js >= 20)
-npm install -g moderado@0.3.10
+npm install -g moderado
 ```
 
 ### Windows
@@ -92,7 +92,7 @@ scoop bucket add moderado https://github.com/marcuz-apl/scoop-moderado
 scoop install moderado
 
 # npm (requires Node.js >= 20)
-npm install -g moderado@0.3.10
+npm install -g moderado
 ```
 
 Any npm-compatible runner works on every platform above (`bun add -g

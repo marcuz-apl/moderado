@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Source version](https://img.shields.io/badge/source-v0.4.8--upcoming-orange.svg)](file:///d:/projects/moderado/VERSION)
+[![Latest release](https://img.shields.io/github/v/release/marcuz-apl/moderado)](https://github.com/marcuz-apl/moderado/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -88,14 +88,13 @@ npm install -g moderado
 moderado --help
 ```
 
-The latest published npm release is 0.3.10. It is self-contained and works
-without the Moderado Gateway. The upcoming 0.4.8 release integrates `/login`
-with the Gateway, which is required for its route catalog and inference;
-`/connect` remains available for direct providers. Both releases use the
-`moderado` command name.
-Version 0.4.8 is not published yet. After release, npm `latest` and the Scoop
-bucket will be updated to it. For now, pin 0.3.10 to retain the self-contained
-CLI: `npm install -g moderado@0.3.10`.
+The latest published release is 0.4.8. Its `/login` command uses the Moderado
+Gateway for model routes and inference; `/connect` remains available for direct
+providers. The previous 0.3.10 release is self-contained and works without the
+Gateway. Both releases use the `moderado` command name.
+
+Install the latest release with `npm install -g moderado`. To stay on the
+self-contained 0.3.10 CLI, run `npm install -g moderado@0.3.10`.
 
 Any npm-compatible installer works (bun add -g moderado,
 pnpm add -g moderado, npx -y moderado@latest --help). Prebuilt binaries and the
@@ -159,8 +158,9 @@ available separately.
 Moderado stores sessions per workspace in `~/.moderado/sessions/`. Use
 `/session` to create, resume, export, or compact a local conversation. Session
 exports redact recognized API-key prefixes. The status line uses only
-provider-reported token usage. It shows the calculated cost when the selected
-model exposes prompt and completion prices, and **Cost unknown** otherwise.
+provider-reported token usage. It shows `$0.00` for Moderado Cloud free routes,
+calculates cost when a model exposes prompt and completion prices, and shows
+**Cost unknown** when a metered model's pricing is unavailable.
 
 Saved OpenAI-compatible profiles continue to support providers such as
 OpenRouter, Z.AI, DeepSeek, Moonshot, and Mistral. Compatibility depends on each
