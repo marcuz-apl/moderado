@@ -16,7 +16,7 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
 
     expect(items).toEqual([
       expect.objectContaining({
-        label: 'Log in to Moderado Cloud first',
+        label: 'Connect Moderado Cloud first',
         description: expect.stringContaining('/login'),
       }),
       expect.objectContaining({ label: 'Close Window' }),

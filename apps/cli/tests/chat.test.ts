@@ -35,7 +35,7 @@ import {
   isLocalWorkspaceQuery,
 } from '../src/commands/chat.js';
 import { CliParsedArgs } from '../src/args.js';
-import { loadConfig, saveConfig, saveMcpServer } from '../src/config.js';
+import { getActiveConnection, loadConfig, saveConfig, saveConnection, saveMcpServer } from '../src/config.js';
 import { ApprovalRequest, ChatMessage } from '@moderado/contracts';
 import { createSession } from '../src/sessions.js';
 
@@ -112,6 +112,16 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
 
     const exitCode = await handleChatSession(args, 'v0.1.2', controller.signal);
     expect(exitCode).toBe(0);
+  });
+
+  it('keeps a saved keyless Cloud Gateway active for chat setup', () => {
+    saveConnection({
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+      baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+    }, tempDir);
+    const connection = getActiveConnection(loadConfig(tempDir));
+    expect(connection).toMatchObject({ id: 'moderado-cloud', defaultModel: 'auto' });
+    expect(connection?.apiKey).toBeUndefined();
   });
 
 

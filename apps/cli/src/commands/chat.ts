@@ -735,7 +735,7 @@ export async function executeBtwQuery(
   if (!provider || !currentModel) {
     await drawFrame(renderBoxLines('By The Way (/btw)', [
       'No model or provider connected.',
-      'Log in to Moderado Cloud with /login or select a model with /model first.',
+      'Connect to the public Gateway or use /login to sign in, then select a model with /model.',
       '',
       'Press Esc or Enter to return.',
     ], 72));
@@ -811,7 +811,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let config = loadConfig();
   let activeConnection = getActiveConnection(config);
   if (activeConnection) activeConnection = await resolveConnectionCredential(activeConnection, credentialStore);
-  if (activeConnection?.id === 'moderado-cloud' && !activeConnection.apiKey) activeConnection = undefined;
   if (!activeConnection && resolveApiKey()) {
     activeConnection = { id: 'nvidia-nim', displayName: 'NVIDIA NIM', kind: 'nvidia-nim',
       baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: resolveApiKey(), defaultModel: config.defaultModel };
@@ -829,7 +828,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const activateConnection = (connection: ProviderConnection, explicitModel?: string): void => {
     activeConnection = connection;
     currentModel = explicitModel ?? connection.defaultModel ?? (connection.kind === 'nvidia-nim' ? 'auto' : undefined);
-    provider = new NvidiaAdapter({ apiKey: connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
+    provider = new NvidiaAdapter({ apiKey: connection.id === 'moderado-cloud' ? undefined : connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
   };
   if (activeConnection) activateConnection(activeConnection, args.model);
 
@@ -904,7 +903,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
         if (activeConnection.kind === 'openai-compatible') {
           const modelId = await selectCompatibleModelOverlay({
-            apiKey: activeConnection.apiKey,
+            apiKey: activeConnection.id === 'moderado-cloud' ? undefined : activeConnection.apiKey,
             baseUrl: activeConnection.baseUrl,
             providerId: activeConnection.id,
             providerName: activeConnection.displayName,
@@ -920,7 +919,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           }
           return modelId;
         }
-        const selection = await selectModelOverlay({ apiKey: activeConnection.apiKey, currentModel, signal, saveSelectionByDefault: true, drawFrame });
+        const selection = await selectModelOverlay({ apiKey: activeConnection.id === 'moderado-cloud' ? undefined : activeConnection.apiKey, currentModel, signal, saveSelectionByDefault: true, drawFrame });
         if (selection.modelId) {
           currentModel = selection.modelId;
           activeConnection = { ...activeConnection, defaultModel: selection.modelId };
@@ -1274,7 +1273,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     if (trimmed === '/help') {
       lastQuestion = trimmed;
       lastAnswer = 'Available slash commands:\n' +
-        '  /login     - Log in to Moderado Cloud\n' +
+        '  /login     - Connect to the public Gateway or log in to Moderado Cloud\n' +
         '  /model     - Switch active AI model\n' +
         '  /init      - Scaffold AGENTS.md from workspace scan\n' +
         '  /mcp       - Manage local MCP servers\n' +
@@ -1402,7 +1401,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
 
     if (!provider) {
-      process.stdout.write('\nNo model is connected. Log in to Moderado Cloud before sending this task.\n');
+      process.stdout.write('\nNo model is connected. Connect to the public Gateway or log in to Moderado Cloud.\n');
       const connection = await loginModeradoCloudInteractive({ signal });
       if (!connection) { process.stdout.write('No provider connected. Use /login whenever you are ready.\n\n'); continue; }
       const runtimeConnection = requiresCredentialReference(connection) ? await storeConnectionCredential(connection, credentialStore) : connection;

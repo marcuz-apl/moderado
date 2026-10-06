@@ -238,8 +238,8 @@ export async function storeConnectionCredential(connection: ProviderConnection, 
   return { ...connection, credentialReference: reference };
 }
 
-export function requiresCredentialReference(connection: Pick<ProviderConnection, 'id'>, platform: NodeJS.Platform = process.platform): boolean {
-  return platform === 'win32' || connection.id === 'moderado-cloud';
+export function requiresCredentialReference(connection: Pick<ProviderConnection, 'id' | 'apiKey'>, platform: NodeJS.Platform = process.platform): boolean {
+  return Boolean(connection.apiKey?.trim()) && (platform === 'win32' || connection.id === 'moderado-cloud');
 }
 
 export async function resolveConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {

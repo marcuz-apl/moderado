@@ -36,7 +36,7 @@ export class NvidiaAdapter implements IProviderAdapter {
     this.id = config.providerId || 'nvidia';
     this.name = config.providerName || 'NVIDIA NIM';
     this.isModeradoCloud = this.id === 'moderado-cloud';
-    this.apiKey = config.apiKey || process.env.NVIDIA_API_KEY || '';
+    this.apiKey = config.apiKey || (this.id === 'nvidia' ? process.env.NVIDIA_API_KEY : undefined) || '';
     this.baseUrl = (config.baseUrl || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
   }
 
@@ -197,32 +197,30 @@ export class NvidiaAdapter implements IProviderAdapter {
   }
 
   private async handleHttpError(response: Response, action: string): Promise<never> {
-    if (this.isModeradoCloud) {
-      let code: string | undefined;
-      try {
-        const body: unknown = await response.json();
-        if (body && typeof body === 'object' && 'error' in body && body.error && typeof body.error === 'object'
-          && 'code' in body.error && typeof body.error.code === 'string') {
-          code = body.error.code;
-        }
-      } catch {
-        // Return a status-based, sanitized error when the Gateway body is invalid.
-      }
-      code ??= response.status === 401 ? 'unauthorized'
-        : response.status === 403 ? 'scope_denied'
-          : response.status === 400 ? 'invalid_request'
-            : response.status === 404 ? 'model_unavailable'
-              : response.status === 429 ? 'quota_exceeded'
-                : response.status === 503 ? 'service_unavailable' : 'provider_error';
-      if (!GATEWAY_ERROR_CODES.includes(code)) code = 'provider_error';
-      const retrySeconds = parseRetryAfter(response.headers.get('Retry-After'));
-      throw new GatewayError(code, response.status, retrySeconds);
-    }
     let errorText = '';
-    try {
-      errorText = await response.text();
-    } catch {
-      // ignore
+    if (this.isModeradoCloud) {
+      try {
+        errorText = await response.text();
+      } catch {
+        // Fall through to a status-based provider error when the response body is unavailable.
+      }
+      try {
+        const body: unknown = JSON.parse(errorText);
+        const code = body && typeof body === 'object' && 'error' in body && body.error && typeof body.error === 'object'
+          && 'code' in body.error && typeof body.error.code === 'string' ? body.error.code : undefined;
+        if (code && GATEWAY_ERROR_CODES.includes(code)) {
+          throw new GatewayError(code, response.status, parseRetryAfter(response.headers.get('Retry-After')));
+        }
+      } catch (error) {
+        if (error instanceof GatewayError) throw error;
+        // Unrecognized or malformed bodies use the provider's ordinary error mapping below.
+      }
+    } else {
+      try {
+        errorText = await response.text();
+      } catch {
+        // ignore
+      }
     }
 
     if (response.status === 401 || response.status === 403) {

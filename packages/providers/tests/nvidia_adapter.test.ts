@@ -44,6 +44,31 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(adapter.name).toBe('OpenRouter');
   });
 
+  it('does not send the NVIDIA environment key to a keyless Cloud Gateway', async () => {
+    const previousKey = process.env.NVIDIA_API_KEY;
+    process.env.NVIDIA_API_KEY = 'nvapi-must-not-leak';
+    const authorizations: Array<string | undefined> = [];
+    nextHandler = (req, res) => {
+      authorizations.push(req.headers.authorization);
+      if (req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ data: [] }));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      }
+    };
+    try {
+      const gateway = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado-cloud' });
+      await gateway.discoverModels();
+      for await (const _ of gateway.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) {}
+      expect(authorizations).toEqual([undefined, undefined]);
+    } finally {
+      if (previousKey === undefined) delete process.env.NVIDIA_API_KEY;
+      else process.env.NVIDIA_API_KEY = previousKey;
+    }
+  });
+
   it('sends Cloud inference requests without client-side token, message, or body limits', async () => {
     const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
     let sentPayload: Record<string, any> | undefined;
@@ -145,6 +170,32 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
       expect(caught).toMatchObject({ retryAfterSeconds: 17 });
       expect(String(caught)).toContain('17 seconds');
     }
+  });
+
+  it('maps raw Cloud upstream 401 responses as provider authentication errors', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: { message: 'upstream token expired', code: 'invalid_api_key' } }));
+    };
+    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    let caught: unknown;
+    try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) {} }
+    catch (error) { caught = error; }
+    expect(caught).toMatchObject({ name: 'AuthenticationError', statusCode: 401 });
+    expect(String(caught)).toContain('upstream token expired');
+  });
+
+  it('maps raw Cloud upstream 429 responses as provider rate limits', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '12' });
+      res.end(JSON.stringify({ error: { message: 'upstream capacity reached', code: 'rate_limit_exceeded' } }));
+    };
+    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    let caught: unknown;
+    try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) {} }
+    catch (error) { caught = error; }
+    expect(caught).toMatchObject({ name: 'RateLimitError', statusCode: 429, retryAfterSeconds: 12 });
+    expect(String(caught)).toContain('upstream capacity reached');
   });
 
   it('converts an HTTP-date Retry-After header into a delay in seconds', async () => {

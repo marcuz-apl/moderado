@@ -165,14 +165,29 @@ describe('CLI Configuration Storage', () => {
     expect((await resolveConnectionCredential(connection, store)).apiKey).toBeUndefined();
   });
 
-  it('requires a credential reference for Moderado Cloud on every platform', () => {
+  it('requires credential storage only for Cloud profiles that have a key', () => {
     const cloud = { id: 'moderado-cloud' };
+    const keyedCloud = { id: 'moderado-cloud', apiKey: 'mrd_test' };
     const other = { id: 'openrouter' };
-    expect(requiresCredentialReference(cloud, 'linux')).toBe(true);
-    expect(requiresCredentialReference(cloud, 'darwin')).toBe(true);
-    expect(requiresCredentialReference(cloud, 'win32')).toBe(true);
+    const keyedOther = { id: 'openrouter', apiKey: 'sk_test' };
+    expect(requiresCredentialReference(cloud, 'linux')).toBe(false);
+    expect(requiresCredentialReference(cloud, 'darwin')).toBe(false);
+    expect(requiresCredentialReference(cloud, 'win32')).toBe(false);
+    expect(requiresCredentialReference(keyedCloud, 'linux')).toBe(true);
+    expect(requiresCredentialReference(keyedCloud, 'win32')).toBe(true);
     expect(requiresCredentialReference(other, 'linux')).toBe(false);
-    expect(requiresCredentialReference(other, 'win32')).toBe(true);
+    expect(requiresCredentialReference(keyedOther, 'win32')).toBe(true);
+  });
+
+  it('loads a saved public Gateway as the active connection without credentials', () => {
+    saveConnection({
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+      baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+    }, tempDir);
+    expect(getActiveConnection(loadConfig(tempDir))).toMatchObject({
+      id: 'moderado-cloud', baseUrl: 'https://api.mod.alfazen.org/v1', defaultModel: 'auto',
+    });
+    expect(getActiveConnection(loadConfig(tempDir))?.apiKey).toBeUndefined();
   });
 
   it('uses legacy NVIDIA credentials as an implicit NVIDIA connection', () => {

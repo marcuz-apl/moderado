@@ -88,6 +88,20 @@ describe('provider connection setup', () => {
     }
   });
 
+  it('builds a public Moderado Gateway profile without an account key', () => {
+    const previousBaseUrl = process.env.MODERADO_CLOUD_BASE_URL;
+    process.env.MODERADO_CLOUD_BASE_URL = 'https://gateway.example/v1/';
+    try {
+      expect(buildModeradoCloudConnection()).toEqual({
+        id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+        baseUrl: 'https://gateway.example/v1', apiKey: undefined, defaultModel: 'auto',
+      });
+    } finally {
+      if (previousBaseUrl === undefined) delete process.env.MODERADO_CLOUD_BASE_URL;
+      else process.env.MODERADO_CLOUD_BASE_URL = previousBaseUrl;
+    }
+  });
+
   it('targets the local Gateway when login runs in development mode', () => {
     const previous = process.env.MODERADO_CLOUD_ENV;
     process.env.MODERADO_CLOUD_ENV = 'development';

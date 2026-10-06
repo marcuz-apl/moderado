@@ -178,7 +178,7 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: '/login', desc: 'Log in to Moderado Cloud with an API key' },
+  { name: '/login', desc: 'Connect to the public Gateway or log in to Moderado Cloud' },
   { name: '/model', desc: 'Switch active AI model' },
   { name: '/init', desc: 'Scaffold AGENTS.md from workspace scan' },
   { name: '/btw', desc: 'Ask an ephemeral side question (no session pollution)' },
@@ -421,7 +421,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
     '\x1b[1m/init\x1b[0m       Scaffold AGENTS.md from workspace scan',
     '\x1b[1m/model\x1b[0m      Switch active AI model (Free, Paid, or Custom)',
-    '\x1b[1m/login\x1b[0m      Log in to Moderado Cloud with an API key',
+    '\x1b[1m/login\x1b[0m      Connect to the public Gateway or log in to Moderado Cloud',
     '\x1b[1m/btw\x1b[0m        Ask an ephemeral side question (no session pollution)',
     '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
     '\x1b[1m/session\x1b[0m   Create, resume, undo, redo, share, export, or compact sessions',

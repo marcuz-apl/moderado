@@ -137,7 +137,7 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
   const displayName = input.displayName?.trim() || 'OpenAI-compatible provider';
   const defaultModel = input.defaultModel?.trim();
   if (!defaultModel) throw new Error('A default model is required for an OpenAI-compatible provider.');
-  if (!input.apiKey?.trim() && !['ollama', 'lm-studio'].includes(connectionId(displayName))) throw new Error('An API key is required.');
+  if (!input.apiKey?.trim() && !['ollama', 'lm-studio', 'moderado-cloud'].includes(connectionId(displayName))) throw new Error('An API key is required.');
   if (!input.baseUrl?.trim()) throw new Error('A base URL is required.');
 
   let url: URL;
@@ -156,10 +156,10 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
   };
 }
 
-/** Build a manual-key Moderado Cloud profile, optionally targeting a private Gateway. */
-export function buildModeradoCloudConnection(apiKey: string, credentialExpiresAt?: number): ProviderConnection {
-  const key = apiKey.trim();
-  if (!/^mrd_.+/.test(key)) throw new Error('Enter a non-empty Moderado Cloud key starting with mrd_.');
+/** Build a public Gateway profile or a keyed account profile. */
+export function buildModeradoCloudConnection(apiKey?: string, credentialExpiresAt?: number): ProviderConnection {
+  const key = apiKey?.trim();
+  if (key && !/^mrd_.+/.test(key)) throw new Error('Enter a Moderado Cloud key starting with mrd_.');
   const connection = buildConnection({
     kind: 'openai-compatible',
     displayName: 'Moderado Cloud',
@@ -224,13 +224,15 @@ async function authorizeModeradoCloudInBrowser(signal?: AbortSignal): Promise<{ 
 
 export async function loginModeradoCloudInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
   const loginChoices = [
+    { label: 'Use public Gateway', value: 'public', description: 'Connect without an account or API key.' },
     { label: 'Sign in with browser', value: 'browser', description: 'Authorize Moderado Cloud in your browser.' },
     { label: 'Enter an API key', value: 'manual', description: 'Paste a Moderado Cloud key starting with mrd_.' },
   ];
   const method = options.drawFrame
-    ? await selectListPopup('Log in to Moderado Cloud', loginChoices, { drawFrame: options.drawFrame, signal: options.signal })
-    : (await askSelect('Log in to Moderado Cloud', loginChoices, 0, { signal: options.signal })).value;
+    ? await selectListPopup('Connect Moderado Cloud', loginChoices, { drawFrame: options.drawFrame, signal: options.signal })
+    : (await askSelect('Connect Moderado Cloud', loginChoices, 0, { signal: options.signal })).value;
   if (!method || options.signal?.aborted) return undefined;
+  if (method === 'public') return buildModeradoCloudConnection();
   if (method === 'browser') {
     const credential = await authorizeModeradoCloudInBrowser(options.signal);
     return credential ? buildModeradoCloudConnection(credential.accessToken, credential.expiresAt) : undefined;

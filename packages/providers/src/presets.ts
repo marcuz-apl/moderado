@@ -126,7 +126,7 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
   {
     id: 'moderado-cloud',
     label: 'Moderado Cloud',
-    description: 'Use your Moderado Cloud account and its configured model pool.',
+    description: 'Use the public Moderado Gateway without an account, or sign in for account routes.',
     kind: 'openai-compatible',
     baseUrl: MODERADO_CLOUD_BASE_URL,
     defaultModel: 'auto',
