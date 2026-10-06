@@ -2,6 +2,13 @@
 
 Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
+Release context: `0.3.10` is the published self-contained CLI and does not need
+the Moderado Gateway. `0.4.8` is the upcoming Gateway-integrated CLI: `/login`
+uses the Gateway for model routes and inference, while `/connect` continues to
+support direct providers. Do not publish 0.4.8 until its documentation is ready.
+Windows installation for the 0.4.8 release will use npm and Scoop; no Winget
+submission or package-index release is planned.
+
 ---
 
 ## 1. Local Pre-Flight Certification
@@ -92,9 +99,9 @@ Public publication requires explicit maintainer confirmation through the manual 
      ```bash
      npm publish apps/cli/*.tgz --provenance --access public
      ```
-  4. Creates the official GitHub Release with binaries, checksums, the verified manifest, and reviewable community manifests:
+  4. Creates the official GitHub Release with binaries, checksums, the verified manifest, and Scoop/Homebrew manifests:
      ```bash
-     gh release create "${TAG}" --verify-tag --title "Moderado ${TAG}" --generate-notes "artifacts/release/moderado-win-x64.exe#moderado-win-x64.exe" "artifacts/release/moderado-win-x64.exe.sha256" "artifacts/release/moderado-macos-arm64#moderado-macos-arm64" "artifacts/release/moderado-macos-arm64.sha256" "artifacts/release/moderado-linux-x64#moderado-linux-x64" "artifacts/release/moderado-linux-x64.sha256" "artifacts/release/manifest.json#manifest.json" "distribution/homebrew/moderado.rb#moderado.rb" "distribution/scoop/moderado.json#moderado.json" "distribution/winget/Moderado.yaml#Moderado.yaml"
+     gh release create "${TAG}" --verify-tag --title "Moderado ${TAG}" --generate-notes "artifacts/release/moderado-win-x64.exe#moderado-win-x64.exe" "artifacts/release/moderado-win-x64.exe.sha256" "artifacts/release/moderado-macos-arm64#moderado-macos-arm64" "artifacts/release/moderado-macos-arm64.sha256" "artifacts/release/moderado-linux-x64#moderado-linux-x64" "artifacts/release/moderado-linux-x64.sha256" "artifacts/release/manifest.json#manifest.json" "distribution/homebrew/moderado.rb#moderado.rb" "distribution/scoop/moderado.json#moderado.json"
      ```
 
 No long-lived credentials or API tokens are stored in the repository. Authentication is handled entirely via GitHub OIDC trusted publishing.
@@ -110,9 +117,6 @@ community-maintained packages stay in sync without hand-written hashes:
   bucket (`bucket/moderado.json`). Per-release cost is one JSON bump.
 - **Homebrew**: publish `distribution/homebrew/moderado.rb` through a
   `homebrew-moderado` tap (`brew tap <owner>/moderado; brew install moderado`).
-- **winget**: submit `distribution/winget/Moderado.yaml` to
-  `microsoft/winget-pkgs` as `MarcuzApl.Moderado` (one manifest PR per
-  release; `wingetcreate update` can automate it).
 - **curl installer**: `scripts/install.sh` downloads the matching binary for
   Linux x64 or macOS arm64 from the latest GitHub Release, verifies its
   SHA-256 checksum against both the `.sha256` sidecar and `manifest.json`,

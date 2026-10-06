@@ -1,29 +1,29 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-Status: `moderado@0.3.10` is live on npm as `latest`, and the GitHub Release
-`v0.3.10` carries all 11 assets (3 binaries, 3 checksum sidecars,
-`manifest.json`, and the 4 community manifests). The Homebrew tap
+The latest published CLI is `moderado@0.3.10`. It is self-contained and does
+not require the Moderado Gateway. CLI `0.4.8` is the upcoming Gateway-integrated
+release and is not published yet: `/login` uses the Gateway for its route
+catalog and inference, while `/connect` supports direct provider connections.
+Both versions use the `moderado` command name. Keep users on 0.3.10 until 0.4.8
+is released; the npm `latest` tag and Scoop package will then be updated.
+
+The GitHub Release `v0.3.10` includes binaries, checksum sidecars, and a
+`manifest.json`. The Homebrew tap
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
 are both at **v0.3.10**, bumped after verifying every binary checksum against
-its `.sha256` sidecar. The winget submission has passed validation and is
-awaiting moderator approval; it is not yet searchable or installable by ID.
-[microsoft/winget-pkgs#444475](https://github.com/microsoft/winget-pkgs/pull/444475)
-contains the 0.3.10 manifest. After the PR merges, allow the community source
-index time to refresh before searching or installing by ID.
-Chocolatey is deliberately out of scope.
+its `.sha256` sidecar. Windows installation is supported through npm and Scoop.
+Chocolatey is out of scope.
 
-CI already does the heavy lifting: `release.yml` builds the three binaries
-and generates the manifests; `publish.yml` attaches `moderado.rb`,
-`moderado.json`, and `Moderado.yaml` to every GitHub Release. After a release,
-refresh the Homebrew and Scoop manifests and submit the new winget manifest.
+CI builds the binaries and release artifacts. After a release, refresh the
+Homebrew and Scoop manifests from the verified release assets.
 
 ---
 
 ## 1. curl installer (`scripts/install.sh`)
 
-Live now, zero submission needed. Linux x64 and macOS arm64 only (Windows
-users take the `.exe`, Scoop, or winget):
+Live now, zero submission needed. Linux x64 and macOS arm64 only. Windows users
+can install through npm or Scoop.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash
@@ -61,40 +61,11 @@ refusal against a local fixture server).
 - **Outstanding: none — bumped to v0.3.10** in commit `f7d2e9d`, copied from
   the v0.3.10 Release attachment after checksum verification.
 
-## 4. winget — 0.3.10 submitted, awaiting moderator approval
+## 4. Windows installation
 
-- Package ID: `MarcuzApl.Moderado`. The 0.3.0 submission
-  ([#439175](https://github.com/microsoft/winget-pkgs/pull/439175)) was closed
-  as out of date and superseded by
-  **[#444475](https://github.com/microsoft/winget-pkgs/pull/444475)**,
-  which has passed validation but remains open pending moderator approval.
-- The PR carries the required three-file layout under
-  `manifests/m/MarcuzApl/Moderado/0.3.10/`: `MarcuzApl.Moderado.yaml` (version),
-  `MarcuzApl.Moderado.installer.yaml` (portable, x64), and
-  `MarcuzApl.Moderado.locale.en-US.yaml` (defaultLocale).
-- `InstallerSha256` is the published `moderado-win-x64.exe.sha256` sidecar from
-  the v0.3.10 release (`54263b4801995d99147fb1a720dd52f104c38c4ba76ea6e74d0d2b5cbafeff0f`),
-  verified against the attached binary.
-- The PR was opened for 0.3.9 and updated **in place** to 0.3.10, so a single
-  moderation cycle yields the corrected version instead of two competing
-  submissions for the same `PackageIdentifier`.
-- Microsoft runs a 10-stage validation pipeline on the PR (`01. Pull Request
-  Validation` through `10. Validation Completed`), plus a `license/cla` check.
-  A full pass on 2026-09-30 went green through `10. Validation Completed`, which
-  includes downloading and installing the real binary; the pipeline re-queues
-  and is slow, so allow time and check
-  `gh pr checks <id> --repo microsoft/winget-pkgs` rather than assuming failure.
-- This is the authoritative validation. Do **not** rely on a local
-  `winget validate` run: on `v1.30.140-preview` it reports "multi file manifest
-  is incomplete" even for an unmodified, already-merged Microsoft manifest
-  (`Microsoft.PowerShell` 7.6.6.0), so that message is a limitation of the
-  local preview build, not a defect in these files.
-- Per release after the first merge: one manifest PR (automatable with
-  `wingetcreate update MarcuzApl.Moderado -u <exe-url> -v <version>`).
-- Until it merges and reaches the community source index, Windows users can
-  install the standalone `moderado-win-x64.exe` from the Release.
-- Note: the draft is `InstallerType: portable` — true today (the exe runs
-  standalone); re-check if packaging ever changes.
+The supported Windows install options are npm and Scoop. The existing Winget
+submission for 0.3.10 is left as-is; no Winget submission or package-index
+release is planned for 0.4.8.
 
 ## 5. Automation gaps (owner decision)
 

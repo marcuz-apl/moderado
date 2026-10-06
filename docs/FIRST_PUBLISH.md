@@ -1,9 +1,12 @@
 # First Public Release via npmjs.com + GitHub Actions
 
 A historical field log of how Moderado published `moderado@0.3.0` for the first time
-(2026-09-22). The current published release is `moderado@0.3.10`; use the README and
-`docs/RELEASING.md` for current installation and release procedures. The normal path is now CI,
-but the first publish could not be, for reasons explained below.
+(2026-09-22). `moderado@0.3.10` is the current published, self-contained CLI;
+the upcoming `0.4.8` release integrates the Moderado Gateway and requires it for
+Gateway model routes and inference. Both versions use the `moderado` command.
+Use the README and `docs/RELEASING.md` for current installation and release
+procedures. The normal path is now CI, but the first publish could not be, for
+reasons explained below.
 
 Companion runbook: [`RELEASING.md`](./RELEASING.md) (the standing procedure).
 Install instructions for users: root [`README.md`](../README.md#install-moderado).
@@ -20,7 +23,7 @@ Install instructions for users: root [`README.md`](../README.md#install-moderado
 | Try without installing | `npx -y moderado@latest --help` | Works |
 | Prebuilt binary (no Node needed) | Download from GitHub Release v0.3.0, verify `.sha256` + `manifest.json` | Works (win-x64, macos-arm64, linux-x64) |
 | `curl \| bash` installer | `curl -fsSL .../scripts/install.sh \| bash` | Available (`scripts/install.sh`) |
-| winget / Scoop / Homebrew | reviewable manifests on every GitHub Release | Available (see `RELEASING.md` section 4) |
+| Scoop / Homebrew | reviewable manifests on community releases | Available |
 | Chocolatey | -- | Out of scope |
 
 Post-install: `moderado --help`, then `/connect` in the TUI

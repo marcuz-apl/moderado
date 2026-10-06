@@ -1,8 +1,8 @@
 ﻿# Moderado Project Handoff
 
-Updated: 2026-10-06 17:12 UTC
-Branch: Moderado `master` at `d930664`; Gateway `master` at `99c203d`
-Status: **`/login` preserves and displays the Gateway URL; PowerShell environment selection is documented; changes are ready to commit and push.**
+Updated: 2026-10-06 17:36 UTC
+Branch: Moderado `master` at `d4680a4`; Gateway `master` at `99c203d`
+Status: **Release documentation distinguishes 0.3.10 from upcoming 0.4.8; Gateway model IDs now omit provider prefixes; changes are being pushed. Winget PR #444475 remains untouched.**
 
 ## Summary
 
@@ -16,6 +16,8 @@ The Moderado CLI exposes separate connection paths: `/login` for the Moderado Ga
 - Updated existing command and welcome tests to expect `/connect` as supported.
 - Fixed Gateway re-login to use the saved Base URL unless environment overrides are set; added the resolved Base URL to the login option descriptions and documented the behavior.
 - Added PowerShell instructions to force development or production and clear the overrides to return to the saved Gateway URL.
+- Updated root and CLI READMEs, Guide, Distribution, First Publish, and Releasing docs to distinguish self-contained 0.3.10 from upcoming Gateway-integrated 0.4.8. Removed Winget as a documented installation/release channel; retained the existing PR without changes.
+- Updated the Gateway `/v1/models` catalog to return provider model IDs without provider prefixes where unique, while preserving unique IDs for collisions and accepting legacy provider-prefixed inference IDs. The local Gateway was restarted and returned healthy status with unprefixed IDs.
 
 ## In progress
 
@@ -23,12 +25,13 @@ The Moderado CLI exposes separate connection paths: `/login` for the Moderado Ga
 
 ## Working tree
 
-- Five files are modified for this task, including this handoff. Commit and push are pending.
+- CLI documentation and Gateway code/docs are pending commits and pushes in their separate repositories.
 
 ## Checks
 
 - `npm run typecheck` — PASS after the Gateway URL preservation change.
 - `git diff --check` — PASS.
+- Gateway `node --check` on modified runtime files — PASS.
 - Tests — NOT RUN.
 
 ## Decisions and context

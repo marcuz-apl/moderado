@@ -2,7 +2,7 @@
 
 > **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
 
-[![Version](https://img.shields.io/badge/version-v0.3.10-blue.svg)](file:///d:/projects/moderado/VERSION)
+[![Source version](https://img.shields.io/badge/source-v0.4.8--upcoming-orange.svg)](file:///d:/projects/moderado/VERSION)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
@@ -88,16 +88,19 @@ npm install -g moderado
 moderado --help
 ```
 
-moderado@0.3.10 is live on the public npm registry (latest tag points at 0.3.10).
+The latest published npm release is 0.3.10. It is self-contained and works
+without the Moderado Gateway. The upcoming 0.4.8 release integrates `/login`
+with the Gateway, which is required for its route catalog and inference;
+`/connect` remains available for direct providers. Both releases use the
+`moderado` command name.
+Version 0.4.8 is not published yet. After release, npm `latest` and the Scoop
+bucket will be updated to it. For now, pin 0.3.10 to retain the self-contained
+CLI: `npm install -g moderado@0.3.10`.
+
 Any npm-compatible installer works (bun add -g moderado,
-pnpm add -g moderado, npx -y moderado@latest --help), and prebuilt
-dependency-free binaries (moderado-win-x64.exe, moderado-macos-arm64,
-moderado-linux-x64) are attached to the
-GitHub Release v0.3.10 at https://github.com/marcuz-apl/moderado/releases/tag/v0.3.10.
-  The curl installer (`scripts/install.sh`, Linux x64 + macOS arm64), Homebrew,
-  and Scoop are available. The winget submission is awaiting moderator
-  approval; until it merges, Windows users can install the standalone binary.
-  See docs/DISTRIBUTION.md in the repository.
+pnpm add -g moderado, npx -y moderado@latest --help). Prebuilt binaries and the
+curl installer are documented in the root README. Windows installation options
+are npm and Scoop. See `docs/DISTRIBUTION.md` in the repository.
 To build from source instead:
 
 ```bash
