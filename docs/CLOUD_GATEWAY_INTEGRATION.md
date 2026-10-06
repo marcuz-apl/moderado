@@ -9,7 +9,7 @@ Let Moderado CLI use configured routes through the public Gateway, while preserv
 
 ## Existing support
 
-CLI supports keyless Gateway inference through `/v1/models` and `/v1/chat/completions`; account authorization is optional and uses the website OAuth flow. The CLI login flow manages the Gateway base URL automatically and does not ask users to configure it.
+CLI supports keyless Gateway inference through `/v1/models` and `/v1/chat/completions`; account authorization is optional and uses the website OAuth flow. `/login` selects the Gateway, while `/connect` selects a direct provider such as OpenRouter, NVIDIA NIM, Agnes AI, OrcaRouter, Ollama, LM Studio, or a custom OpenAI-compatible endpoint.
 
 ## CLI work
 

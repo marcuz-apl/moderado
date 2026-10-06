@@ -54,9 +54,9 @@ let cachedInventory: { id: string }[] | null = null;
 export function buildModelConnectionRequiredItems(): PopupListItem[] {
   return [
     {
-      label: 'Connect Moderado Cloud first',
+      label: 'Connect a provider first',
       value: 'login',
-      description: 'Use /login to connect to the public Gateway without an account, or sign in to your account.',
+      description: 'Use /login for the Gateway or /connect for a direct provider.',
     },
     {
       label: 'Close Window',

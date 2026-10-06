@@ -1,40 +1,38 @@
 ﻿# Moderado Project Handoff
 
-Updated: 2026-10-06 14:54 UTC
-Branch: Moderado `master` at `97f783c`; Gateway `master` at `99c203d`
-Status: **Gateway client sync is ready for review; changes are uncommitted.**
+Updated: 2026-10-06 16:43 UTC
+Branch: Moderado `master` at `55ba231`; Gateway `master` at `99c203d`
+Status: **Direct-provider `/connect` restoration is ready for review; changes are uncommitted.**
 
 ## Summary
 
-The public Gateway now shares one service with the website on port `4788`. This Moderado update aligns the CLI production URL, local development URL, keyless model discovery, and model-picker pricing labels with the latest Gateway contract. Existing saved legacy URLs are rewritten when loaded.
+The Moderado CLI exposes separate connection paths: `/login` for the Moderado Gateway and `/connect` for direct providers. This restores the provider picker available in CLI 0.3.10 while preserving Gateway login.
 
 ## Completed
 
-- Moderado `97f783c` and Gateway `99c203d` are the source revisions inspected for this sync.
-- Updated Moderado defaults to `https://mod.alfazen.org/v1` and `http://127.0.0.1:4788/v1`; saved profiles using the old production hostname or loopback port `8787` migrate during config loading.
-- Removed the Gateway preset's key requirement and free-catalog declaration; the model picker describes configured routes without implying unknown prices are free.
-- Updated CLI docs and `docs/CLOUD_GATEWAY_INTEGRATION.md` to reflect the unified local service and transparent routing contract.
+- Restored `/connect` in standard slash-command validation, autocomplete, TUI dispatch, help, and no-provider guidance.
+- Reconnected the existing provider picker to active connection switching, saved profiles, and the existing credential-store behavior.
+- Clarified README and Gateway integration documentation to distinguish `/login` from direct `/connect` providers.
+- Updated existing command and welcome tests to expect `/connect` as supported.
 
 ## In progress
 
-- Run focused offline provider and CLI model-picker tests.
-- The health check at `http://127.0.0.1:4788/health` timed out, and `Get-NetTCPConnection` showed no listener on port `4788`.
+- Focused CLI tests remain unrun.
 
 ## Working tree
 
-- Moderado has 14 modified files for this sync; no commit or push was made. Gateway repo was clean at `99c203d`.
+- Ten files are modified for this change, including this handoff. No commit or push was made.
 
 ## Checks
 
-- `npm run typecheck` — PASS after the client sync.
+- `npm run typecheck` — PASS.
 - `git diff --check` — PASS.
-- Tests were not run for this sync.
+- Tests — NOT RUN.
 
 ## Decisions and context
 
-- Inference and model listing are unauthenticated. Any network client that can reach the Gateway can consume configured provider credentials and paid capacity.
-- Production clients use `https://mod.alfazen.org/v1`; local development uses `http://127.0.0.1:4788/v1` (`MODERADO_CLOUD_ENV=development`).
-- No deployment, live provider call, tag, or package publication was performed.
+- `/login` selects the public Gateway or account login; `/connect` selects direct provider/local/custom endpoints.
+- The Gateway remains the source of its configured route pool. Direct-provider connections use their own catalogs and credentials.
 
 ## Blockers
 
@@ -42,12 +40,12 @@ None.
 
 ## Next action
 
-1. Run the focused offline provider and CLI model-picker tests; start the Gateway locally when development inference is needed.
+1. Run the focused CLI command and provider-connection tests before committing.
 
 ## Resume notes
 
-- Root workspace: `D:\projects\moderado`; Gateway workspace: `D:\projects\moderado-gateway`.
-- Gateway behavior is documented in `D:\projects\moderado-gateway\docs\CONTRACT.md`, `README.md`, and `docs\OPERATIONS.md`.
+- Root workspace: `D:\projects\moderado`.
+- Direct provider connection setup is implemented in `apps/cli/src/ui/provider_connect.ts` and is wired by `apps/cli/src/commands/chat.ts`.
 ## Release record (v0.3.10)
 
 1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.

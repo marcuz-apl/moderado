@@ -125,6 +125,10 @@ features. `/model` lists configured Gateway routes: `auto` follows Gateway
 routing, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
+Use `/connect` to connect directly to OpenRouter, NVIDIA NIM, Agnes AI,
+OrcaRouter, Ollama, LM Studio, or a custom OpenAI-compatible provider. `/login`
+selects the Moderado Gateway; `/connect` selects a direct provider.
+
 Cloud OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
 On other platforms, the current credential store is memory-only, so log in again

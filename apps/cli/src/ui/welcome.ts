@@ -178,7 +178,8 @@ export interface SlashCommand {
 }
 
 export const SLASH_COMMANDS: SlashCommand[] = [
-  { name: '/login', desc: 'Connect to the public Gateway or log in to Moderado Cloud' },
+  { name: '/connect', desc: 'Connect directly to an external or local provider' },
+  { name: '/login', desc: 'Connect to the Moderado Gateway or log in to Moderado Cloud' },
   { name: '/model', desc: 'Switch active AI model' },
   { name: '/init', desc: 'Scaffold AGENTS.md from workspace scan' },
   { name: '/btw', desc: 'Ask an ephemeral side question (no session pollution)' },
@@ -421,7 +422,8 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
     '\x1b[1m/init\x1b[0m       Scaffold AGENTS.md from workspace scan',
     '\x1b[1m/model\x1b[0m      Switch active AI model (Free, Paid, or Custom)',
-    '\x1b[1m/login\x1b[0m      Connect to the public Gateway or log in to Moderado Cloud',
+    '\x1b[1m/connect\x1b[0m   Connect directly to an external or local provider',
+    '\x1b[1m/login\x1b[0m      Connect to the Moderado Gateway or log in to Moderado Cloud',
     '\x1b[1m/btw\x1b[0m        Ask an ephemeral side question (no session pollution)',
     '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
     '\x1b[1m/session\x1b[0m   Create, resume, undo, redo, share, export, or compact sessions',
@@ -533,6 +535,8 @@ export interface PromptInteractiveTurnOptions {
   onModelSelect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /login. Returns the model label to display. */
   onLogin?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
+  /** Called when user issues /connect. Returns the model label to display. */
+  onConnect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
   onClear?: () => void;
   onExit?: () => string;
@@ -837,6 +841,30 @@ export async function promptInteractiveTurn(
           positionCursorOnInput();
 
           bindComposerInput(); // re-attach main handler
+          return;
+        }
+
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/connect') {
+          setInput('');
+          unbindComposerInput();
+
+          const drawFrame = (popupLines: string[]): void => {
+            stdout.write('\x1b[H\x1b[J');
+            stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
+          };
+
+          if (options.onConnect) {
+            const newModel = await options.onConnect(drawFrame);
+            if (newModel) currentModel = newModel;
+          }
+
+          readline.emitKeypressEvents(stdin);
+          stdin.resume();
+          stdin.setRawMode(true);
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
+          positionCursorOnInput();
+          bindComposerInput();
           return;
         }
 

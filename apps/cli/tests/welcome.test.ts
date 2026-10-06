@@ -341,7 +341,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
     const plain = stripAnsi(output);
     expect(plain).toContain('/login');
-    expect(plain).not.toContain('/connect');
+    expect(plain).toContain('/connect');
     expect(plain).toContain('/model');
     expect(plain).toContain('/session');
     expect(plain).toContain('/workflow');
