@@ -89,6 +89,8 @@ export interface ProviderPresetMeta {
    * metered catalog.
    */
   freeCatalog?: boolean;
+  /** Whether that provider-level guarantee overrides generic curated model tiers. */
+  freeCatalogOverridesClassification?: boolean;
 }
 
 /** How much of a provider's catalog is declared cost-free, for the free-model predicate. */
@@ -96,6 +98,7 @@ export interface ProviderFreePolicy {
   freeModelAliases?: readonly string[];
   freeIdSuffixes?: readonly string[];
   freeCatalog?: boolean;
+  freeCatalogOverridesClassification?: boolean;
 }
 
 /**
@@ -109,6 +112,7 @@ export function freeModelPolicyFor(connectionId: string | undefined): ProviderFr
     freeModelAliases: preset.freeModelAliases,
     freeIdSuffixes: preset.freeIdSuffixes,
     freeCatalog: preset.freeCatalog,
+    freeCatalogOverridesClassification: preset.freeCatalogOverridesClassification,
   };
 }
 
@@ -135,6 +139,7 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     // Moderado Cloud only exposes free routes; the Gateway model catalog does
     // not include per-route pricing metadata to identify them individually.
     freeCatalog: true,
+    freeCatalogOverridesClassification: true,
     requiresApiKey: false,
   },
   {
@@ -248,11 +253,12 @@ export function isFreeModelOption(
   // A reported nonzero price outranks any blanket preset declaration.
   if (entry.pricing && Object.values(entry.pricing).some(price => price.trim() === '' || !Number.isFinite(Number(price)) || Number(price) !== 0)) return false;
   if (isFreeModelEntry(entry)) return true;
-  // A provider's explicit whole-catalog guarantee is scoped to that provider
-  // and outranks generic model-id classifications from other catalogs.
-  if (policy?.freeCatalog) return true;
   const curated = classification.source !== 'heuristic';
+  // Most catalogs still honor curated model tiers. A provider can explicitly
+  // declare that its whole-catalog guarantee overrides generic classifications.
+  if (policy?.freeCatalog && (!curated || policy.freeCatalogOverridesClassification)) return true;
   if (curated && classification.accessTier !== 'free_trial' && classification.accessTier !== 'local') return false;
+  if (policy?.freeCatalog) return true;
   if (isDeclaredFreeModelId(entry.id, policy)) return true;
   if (!curated) return false;
   return classification.accessTier === 'free_trial' || classification.accessTier === 'local';
