@@ -276,6 +276,12 @@ export class AgentLoop {
       baseHistory = [systemPromptMessage, ...baseHistory];
     }
 
+    if (options.provider.id === 'moderado-cloud' && baseHistory.length > 30) {
+      let firstRecentTurn = baseHistory.length - 29;
+      while (firstRecentTurn < baseHistory.length && baseHistory[firstRecentTurn]?.role !== 'user') firstRecentTurn++;
+      baseHistory = [baseHistory[0]!, ...baseHistory.slice(firstRecentTurn)];
+    }
+
     // Layer 4: Truncate oversized tool outputs from older turns in history to prevent token ballooning
     const messages: ChatMessage[] = [
       ...baseHistory.map((msg, idx) => {

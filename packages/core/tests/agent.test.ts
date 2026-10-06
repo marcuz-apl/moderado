@@ -550,6 +550,29 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(turn2.messages.length).toBeGreaterThan(turn1.messages.length);
   });
 
+  it('limits Cloud conversation history to 32 messages while retaining the system prompt and newest turn', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    provider.queueTextResponse('Calgary weather answer.');
+    const conversationHistory = [
+      { role: 'system' as const, content: 'old system' },
+      ...Array.from({ length: 20 }, (_, index) => [
+        { role: 'user' as const, content: `old question ${index}` },
+        { role: 'assistant' as const, content: `old answer ${index}` },
+      ]).flat(),
+    ];
+
+    await loop.run('What is the weather in Calgary today?', {
+      workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler, conversationHistory,
+    });
+
+    const sentMessages = provider.recordedCalls[0]?.messages ?? [];
+    expect(sentMessages.length).toBeLessThanOrEqual(32);
+    expect(sentMessages[0]).toMatchObject({ role: 'system' });
+    expect(sentMessages).toContainEqual({ role: 'user', content: 'What is the weather in Calgary today?' });
+    expect(sentMessages.some(message => message.role === 'user' && message.content === 'old question 19')).toBe(true);
+    expect(sentMessages.some(message => message.role === 'user' && message.content === 'old question 0')).toBe(false);
+  });
+
   it('emits reasoning_delta events when provider streams reasoning chunks', async () => {
     provider.queueResponse([
       { reasoningDelta: 'Thinking deeply...' },

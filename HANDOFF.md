@@ -1,10 +1,22 @@
-# Active CLI Baseline
+# Moderado Project Handoff
+
+Updated: 2026-10-06
+Branch: root repo `master` at `abca2d7`; Cloud repo `master` at `753ea00`
+Status: **Cloud Gateway daily and concurrency request quotas have been removed in local source and the local Gateway was restarted. Provider free-tier eligibility, zero-price routing, request-size/output-token/timeout bounds, and sign-in abuse protection remain. No Cloud deployment or commit was made.**
+
+## Current task: private Gateway without Moderado request quotas
+
+Cloud changes in `D:\projects\moderado-cloud` remove account/key/model/global daily and concurrency request checks, remove the related route listing filters, and update account usage display plus PRD, contract, architecture, and website docs. The quota reservation table remains for content-free usage/outcome records. The local Gateway on port 8787 was restarted from this source; `/health` returned `ready`. Existing tests were not run, per session instruction; `node --check` on changed JS files and `git diff --check` passed. `apps/gateway/test/quota.test.js` still contains assertions for the old caps and should be updated before a future test run.
+
+Cloud modified files: `PRD.md`, `apps/gateway/src/index.js`, `apps/gateway/src/providers.js`, `apps/gateway/src/quota.js`, `apps/web/public/app.js`, `apps/web/src/index.js`, `apps/web/src/page.js`, `docs/ARCHITECTURE.md`, and `docs/CONTRACT.md`. Root Moderado source changes already in progress: `apps/cli/src/commands/chat.ts`, `packages/core/src/agent.ts`, `packages/core/tests/agent.test.ts`. Both repositories have uncommitted local changes; no deployment, commit, or release was performed.
+
+## Recent CLI baseline (2026-10-05)
 
 Updated: 2026-10-05
 Branch: `master` (tracks `origin/master`).
 Status: **Removing the Cloud Gateway's aggregate 4096-byte messages/tools limit.** The Gateway keeps its independent 32 KiB HTTP body cap, 1–32 message limit, 16-tool limit, and 2048 output-token limit. No release tag or package publication was requested; npm, GitHub Releases, Homebrew, and Scoop remain on v0.3.10.
 
-## Current task: Cloud request-size compatibility
+## Previous task: Cloud request-size compatibility
 
 The Gateway no longer applies a separate aggregate byte limit to messages and tools. Its complete request body remains capped at 32 KiB while reading. The Gateway does not enforce exact input-token counts; the selected provider enforces its model context window. CLI 0.4.3 sends the full prompt and tool schemas again, and locally enforces only the matching 32 KiB body cap.
 
@@ -61,7 +73,7 @@ Fixed in `.githooks/pre-commit` by stripping all leading stamps:
 `s/^(v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z] )+//`. Verified against a
 synthetic stale message — it now yields `v0.3.10+260930d`.
 
-### Next
+### Release follow-up (historical)
 
 1. Decide whether to create and push the `v0.4.0` tag. Do not publish until
    the release verification workflow passes and publication is explicitly

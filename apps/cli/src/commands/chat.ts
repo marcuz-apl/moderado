@@ -490,14 +490,14 @@ export function resolveWebSearchEndpoint(config: ModeradoConfig): string | undef
 /** Provider results are raw page excerpts; strip block metadata so the no-provider fallback stays readable. */
 const SEARCH_BLOCK_METADATA = /^(title|url|published|author|highlights?|source|score|favicon)\s*:/i;
 
-export function formatDirectWebSearchAnswer(result: ToolResult): string {
+export function formatDirectWebSearchAnswer(result: ToolResult, modelConnected = false): string {
   if (result.status !== 'success') return `Web search failed: ${result.output}`;
   const lines = result.output
     .split('\n')
     .map((line) => line.trim().replace(/^#{1,6}\s*/, '').replace(/\*\*/g, ''))
     .filter((line) => line && line !== '...' && line !== '---' && !SEARCH_BLOCK_METADATA.test(line) && !/^https?:\/\//i.test(line));
   if (!lines.length) return 'Web search returned no readable content.';
-  return `${lines.slice(0, 10).join('\n')}\n\n(no model connected — raw search excerpt)`;
+  return `${lines.slice(0, 10).join('\n')}\n\n(${modelConnected ? 'model summary unavailable — ' : 'no model connected — '}raw search excerpt)`;
 }
 /** Environment configuration overrides the persistent search provider preference. */
 export function resolveWebSearchProvider(config: ModeradoConfig): WebSearchProviderName | undefined {
@@ -1358,7 +1358,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     // Current-information lane: gather live evidence before inference so the model answers in one turn.
     let liveSearch: ToolResult | undefined;
     const liveSearchTool = tools.get('web_search');
-    if (activeMode === 'Execute' && shouldFastRouteWebSearch(trimmed) && liveSearchTool) {
+    if (shouldFastRouteWebSearch(trimmed) && liveSearchTool) {
       const searchStartedAt = Date.now();
       lastQuestion = trimmed;
       lastAnswer = 'Searching the web...';
@@ -1654,13 +1654,26 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         currentModel,
         otherConnections
       );
-      lastAnswer = resolution.answer;
+      const searchFallback = result.status === 'failed' && liveSearch?.status === 'success'
+        ? formatDirectWebSearchAnswer(liveSearch, true)
+        : undefined;
+      const hasSearchFallback = searchFallback !== undefined && searchFallback !== 'Web search returned no readable content.';
+      lastAnswer = hasSearchFallback ? searchFallback : resolution.answer;
       if (budgetStopped) {
         const note = `Token budget reached (${tokenBudget?.toLocaleString()} per task). Task stopped; usage may exceed the limit because providers report in chunks.`;
         lastAnswer = [lastAnswer, note].filter(Boolean).join('\n\n');
         streamedAnswer = lastAnswer;
       }
-      if (resolution.isError) {
+      if (resolution.isError && hasSearchFallback) {
+        conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: lastAnswer }];
+        activeSession.messages = conversationHistory;
+        activeSession.providerId = activeConnection?.id;
+        activeSession.providerName = activeConnection?.displayName;
+        activeSession.modelId = currentModel;
+        activeSession.mode = activeMode;
+        sessionStore.save(activeSession);
+        streamedAnswer = lastAnswer;
+      } else if (resolution.isError) {
         streamedAnswer = lastAnswer;
       } else {
         conversationHistory = evidenceTask ? replaceEvidenceTurn(result.messages, evidenceTask, trimmed) : result.messages;
