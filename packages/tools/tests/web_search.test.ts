@@ -66,6 +66,24 @@ it('searches the hosted Exa site by default without any API key', async () => {
   expect(result.metadata?.sources).toEqual([{ title: 'Weather', url: 'https://example.test/weather' }]);
 });
 
+it('falls back to Parallel when Exa returns its free MCP rate limit notice as content', async () => {
+  const calls: string[] = [];
+  const tool = createWebSearchTool({
+    fetchImpl: async (input) => {
+      calls.push(String(input));
+      return String(input).startsWith(EXA_SEARCH_URL)
+        ? jsonBody(mcpSse("You've hit Exa's free MCP rate limit. To continue using without limits, create your own Exa API Key."))
+        : jsonBody(mcpSse('Beijing is sunny today.'));
+    },
+  });
+  const result = await tool.execute({ query: 'weather in Beijing today', maxResults: 5 }, { workspaceRoot: process.cwd() });
+
+  expect(calls).toEqual([EXA_SEARCH_URL, PARALLEL_SEARCH_URL]);
+  expect(result.status).toBe('success');
+  expect(result.metadata?.provider).toBe('parallel');
+  expect(result.output).toBe('Beijing is sunny today.');
+});
+
 it('falls back to the next search site when the first one fails', async () => {
   const calls: string[] = [];
   const tool = createWebSearchTool({

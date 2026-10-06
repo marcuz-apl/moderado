@@ -170,6 +170,7 @@ export function createWebSearchTool(options: WebSearchToolOptions = {}): IToolDe
         const signal = searchSignal(context, timeoutMs);
         try {
           const text = target.provider === 'custom' ? await fetchCustomSearch(target.url, params, signal, fetchImpl) : await fetchMcpSearch(target, params, signal, fetchImpl);
+          if (target.provider === 'exa' && /free\s+MCP\s+rate\s+limit/i.test(text)) throw new Error('free MCP rate limit reached');
           if (!text.trim()) { failures.push(`${target.provider}: no results`); continue; }
           const bounded = boundSearchOutput(text);
           return {
