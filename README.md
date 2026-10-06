@@ -137,8 +137,22 @@ after starting a new CLI process.
 Cloud connections use their configured Gateway URL. Loopback URLs such as
 `http://127.0.0.1:4788/v1` are treated as local development; HTTPS URLs for a
 NAS, VPS, or other remote host are used as configured. To set the URL before
-first login, define `MODERADO_CLOUD_BASE_URL`. `MODERADO_CLOUD_ENV=development`
-and `MODERADO_CLOUD_ENV=production` remain available as explicit overrides.
+first login, define `MODERADO_CLOUD_BASE_URL`. Later `/login` attempts keep the
+saved Gateway URL unless an environment override is set. The login prompt shows
+the resolved Base URL before connecting. To force an environment for the current
+PowerShell session, set `MODERADO_CLOUD_ENV` before starting the CLI:
+
+```powershell
+$env:MODERADO_CLOUD_ENV = "development"
+npm run moderado
+```
+
+Development uses `http://127.0.0.1:4788/v1`. To force production, set the value
+to `production` instead. To return to the saved Gateway URL, clear the override
+with `Remove-Item Env:MODERADO_CLOUD_ENV`; also clear
+`MODERADO_CLOUD_BASE_URL` if you set that variable. These environment settings
+apply to `npm run moderado` launched from the same PowerShell window. You can
+also set `MODERADO_CLOUD_BASE_URL` to a specific Gateway URL before first login.
 
 Run `moderado doctor` to inspect local setup without exposing secrets. Add
 `--connectivity` only when you want an optional live model-catalog check.

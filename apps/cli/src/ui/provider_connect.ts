@@ -22,6 +22,7 @@ export interface PopupConnectionOptions {
   savedConnections?: Record<string, ProviderConnection>;
   resolveSavedConnection?: (connection: ProviderConnection) => Promise<ProviderConnection>;
   connectProviders?: ConnectProvidersConfig;
+  gatewayUrl?: string;
 }
 
 export type ProviderPresetValue = ConnectProviderPresetId | `custom:${string}`;
@@ -157,13 +158,16 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
 }
 
 /** Build a public Gateway profile or a keyed account profile. */
-export function buildModeradoCloudConnection(apiKey?: string, credentialExpiresAt?: number): ProviderConnection {
+export function buildModeradoCloudConnection(apiKey?: string, credentialExpiresAt?: number, gatewayUrl?: string): ProviderConnection {
   const key = apiKey?.trim();
   if (key && !/^mrd_.+/.test(key)) throw new Error('Enter a Moderado Cloud key starting with mrd_.');
   const connection = buildConnection({
     kind: 'openai-compatible',
     displayName: 'Moderado Cloud',
-    baseUrl: resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV, process.env.MODERADO_CLOUD_BASE_URL),
+    baseUrl: resolveModeradoCloudBaseUrl(
+      process.env.MODERADO_CLOUD_ENV,
+      process.env.MODERADO_CLOUD_BASE_URL ?? gatewayUrl,
+    ),
     apiKey: key,
     defaultModel: 'auto',
   });
@@ -223,26 +227,30 @@ async function authorizeModeradoCloudInBrowser(signal?: AbortSignal): Promise<{ 
 }
 
 export async function loginModeradoCloudInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+  const baseUrl = resolveModeradoCloudBaseUrl(
+    process.env.MODERADO_CLOUD_ENV,
+    process.env.MODERADO_CLOUD_BASE_URL ?? options.gatewayUrl,
+  );
   const loginChoices = [
-    { label: 'Use public Gateway', value: 'public', description: 'Connect without an account or API key.' },
-    { label: 'Sign in with browser', value: 'browser', description: 'Authorize Moderado Cloud in your browser.' },
-    { label: 'Enter an API key', value: 'manual', description: 'Paste a Moderado Cloud key starting with mrd_.' },
+    { label: 'Use public Gateway', value: 'public', description: `Connect without an account or API key. Base URL: ${baseUrl}` },
+    { label: 'Sign in with browser', value: 'browser', description: `Authorize Moderado Cloud in your browser. Base URL: ${baseUrl}` },
+    { label: 'Enter an API key', value: 'manual', description: `Paste a Moderado Cloud key starting with mrd_. Base URL: ${baseUrl}` },
   ];
   const method = options.drawFrame
     ? await selectListPopup('Connect Moderado Cloud', loginChoices, { drawFrame: options.drawFrame, signal: options.signal })
     : (await askSelect('Connect Moderado Cloud', loginChoices, 0, { signal: options.signal })).value;
   if (!method || options.signal?.aborted) return undefined;
-  if (method === 'public') return buildModeradoCloudConnection();
+  if (method === 'public') return buildModeradoCloudConnection(undefined, undefined, options.gatewayUrl);
   if (method === 'browser') {
     const credential = await authorizeModeradoCloudInBrowser(options.signal);
-    return credential ? buildModeradoCloudConnection(credential.accessToken, credential.expiresAt) : undefined;
+    return credential ? buildModeradoCloudConnection(credential.accessToken, credential.expiresAt, options.gatewayUrl) : undefined;
   }
   let prompt = 'Moderado Cloud API key (mrd_…)';
   while (!options.signal?.aborted) {
     const apiKey = await askPopupText(prompt, options, true);
     if (!apiKey) return undefined;
     try {
-      return buildModeradoCloudConnection(apiKey);
+      return buildModeradoCloudConnection(apiKey, undefined, options.gatewayUrl);
     } catch (error) {
       prompt = `Invalid key: ${error instanceof Error ? error.message : String(error)} Try again`;
     }

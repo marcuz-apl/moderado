@@ -1,12 +1,12 @@
 ﻿# Moderado Project Handoff
 
-Updated: 2026-10-06 16:43 UTC
-Branch: Moderado `master` at `55ba231`; Gateway `master` at `99c203d`
-Status: **Direct-provider `/connect` restoration is ready for review; changes are uncommitted.**
+Updated: 2026-10-06 17:12 UTC
+Branch: Moderado `master` at `d930664`; Gateway `master` at `99c203d`
+Status: **`/login` preserves and displays the Gateway URL; PowerShell environment selection is documented; changes are ready to commit and push.**
 
 ## Summary
 
-The Moderado CLI exposes separate connection paths: `/login` for the Moderado Gateway and `/connect` for direct providers. This restores the provider picker available in CLI 0.3.10 while preserving Gateway login.
+The Moderado CLI exposes separate connection paths: `/login` for the Moderado Gateway and `/connect` for direct providers. This restores the provider picker available in CLI 0.3.10 while preserving Gateway login. The current `/login` fix retains an existing Gateway Base URL when reauthenticating and shows the resolved URL in the login choices. Local Gateway `/v1/models` was reachable at `http://127.0.0.1:4788/v1/models` during diagnosis.
 
 ## Completed
 
@@ -14,6 +14,8 @@ The Moderado CLI exposes separate connection paths: `/login` for the Moderado Ga
 - Reconnected the existing provider picker to active connection switching, saved profiles, and the existing credential-store behavior.
 - Clarified README and Gateway integration documentation to distinguish `/login` from direct `/connect` providers.
 - Updated existing command and welcome tests to expect `/connect` as supported.
+- Fixed Gateway re-login to use the saved Base URL unless environment overrides are set; added the resolved Base URL to the login option descriptions and documented the behavior.
+- Added PowerShell instructions to force development or production and clear the overrides to return to the saved Gateway URL.
 
 ## In progress
 
@@ -21,11 +23,11 @@ The Moderado CLI exposes separate connection paths: `/login` for the Moderado Ga
 
 ## Working tree
 
-- Ten files are modified for this change, including this handoff. No commit or push was made.
+- Five files are modified for this task, including this handoff. Commit and push are pending.
 
 ## Checks
 
-- `npm run typecheck` — PASS.
+- `npm run typecheck` — PASS after the Gateway URL preservation change.
 - `git diff --check` — PASS.
 - Tests — NOT RUN.
 

@@ -930,7 +930,11 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         return selection.modelId;
       },
       onLogin: async (drawFrame) => {
-        const connection = await loginModeradoCloudInteractive({ signal, drawFrame });
+        const connection = await loginModeradoCloudInteractive({
+          signal,
+          drawFrame,
+          gatewayUrl: config.connections?.['moderado-cloud']?.baseUrl,
+        });
         if (!connection) return currentModel;
         const runtimeConnection = requiresCredentialReference(connection) ? await storeConnectionCredential(connection, credentialStore) : connection;
         saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
@@ -1417,7 +1421,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
     if (!provider) {
       process.stdout.write('\nNo model is connected. Use /login for the Gateway or /connect for a direct provider.\n');
-      const connection = await loginModeradoCloudInteractive({ signal });
+      const connection = await loginModeradoCloudInteractive({
+        signal,
+        gatewayUrl: config.connections?.['moderado-cloud']?.baseUrl,
+      });
       if (!connection) { process.stdout.write('No provider connected. Use /login or /connect whenever you are ready.\n\n'); continue; }
       const runtimeConnection = requiresCredentialReference(connection) ? await storeConnectionCredential(connection, credentialStore) : connection;
       saveConnection(runtimeConnection); config = loadConfig(); activateConnection(runtimeConnection);
@@ -1637,7 +1644,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           ? '\nModerado Cloud rejected this browser login. Sign in again to retry once.\n'
           : `\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
         const replacement = cloudOAuth
-          ? await loginModeradoCloudInteractive({ signal })
+          ? await loginModeradoCloudInteractive({ signal, gatewayUrl: activeConnection.baseUrl })
           : await replaceProviderKeyInteractive(activeConnection, { signal });
         if (!replacement) throw error;
         recordTurnUsage();
