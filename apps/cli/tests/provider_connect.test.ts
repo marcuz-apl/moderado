@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
 import { GatewayError } from '@moderado/contracts';
-import { buildConnection, buildModeradoCloudConnection, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { authorizeModeradoCloudInBrowser, buildConnection, buildModeradoCloudConnection, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+
+/** Minimal fake stdin: the code only attaches a `keypress` listener to it. */
+function fakeStdin(): EventEmitter {
+  const stdin = new EventEmitter() as EventEmitter & { isTTY?: boolean };
+  stdin.isTTY = false;
+  return stdin;
+}
 
 const openRouter = {
   id: 'openrouter',
@@ -147,5 +155,95 @@ describe('provider connection setup', () => {
     });
     expect(() => buildConnection({ kind: 'openai-compatible', baseUrl: 'https://example.com/v1' }))
       .toThrow('model');
+  });
+});
+
+describe('browser sign-in wait', () => {
+  // The browser sends no callback when it is closed without signing in, so the
+  // only escapes are a keypress, an abort, or the timeout. Every one of these
+  // must settle promptly as `undefined` instead of hanging or rejecting into
+  // the async keypress handler (which would crash the TUI).
+  it('returns undefined when Esc cancels the wait instead of hanging', async () => {
+    const stdin = fakeStdin();
+    const pending = authorizeModeradoCloudInBrowser(undefined, {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      openBrowser: () => setImmediate(() => stdin.emit('keypress', undefined, { name: 'escape' })),
+      timeoutMs: 60_000, // would fail the test if cancel did not work
+    });
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it('returns undefined when Ctrl+C cancels the wait', async () => {
+    const stdin = fakeStdin();
+    const pending = authorizeModeradoCloudInBrowser(undefined, {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      openBrowser: () => setImmediate(() => stdin.emit('keypress', undefined, { ctrl: true, name: 'c' })),
+      timeoutMs: 60_000,
+    });
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it('returns undefined when the session aborts during the wait', async () => {
+    const controller = new AbortController();
+    const stdin = fakeStdin();
+    const pending = authorizeModeradoCloudInBrowser(controller.signal, {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      openBrowser: () => setImmediate(() => controller.abort()),
+      timeoutMs: 60_000,
+    });
+    await expect(pending).resolves.toBeUndefined();
+  });
+
+  it('settles as undefined on timeout instead of rejecting', async () => {
+    const stdin = fakeStdin();
+    await expect(authorizeModeradoCloudInBrowser(undefined, {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      openBrowser: () => { /* browser closed without signing in */ },
+      timeoutMs: 30,
+    })).resolves.toBeUndefined();
+  });
+
+  it('draws a waiting frame that tells the user how to cancel', async () => {
+    const stdin = fakeStdin();
+    const frames: string[][] = [];
+    const pending = authorizeModeradoCloudInBrowser(undefined, {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      openBrowser: () => setImmediate(() => stdin.emit('keypress', undefined, { name: 'escape' })),
+      drawFrame: (lines) => { frames.push(lines); },
+      timeoutMs: 60_000,
+    });
+    await pending;
+    const text = frames.flat().join('\n');
+    expect(text).toContain('Sign-in page opened in your browser');
+    expect(text).toContain('Press Esc or Ctrl+C to cancel');
+  });
+
+  it('completes a verified callback and exchanges the token offline', async () => {
+    const stdin = fakeStdin();
+    const pending = authorizeModeradoCloudInBrowser(undefined, {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      openBrowser: (authorizationUrl) => {
+        const authorize = new URL(authorizationUrl);
+        const redirect = authorize.searchParams.get('redirect_uri')!;
+        const state = authorize.searchParams.get('state')!;
+        void fetch(`${redirect}?code=auth-code&state=${encodeURIComponent(state)}`);
+      },
+      tokenFetch: async () => new Response(JSON.stringify({ access_token: 'mrd_browser-token', token_type: 'Bearer', expires_in: 2_592_000 })),
+      timeoutMs: 60_000,
+    });
+    await expect(pending).resolves.toEqual({ accessToken: 'mrd_browser-token', expiresAt: expect.any(Number) });
+  });
+
+  it('rejects when the loopback callback fails state validation', async () => {
+    const stdin = fakeStdin();
+    const pending = authorizeModeradoCloudInBrowser(undefined, {
+      stdin: stdin as unknown as NodeJS.ReadStream,
+      openBrowser: (authorizationUrl) => {
+        const redirect = new URL(authorizationUrl).searchParams.get('redirect_uri')!;
+        void fetch(`${redirect}?code=auth-code&state=tampered`);
+      },
+      timeoutMs: 60_000,
+    });
+    await expect(pending).rejects.toThrow(/could not be verified/);
   });
 });

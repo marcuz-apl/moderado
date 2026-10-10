@@ -6,6 +6,7 @@ import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/provid
 import type { ModelInventoryEntry } from '@moderado/contracts';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
+import { emitKeypressEvents } from 'node:readline';
 import { createModeradoOAuthRequest, exchangeModeradoOAuthCode, validateModeradoOAuthCallback } from '../moderado_oauth.js';
 
 export interface ConnectionInput {
@@ -183,7 +184,47 @@ function openAuthorizationPage(url: string): void {
   child.unref();
 }
 
-async function authorizeModeradoCloudInBrowser(signal?: AbortSignal): Promise<{ accessToken: string; expiresAt: number } | undefined> {
+/** Tunable seams for the browser wait; production uses the real defaults. */
+export interface BrowserLoginOptions {
+  /** Stream that receives Esc / Ctrl+C while waiting for the browser. */
+  stdin?: NodeJS.ReadStream;
+  /** Opens the authorization URL; injectable so tests never spawn a browser. */
+  openBrowser?: (url: string) => void;
+  /** Max time to wait for the loopback callback. Defaults to five minutes. */
+  timeoutMs?: number;
+  /** Draws the "waiting for browser" frame while the callback is pending. */
+  drawFrame?: (popupLines: string[]) => void;
+  /** Token-exchange fetch; injectable so the success path runs offline. */
+  tokenFetch?: typeof fetch;
+}
+
+const DEFAULT_BROWSER_LOGIN_TIMEOUT_MS = 5 * 60_000;
+
+function waitingForBrowserFrame(): string[] {
+  return renderBoxLines('Moderado Cloud', [
+    'Sign-in page opened in your browser.',
+    '',
+    'Complete the sign-in, then return here.',
+    'The CLI resumes automatically once the browser finishes.',
+    '',
+    '\x1b[38;5;244mPress Esc or Ctrl+C to cancel and go back.\x1b[0m',
+  ], 64);
+}
+
+/**
+ * Run the loopback OAuth wait. Closing the browser without finishing sends no
+ * callback, so we give the user a visible frame plus an Esc/Ctrl+C cancel and
+ * settle every non-success path as `undefined` (never a rejection, which would
+ * surface as an unhandled rejection inside the async keypress handler).
+ */
+export async function authorizeModeradoCloudInBrowser(
+  signal?: AbortSignal,
+  options: BrowserLoginOptions = {},
+): Promise<{ accessToken: string; expiresAt: number } | undefined> {
+  const stdin = options.stdin ?? process.stdin;
+  const openBrowser = options.openBrowser ?? openAuthorizationPage;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_BROWSER_LOGIN_TIMEOUT_MS;
+
   const server = createServer();
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -199,12 +240,30 @@ async function authorizeModeradoCloudInBrowser(signal?: AbortSignal): Promise<{ 
         if (settled) return;
         settled = true;
         clearTimeout(timeout);
+        stdin.removeListener('keypress', onKeypress);
         signal?.removeEventListener('abort', onAbort);
         error ? reject(error) : resolve(value);
       };
       const onAbort = () => finish(undefined);
-      const timeout = setTimeout(() => finish(undefined, new Error('Moderado browser login timed out. Run /login to try again.')), 5 * 60_000);
+      // Raw mode delivers Esc / Ctrl+C as keypresses, not SIGINT, so the only
+      // way out is an explicit listener here. Cancel resolves `undefined`.
+      const onKeypress = (_str: string | undefined, key: { name?: string; ctrl?: boolean } | undefined): void => {
+        if (key?.name === 'escape' || (key?.ctrl && key?.name === 'c')) finish(undefined);
+      };
+      const timeout = setTimeout(() => {
+        options.drawFrame?.(renderBoxLines('Moderado Cloud', [
+          'Browser sign-in timed out.',
+          '',
+          'Run /login again when you are ready to sign in.',
+        ], 64));
+        finish(undefined);
+      }, timeoutMs);
       signal?.addEventListener('abort', onAbort, { once: true });
+      options.drawFrame?.(waitingForBrowserFrame());
+      if (stdin && typeof stdin.on === 'function') {
+        emitKeypressEvents(stdin as NodeJS.ReadStream);
+        stdin.on('keypress', onKeypress);
+      }
       server.on('request', (incoming, response) => {
         if (incoming.method !== 'GET') { response.writeHead(405).end(); return; }
         let authCode: string;
@@ -218,9 +277,9 @@ async function authorizeModeradoCloudInBrowser(signal?: AbortSignal): Promise<{ 
         response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' }).end('Moderado login complete. You can close this tab.');
         finish(authCode);
       });
-      openAuthorizationPage(request.authorizationUrl);
+      openBrowser(request.authorizationUrl);
     });
-    return code ? await exchangeModeradoOAuthCode(code, request) : undefined;
+    return code ? await exchangeModeradoOAuthCode(code, request, options.tokenFetch) : undefined;
   } finally {
     server.close();
   }
@@ -242,8 +301,16 @@ export async function loginModeradoCloudInteractive(options: PopupConnectionOpti
   if (!method || options.signal?.aborted) return undefined;
   if (method === 'public') return buildModeradoCloudConnection(undefined, undefined, options.gatewayUrl);
   if (method === 'browser') {
-    const credential = await authorizeModeradoCloudInBrowser(options.signal);
-    return credential ? buildModeradoCloudConnection(credential.accessToken, credential.expiresAt, options.gatewayUrl) : undefined;
+    try {
+      const credential = await authorizeModeradoCloudInBrowser(options.signal, { drawFrame: options.drawFrame });
+      return credential ? buildModeradoCloudConnection(credential.accessToken, credential.expiresAt, options.gatewayUrl) : undefined;
+    } catch (error) {
+      // Surface the failure instead of letting it reject into the async keypress
+      // handler, where it would become an unhandled rejection and kill the TUI.
+      const message = error instanceof Error ? error.message : String(error);
+      options.drawFrame?.(renderBoxLines('Moderado Cloud', [message, '', '\x1b[38;5;244mPress Esc to go back.\x1b[0m'], 64));
+      return undefined;
+    }
   }
   let prompt = 'Moderado Cloud API key (mrd_…)';
   while (!options.signal?.aborted) {
