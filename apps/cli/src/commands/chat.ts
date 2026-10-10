@@ -227,6 +227,14 @@ export function resolveTurnAssistantAnswer(
   };
 }
 
+export function saveFailedTurnPrompt(
+  history: ChatMessage[],
+  prompt: string,
+): ChatMessage[] {
+  if (!prompt.trim()) return history;
+  return [...history, { role: 'user', content: prompt }];
+}
+
 export function isBareExitCommand(input: string): boolean {
   return input.trim().toLowerCase() === 'exit';
 }
@@ -1730,6 +1738,13 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         sessionStore.save(activeSession);
         streamedAnswer = lastAnswer;
       } else if (resolution.isError) {
+        conversationHistory = saveFailedTurnPrompt(conversationHistory, effectivePrompt);
+        activeSession.messages = conversationHistory;
+        activeSession.providerId = activeConnection?.id;
+        activeSession.providerName = activeConnection?.displayName;
+        activeSession.modelId = result.selectedModel.id;
+        activeSession.mode = activeMode;
+        sessionStore.save(activeSession);
         streamedAnswer = lastAnswer;
       } else {
         conversationHistory = evidenceTask ? replaceEvidenceTurn(result.messages, evidenceTask, trimmed) : result.messages;
@@ -1757,6 +1772,13 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         ? ` (other configured providers: ${otherConnections.join(', ')})`
         : '';
       lastQuestion = trimmed;
+      conversationHistory = saveFailedTurnPrompt(conversationHistory, effectivePrompt);
+      activeSession.messages = conversationHistory;
+      activeSession.providerId = activeConnection?.id;
+      activeSession.providerName = activeConnection?.displayName;
+      activeSession.modelId = currentModel;
+      activeSession.mode = activeMode;
+      sessionStore.save(activeSession);
       const rawErr = err?.message || 'Inference error';
       const cleanErr = rawErr
         .replace(/^(?:NVIDIA NIM|OpenAI|OpenRouter|[a-zA-Z0-9_-]+)\s*(?:request failed|rate limit exceeded|service or model unavailable)?\s*(?:\([^)]*\))?\s*(?:during\s*streamChat)?:\s*/i, '')

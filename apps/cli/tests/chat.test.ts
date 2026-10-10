@@ -31,6 +31,7 @@ import {
   formatSessionExitSummary,
   levenshteinDistance,
   resolveTurnAssistantAnswer,
+  saveFailedTurnPrompt,
   isLocalTokenQuery,
   isLocalVersionQuery,
   isLocalWorkspaceQuery,
@@ -859,5 +860,20 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
 
     const workspaceAnswer = resolveLocalMetaQuery('where are we?', context);
     expect(workspaceAnswer).toContain('D:/test/workspace');
+  });
+});
+
+describe('failed turn recovery', () => {
+  it('preserves the failed prompt for the next model attempt', () => {
+    const history: ChatMessage[] = [
+      { role: 'system', content: 'You are Moderado.' },
+      { role: 'user', content: 'Earlier request' },
+      { role: 'assistant', content: 'Earlier answer' },
+    ];
+
+    const recovered = saveFailedTurnPrompt(history, 'Task stopped by token budget');
+
+    expect(recovered.at(-1)).toEqual({ role: 'user', content: 'Task stopped by token budget' });
+    expect(history.at(-1)?.content).toBe('Earlier answer');
   });
 });
