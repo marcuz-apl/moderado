@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { createServer } from 'node:http';
 import { GatewayError } from '@moderado/contracts';
-import { authorizeModeradoCloudInBrowser, buildConnection, buildModeradoCloudConnection, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { authorizeModeradoCloudInBrowser, buildConnection, buildModeradoCloudConnection, connectProviderInteractive, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, loginModeradoCloudInteractive, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { stripAnsi } from '../src/ui/welcome.js';
 
 /** Minimal fake stdin: the code only attaches a `keypress` listener to it. */
 function fakeStdin(): EventEmitter {
@@ -22,7 +24,7 @@ const openRouter = {
 describe('provider connection setup', () => {
   it('offers NVIDIA NIM, Moderado Cloud, OpenRouter, and Agnes AI presets', () => {
     expect(PROVIDER_PRESETS.map((preset) => preset.value)).toEqual([
-      'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
+      'moderado-cloud', 'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
     ]);
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')?.baseUrl)
       .toBe('https://openrouter.ai/api/v1');
@@ -245,5 +247,118 @@ describe('browser sign-in wait', () => {
       timeoutMs: 60_000,
     });
     await expect(pending).rejects.toThrow(/could not be verified/);
+  });
+});
+
+describe('repeat Cloud login', () => {
+  it('offers the saved key and shows the active provider without exposing the key', async () => {
+    let authorization: string | undefined;
+    const server = createServer((request, response) => {
+      authorization = request.headers.authorization;
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ data: [] }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
+    const saved = { ...buildModeradoCloudConnection('mrd_saved-secret'), baseUrl: `http://127.0.0.1:${address.port}/v1` };
+    const frames: string[][] = [];
+    let selected = false;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1_000);
+    try {
+      const result = await loginModeradoCloudInteractive({
+        signal: controller.signal,
+        activeConnection: saved,
+        savedConnections: { 'moderado-cloud': { ...saved, apiKey: undefined } },
+        resolveSavedConnection: async () => saved,
+        drawFrame: (lines) => {
+          frames.push(lines);
+          const frame = lines.map(stripAnsi).join('\n');
+          if (!selected) { selected = true; setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' })); }
+          else if (frame.includes('Moderado Cloud Models')) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+        },
+      });
+      expect(result).toEqual(saved);
+      const visible = frames.flat().map(stripAnsi).join('\n');
+      expect(visible).toContain('Active: Moderado Cloud');
+      expect(visible).toContain('Use saved API key');
+      expect(visible).not.toContain('mrd_saved-secret');
+      expect(authorization).toBe('Bearer mrd_saved-secret');
+    } finally {
+      clearTimeout(timeout);
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it('wraps the selected login note inside the popup border', async () => {
+    const frames: string[][] = [];
+    let selected = false;
+    await loginModeradoCloudInteractive({
+      activeConnection: buildModeradoCloudConnection(),
+      drawFrame: (lines) => {
+        frames.push(lines);
+        if (!selected) { selected = true; setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'down' })); }
+        else if (frames.length === 2) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+      },
+    });
+    const lines = frames.at(-1)!.map(stripAnsi);
+    expect(lines.join('\n')).toContain('mrd_');
+    expect(lines.join('\n')).toContain('Base URL:');
+    expect(lines.every((line) => line.length <= lines[0].length)).toBe(true);
+  });
+});
+
+describe('unified provider connection', () => {
+  it('connects to the Gateway and selects one of its routes through /connect', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ data: [{ id: 'vendor/route-one' }] }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
+    const previousEnvironment = process.env.MODERADO_CLOUD_ENV;
+    const previousUrl = process.env.MODERADO_CLOUD_BASE_URL;
+    delete process.env.MODERADO_CLOUD_ENV;
+    delete process.env.MODERADO_CLOUD_BASE_URL;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1_000);
+    const seen = new Set<string>();
+    try {
+      const result = await connectProviderInteractive({
+        signal: controller.signal,
+        gatewayUrl: `http://127.0.0.1:${address.port}/v1`,
+        drawFrame: (lines) => {
+          const frame = lines.map(stripAnsi).join('\n');
+          if (frame.includes('Connect Provider') && !seen.has('provider')) {
+            seen.add('provider');
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Login · Active:') && !seen.has('login')) {
+            seen.add('login');
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          } else if (frame.includes('Moderado Cloud Models') && !seen.has('model')) {
+            seen.add('model');
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          }
+        },
+      });
+      expect(result).toMatchObject({ id: 'moderado-cloud', defaultModel: 'vendor/route-one' });
+      expect([...seen]).toEqual(['provider', 'login', 'model']);
+    } finally {
+      clearTimeout(timeout);
+      if (previousEnvironment === undefined) delete process.env.MODERADO_CLOUD_ENV;
+      else process.env.MODERADO_CLOUD_ENV = previousEnvironment;
+      if (previousUrl === undefined) delete process.env.MODERADO_CLOUD_BASE_URL;
+      else process.env.MODERADO_CLOUD_BASE_URL = previousUrl;
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
   });
 });

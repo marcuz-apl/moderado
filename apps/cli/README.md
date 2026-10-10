@@ -116,15 +116,16 @@ Maintainers can install a verified release artifact directly with
 
 ### Connect to the Moderado Gateway
 
-Run `/login` in the TUI and choose the public Gateway for keyless inference.
+In the current source build, run `/connect`, choose Moderado Gateway, and then
+choose public access or sign in.
 Browser authorization or a Moderado Cloud `mrd_` API key is optional for account
 features. `/model` lists configured Gateway routes: `auto` follows Gateway
 routing, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
-Use `/connect` to connect directly to OpenRouter, NVIDIA NIM, Agnes AI,
-OrcaRouter, Ollama, LM Studio, or a custom OpenAI-compatible provider. `/login`
-selects the Moderado Gateway; `/connect` selects a direct provider.
+The same `/connect` menu offers OpenRouter, NVIDIA NIM, Agnes AI, OrcaRouter,
+Ollama, LM Studio, and custom OpenAI-compatible providers. The published 0.4.8
+release still uses `/login` for the Gateway.
 
 Cloud OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
@@ -146,12 +147,12 @@ Run `moderado doctor` to inspect local setup without exposing secrets. Add
 
 Run `moderado` to open the TUI immediately. A fresh installation does not require
 an API key or a preselected model. The welcome card shows **No model connected —
-use `/login`** until you add one.
+use `/connect`** until you add one.
 
-Use `/login` for the public Moderado Gateway and `/model` to browse configured routes.
-Cloud `auto` follows the Gateway's configured pool; choosing a route in `/model`
-pins it for subsequent requests. Existing direct BYOK and local profiles remain
-available separately.
+Use `/connect` to choose the Gateway or another provider. The Gateway offers a
+route picker after connection; `/model` can change the route later. Cloud `auto`
+follows the Gateway's configured pool, while choosing a route pins subsequent
+requests to it.
 
 ### Sessions and usage
 
@@ -230,7 +231,7 @@ Run `moderado doctor` to check the local Node runtime, workspace, Moderado home 
 
 ## Windows credential storage
 
-On Windows, `/login` stores Moderado Cloud credentials in Windows Credential
+On Windows, Gateway sign-in through `/connect` stores credentials in Windows Credential
 Manager and keeps only a credential reference in `~/.moderado/config.json`.
 Non-Windows platforms use the current memory-only credential store, so log in
 again for each new CLI process. Existing BYOK environment variables and saved

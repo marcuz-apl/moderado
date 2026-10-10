@@ -119,16 +119,17 @@ Maintainers can install a verified release artifact directly with
 
 ### Connect to the Moderado Gateway
 
-Run `/login` in the TUI and sign in with the browser or enter a Moderado Cloud
-`mrd_` website API key to use free Gateway routes. The public Gateway option
+In the current source build, run `/connect` and choose Moderado Gateway. Sign in
+with the browser or enter a Moderado Cloud `mrd_` website API key to use free
+Gateway routes. The public Gateway option
 lists all routes and can use paid routes without a key. `/model` lists configured
 Gateway routes: `auto` follows Gateway routing and may select a free or paid
 route, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
-Use `/connect` to connect directly to OpenRouter, NVIDIA NIM, Agnes AI,
-OrcaRouter, Ollama, LM Studio, or a custom OpenAI-compatible provider. `/login`
-selects the Moderado Gateway; `/connect` selects a direct provider.
+The same `/connect` menu offers OpenRouter, NVIDIA NIM, Agnes AI, OrcaRouter,
+Ollama, LM Studio, and custom OpenAI-compatible providers. The published 0.4.8
+release still uses `/login` for the Gateway.
 
 Cloud OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
@@ -138,8 +139,8 @@ after starting a new CLI process.
 Cloud connections use their configured Gateway URL. Loopback URLs such as
 `http://127.0.0.1:4788/v1` are treated as local development; HTTPS URLs for a
 NAS, VPS, or other remote host are used as configured. To set the URL before
-first login, define `MODERADO_CLOUD_BASE_URL`. Later `/login` attempts keep the
-saved Gateway URL unless an environment override is set. The login prompt shows
+first connection, define `MODERADO_CLOUD_BASE_URL`. Later Gateway connections
+keep the saved URL unless an environment override is set. The Gateway picker shows
 the resolved Base URL before connecting. To force an environment for the current
 PowerShell session, set `MODERADO_CLOUD_ENV` before starting the CLI:
 
@@ -153,7 +154,9 @@ to `production` instead. To return to the saved Gateway URL, clear the override
 with `Remove-Item Env:MODERADO_CLOUD_ENV`; also clear
 `MODERADO_CLOUD_BASE_URL` if you set that variable. These environment settings
 apply to `npm run moderado` launched from the same PowerShell window. You can
-also set `MODERADO_CLOUD_BASE_URL` to a specific Gateway URL before first login.
+also set `MODERADO_CLOUD_BASE_URL` to a specific Gateway URL. For a NAS Gateway,
+use its HTTPS `/v1` URL and leave `MODERADO_CLOUD_ENV` unset; `production`
+selects the built-in public URL.
 
 Run `moderado doctor` to inspect local setup without exposing secrets. Add
 `--connectivity` only when you want an optional live model-catalog check.
@@ -164,12 +167,12 @@ Run `moderado doctor` to inspect local setup without exposing secrets. Add
 
 Run `moderado` to open the TUI immediately. A fresh installation does not require
 an API key or a preselected model. The welcome card shows **No model connected —
-use `/login`** until you add one.
+use `/connect`** until you add one.
 
-Use `/login` for the Moderado Gateway and `/model` to browse configured routes.
-Cloud `auto` follows the Gateway's configured pool; choosing a route in `/model`
-pins it for subsequent requests. Existing direct BYOK and local profiles remain
-available separately.
+Use `/connect` to choose the Moderado Gateway or another provider. The Gateway
+offers a route picker after connection; `/model` can change the route later.
+Cloud `auto` follows the Gateway's configured pool, while choosing a route pins
+subsequent requests to it.
 
 ### Sessions and usage
 
@@ -212,7 +215,7 @@ node scripts/smoke_test.js
 
 ## Windows credential storage
 
-On Windows, `/login` stores Moderado Cloud credentials in Windows Credential
+On Windows, Gateway sign-in through `/connect` stores credentials in Windows Credential
 Manager and keeps only a credential reference in `~/.moderado/config.json`.
 Non-Windows platforms use the current memory-only credential store, so log in
 again for each new CLI process. Existing BYOK environment variables and saved

@@ -57,7 +57,7 @@ export function buildModelConnectionRequiredItems(): PopupListItem[] {
     {
       label: 'Connect a provider first',
       value: 'login',
-      description: 'Use /login for the Gateway or /connect for a direct provider.',
+      description: 'Use /connect to choose a provider, including the Gateway.',
     },
     {
       label: 'Close Window',
@@ -139,7 +139,7 @@ export function buildCompatibleModelMenuItems(
   items.push({
     label: 'Cancel & Close Window',
     value: 'cancel',
-    description: 'No changes will be made.',
+    description: 'Keep the current model selection.',
   });
   return items;
 }

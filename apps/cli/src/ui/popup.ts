@@ -218,7 +218,22 @@ export async function selectListPopup(
     const sel = list[cursor];
     if (sel?.description) {
       lines.push('');
-      lines.push('\x1b[38;5;244m  ' + sel.description + '\x1b[0m');
+      const words = sel.description.split(/\s+/);
+      let note = '';
+      const width = Math.max(1, boxWidth - 6);
+      for (let word of words) {
+        while (word.length > width) {
+          if (note) { lines.push('\x1b[38;5;244m  ' + note + '\x1b[0m'); note = ''; }
+          lines.push('\x1b[38;5;244m  ' + word.slice(0, width) + '\x1b[0m');
+          word = word.slice(width);
+        }
+        if (note && note.length + word.length + 1 > width) {
+          lines.push('\x1b[38;5;244m  ' + note + '\x1b[0m');
+          note = '';
+        }
+        note += (note ? ' ' : '') + word;
+      }
+      if (note) lines.push('\x1b[38;5;244m  ' + note + '\x1b[0m');
     }
 
     // Footer key-hint bar.
@@ -227,7 +242,8 @@ export async function selectListPopup(
     const page = Math.min(totalPages, Math.floor(cursor / pageSize) + 1);
     const hint = options.hint ?? '↑↓ navigate · Enter select · Esc cancel';
     const count = filter.trim() ? `${list.length}/${items.length} matches` : `${items.length} items`;
-    lines.push(`\x1b[38;5;244m${hint}  ·  ${count}  ·  Page ${page}/${totalPages}\x1b[0m`);
+    const footer = `${hint}  ·  ${count}  ·  Page ${page}/${totalPages}`;
+    lines.push(`\x1b[38;5;244m${(footer.length <= boxWidth - 4 ? footer : hint).slice(0, boxWidth - 4)}\x1b[0m`);
 
     draw(renderBoxLines(title, lines, boxWidth));
   };

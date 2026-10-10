@@ -413,7 +413,7 @@ describe('OpenCode-style Welcome TUI', () => {
     });
 
     const plain = stripAnsi(output);
-    expect(plain).toContain('/login');
+    expect(plain).not.toContain('/login');
     expect(plain).toContain('/connect');
     expect(plain).toContain('/model');
     expect(plain).toContain('/session');
@@ -711,7 +711,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('selects and completes slash command candidates by index', () => {
     expect(selectCommandCandidate('/se', 0, 0)?.name).toBe('/session');
-    expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/login');
+    expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/model');
     expect(selectCommandCandidate('/', 0, -1)?.name).toBe('/exit');
   });
 

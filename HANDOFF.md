@@ -1,21 +1,22 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-06 18:38 UTC
-Branch: `master` at `f1a4fc5`
-Status: **Welcome/chat layout, model-switch recovery, and accurate zero-cost reporting for free routes and search are implemented.**
+Updated: 2026-10-10 16:17 UTC
+Branch: `master` at `a28e6fe` (tracking `origin/master`)
+Status: **Ready for review.** Unified `/connect` changes are uncommitted.
 
 ## Summary
 
-Token/cost details appear at the far left of the welcome window’s Plan/Execute row. In chat, process usage precedes token/cost details on that row; long process text is shortened to preserve the details and mode label. Live updates repaint both portions. The model tag remains before auto-approve on the following row. The `/model` return path now resumes stdin before restoring raw mode, preventing a paused input stream after selection flows. Chat cost calculation now recognizes provider-declared free models when catalogs omit per-model pricing, while retaining advertised pricing for metered models. Direct web-search-only sessions report $0.00; model costs in sessions that also use web search continue to follow model pricing. Moderado Cloud declares its complete Gateway catalog free, so `/login` route labels show Free when pricing metadata is absent. The provider guarantee outranks generic paid model classifications, and free turns remain known-zero with estimated or multi-route usage. Existing unknown-usage sessions are repaired on startup when their stored provider matches the active free catalog.
+The CLI now uses `/connect` for all providers, including the Moderado Gateway. Choosing the Gateway opens saved-key, browser sign-in, manual-key, and public access choices, then its model route picker. The `/login` slash command has been removed. Gateway sign-in can still be cancelled with Esc or Ctrl+C while waiting for a browser callback.
 
 ## Completed
 
-- Updated static/live row rendering and model-switch input recovery in `apps/cli/src/ui/welcome.ts` and `apps/cli/src/commands/chat.ts`.
-- Added regression coverage for mode visibility, narrow rows, and model-switch input recovery in `apps/cli/tests/welcome.test.ts`.
-- Updated slash-command cycling expectation to match `/connect`, `/login`, `/model` order.
-- Chat now records `$0.00` for models covered by the active provider's free policy when the provider does not publish explicit pricing. Added an integration regression test using NVIDIA's price-free catalog metadata.
-- Direct web-search-only sessions mark cost as `$0.00` before the searching frame renders; cost formatting supports a known zero even when no model token usage exists. Regression coverage checks the live frame and persisted session.
-- Declared Moderado Cloud's model catalog free and added picker coverage for Free route labels. Zero cost is retained when token usage is estimated or a free turn switches among multiple routes; explicit nonzero prices still take precedence. Previously unknown same-provider session costs are migrated to zero.
+- Added Moderado Gateway to the provider picker in `apps/cli/src/ui/provider_connect.ts`, with route selection after Gateway connection.
+- Passed active provider and saved Gateway context from `apps/cli/src/commands/chat.ts`; reused secure credential storage and activation. First-prompt setup now renders the same popup flow.
+- Removed `/login` from slash commands, help, and TUI input handling; updated both READMEs and the Gateway integration guide. Published 0.4.8 still uses `/login`.
+- Wrapped popup descriptions and constrained the footer inside the border in `apps/cli/src/ui/popup.ts`.
+- Added offline connection-flow regressions and aligned CLI package metadata to the existing `VERSION` base version 0.4.9.
+- Reviewed cancellation copy: closing the Gateway model picker retains the current route, usually `auto`.
+- Checked Gateway mode handling: the CLI selects a configured URL but does not query the server's runtime mode. A remote NAS Gateway requires an HTTPS URL; `MODERADO_CLOUD_ENV=production` forces the built-in public URL.
 
 ## In progress
 
@@ -23,22 +24,22 @@ Token/cost details appear at the far left of the welcome window’s Plan/Execute r
 
 ## Working tree
 
-- Modified `apps/cli/src/ui/welcome.ts`, `apps/cli/src/commands/chat.ts`, `apps/cli/tests/welcome.test.ts`, and `HANDOFF.md`.
+- Modified `HANDOFF.md`, both READMEs, `docs/CLOUD_GATEWAY_INTEGRATION.md`, `apps/cli/package.json`, `package-lock.json`, CLI chat/UI files, and their focused tests. See `git status --short` for the exact list.
 
 ## Checks
 
-- `npm test -- apps/cli/tests/welcome.test.ts` — PASS (51 tests).
-- `npm test -- apps/cli/tests/chat_usage.test.ts` — PASS (3 tests; includes free-catalog, estimated Moderado Cloud, and live web-search zero-cost regressions).
-- `npm test -- apps/cli/tests/sessions.test.ts` — PASS (7 tests).
-- `npm test -- apps/cli/tests/model_selector_cloud.test.ts apps/cli/tests/model_selection.test.ts` — PASS (16 tests).
-- `npm test -- packages/providers/tests/presets.test.ts` — PASS (5 tests).
-- `npm run typecheck` — PASS.
-- `git diff --check` — PASS.
+- `npm test` â€” PASS (62 files, 525 tests).
+- `npm run build` â€” PASS.
+- `git diff --check` â€” PASS before this handoff edit.
+- `rg -n '/login|onLogin' apps/cli/src` â€” no matches.
 
 ## Decisions and context
 
-- Explicitly resume stdin after `/model` returns because keypress decoder setup is one-time and does not guarantee that a paused stream resumes.
-- Clip process usage as needed to keep token/cost details and mode visible within terminal width.
+- The user chose one command instead of retaining `/login` as an alias.
+- The Gateway key remains in the credential store; the popup offers a saved key only when it can be resolved.
+- Cancelling Gateway model selection keeps its current route, usually `auto`. The picker now says so.
+- The CLI does not infer a NAS Gateway's runtime mode from its URL. The configured URL is sufficient for routing.
+- Current source behavior differs from the published 0.4.8 release. Release-specific documentation retains that distinction.
 
 ## Blockers
 
@@ -46,11 +47,14 @@ Token/cost details appear at the far left of the welcome window’s Plan/Execute r
 
 ## Next action
 
-1. Review the final working-tree changes.
+1. Review the unified `/connect` popup locally with `npm run moderado`, then commit if it behaves as expected.
 
 ## Resume notes
 
-- Focused suite: `npm test -- apps/cli/tests/welcome.test.ts`.
+- Focused suite: `npx vitest run apps/cli/tests/provider_connect.test.ts apps/cli/tests/welcome.test.ts apps/cli/tests/chat.test.ts`.
+
+The release records below are historical and are not current verification.
+
 ## Release record (v0.3.10)
 
 1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.

@@ -17,7 +17,7 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     expect(items).toEqual([
       expect.objectContaining({
         label: 'Connect a provider first',
-        description: expect.stringContaining('/login'),
+        description: expect.stringContaining('/connect'),
       }),
       expect.objectContaining({ label: 'Close Window' }),
     ]);

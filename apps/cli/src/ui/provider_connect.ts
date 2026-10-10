@@ -2,6 +2,7 @@ import { freeModelPolicyFor, resolveModeradoCloudBaseUrl, type ConnectProvidersC
 import { isFreeModelOption } from '../model_pricing.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
+import { selectCompatibleModelOverlay } from './model_selector.js';
 import { fetchOpenRouterFreeModels, fetchProviderModels } from '@moderado/providers';
 import type { ModelInventoryEntry } from '@moderado/contracts';
 import { createServer } from 'node:http';
@@ -20,6 +21,7 @@ export interface ConnectionInput {
 export interface PopupConnectionOptions {
   signal?: AbortSignal;
   drawFrame?: (popupLines: string[]) => void;
+  activeConnection?: ProviderConnection;
   savedConnections?: Record<string, ProviderConnection>;
   resolveSavedConnection?: (connection: ProviderConnection) => Promise<ProviderConnection>;
   connectProviders?: ConnectProvidersConfig;
@@ -39,6 +41,7 @@ export interface ProviderPreset {
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
+  { label: 'Moderado Gateway', value: 'moderado-cloud', tag: 'Gateway', description: 'Use browser sign-in, a saved key, a new key, or public access.' },
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
   { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
@@ -254,7 +257,7 @@ export async function authorizeModeradoCloudInBrowser(
         options.drawFrame?.(renderBoxLines('Moderado Cloud', [
           'Browser sign-in timed out.',
           '',
-          'Run /login again when you are ready to sign in.',
+          'Run /connect again when you are ready to sign in.',
         ], 64));
         finish(undefined);
       }, timeoutMs);
@@ -270,7 +273,7 @@ export async function authorizeModeradoCloudInBrowser(
         try {
           authCode = validateModeradoOAuthCallback(incoming.url ?? '/', request);
         } catch {
-          response.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('Login could not be verified. Return to Moderado CLI and try /login again.');
+          response.writeHead(400, { 'content-type': 'text/plain; charset=utf-8' }).end('Login could not be verified. Return to Moderado CLI and try /connect again.');
           finish(undefined, new Error('Moderado browser login callback could not be verified.'));
           return;
         }
@@ -285,25 +288,53 @@ export async function authorizeModeradoCloudInBrowser(
   }
 }
 
+async function chooseModeradoCloudModel(connection: ProviderConnection, options: PopupConnectionOptions): Promise<ProviderConnection> {
+  if (!options.drawFrame) return connection;
+  const modelId = await selectCompatibleModelOverlay({
+    apiKey: connection.apiKey,
+    baseUrl: connection.baseUrl,
+    providerId: connection.id,
+    providerName: connection.displayName,
+    currentModel: connection.defaultModel,
+    signal: options.signal,
+    drawFrame: options.drawFrame,
+  });
+  return modelId ? { ...connection, defaultModel: modelId } : connection;
+}
+
 export async function loginModeradoCloudInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
   const baseUrl = resolveModeradoCloudBaseUrl(
     process.env.MODERADO_CLOUD_ENV,
     process.env.MODERADO_CLOUD_BASE_URL ?? options.gatewayUrl,
   );
+  let savedConnection: ProviderConnection | undefined;
+  const saved = options.savedConnections?.['moderado-cloud'];
+  if (saved && options.resolveSavedConnection) {
+    try {
+      const resolved = await options.resolveSavedConnection(saved);
+      if (resolved.apiKey?.trim()) savedConnection = resolved;
+    } catch {
+      // Keep fresh login methods available when credential storage cannot be read.
+    }
+  }
   const loginChoices = [
+    ...(savedConnection ? [{ label: 'Use saved API key', value: 'saved', description: 'Continue with the saved Moderado Cloud key.' }] : []),
     { label: 'Sign in with browser', value: 'browser', description: `Get a website key for free Gateway routes. Base URL: ${baseUrl}` },
     { label: 'Enter an API key', value: 'manual', description: `Paste a Moderado Cloud key starting with mrd_ for free routes. Base URL: ${baseUrl}` },
     { label: 'Use public Gateway', value: 'public', description: `Browse all routes and use paid routes without a key. Free routes require a website key. Base URL: ${baseUrl}` },
   ];
+  const activeName = options.activeConnection?.displayName ?? 'None';
+  const title = `Login · Active: ${activeName.slice(0, 28)}`;
   const method = options.drawFrame
-    ? await selectListPopup('Connect Moderado Cloud', loginChoices, { drawFrame: options.drawFrame, signal: options.signal })
-    : (await askSelect('Connect Moderado Cloud', loginChoices, 0, { signal: options.signal })).value;
+    ? await selectListPopup(title, loginChoices, { drawFrame: options.drawFrame, signal: options.signal })
+    : (await askSelect(title, loginChoices, 0, { signal: options.signal })).value;
   if (!method || options.signal?.aborted) return undefined;
-  if (method === 'public') return buildModeradoCloudConnection(undefined, undefined, options.gatewayUrl);
+  if (method === 'saved') return savedConnection ? chooseModeradoCloudModel(savedConnection, options) : undefined;
+  if (method === 'public') return chooseModeradoCloudModel(buildModeradoCloudConnection(undefined, undefined, options.gatewayUrl), options);
   if (method === 'browser') {
     try {
       const credential = await authorizeModeradoCloudInBrowser(options.signal, { drawFrame: options.drawFrame });
-      return credential ? buildModeradoCloudConnection(credential.accessToken, credential.expiresAt, options.gatewayUrl) : undefined;
+      return credential ? chooseModeradoCloudModel(buildModeradoCloudConnection(credential.accessToken, credential.expiresAt, options.gatewayUrl), options) : undefined;
     } catch (error) {
       // Surface the failure instead of letting it reject into the async keypress
       // handler, where it would become an unhandled rejection and kill the TUI.
@@ -317,7 +348,7 @@ export async function loginModeradoCloudInteractive(options: PopupConnectionOpti
     const apiKey = await askPopupText(prompt, options, true);
     if (!apiKey) return undefined;
     try {
-      return buildModeradoCloudConnection(apiKey, undefined, options.gatewayUrl);
+      return chooseModeradoCloudModel(buildModeradoCloudConnection(apiKey, undefined, options.gatewayUrl), options);
     } catch (error) {
       prompt = `Invalid key: ${error instanceof Error ? error.message : String(error)} Try again`;
     }
@@ -325,7 +356,7 @@ export async function loginModeradoCloudInteractive(options: PopupConnectionOpti
   return undefined;
 }
 
-/** Interactive provider picker for direct BYOK and local compatible endpoints. */
+/** Interactive provider picker for the Gateway, BYOK, and local endpoints. */
 export async function connectProviderInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
   const choices = buildProviderPresets(options.connectProviders);
   const selectedValue = options.drawFrame
@@ -336,6 +367,7 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   if (options.signal?.aborted) return undefined;
   const selectedPreset = choices.find((item) => item.value === selectedValue);
   if (!selectedPreset) return undefined;
+  if (selectedPreset.value === 'moderado-cloud') return loginModeradoCloudInteractive(options);
   const saved = findReusableConnection(selectedPreset.value, options.savedConnections);
   if (saved && options.resolveSavedConnection) {
     try {
