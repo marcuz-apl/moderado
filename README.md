@@ -52,11 +52,11 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.10** | Current source | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_CLOUD_ENV` overrides. |
-| **0.4.8** | Latest published release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
+| **0.4.10** | Latest published release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_CLOUD_ENV` overrides. |
+| **0.4.8** | Previous release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
-Both versions use the command name `moderado`. `0.4.10` is not published yet; install the latest published release with `npm install -g moderado`. To keep using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
+Both versions use the command name `moderado`. Install the latest release with `npm install -g moderado`. To keep using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
 
 Chocolatey is deliberately out of scope; the full channel runbook lives in
 [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
@@ -66,7 +66,7 @@ Chocolatey is deliberately out of scope; the full channel runbook lives in
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.8
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.10
 
 # npm (requires Node.js >= 20)
 npm install -g moderado
