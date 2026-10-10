@@ -90,8 +90,9 @@ moderado --help
 
 The latest published release is 0.4.8. Its `/login` command uses the Moderado
 Gateway for model routes and inference; `/connect` remains available for direct
-providers. The previous 0.3.10 release is self-contained and works without the
-Gateway. Both releases use the `moderado` command name.
+providers. The 0.4.10 source build uses `/connect` for all providers and does
+not offer `/login`. The previous 0.3.10 release is self-contained and works
+without the Gateway. All three use the `moderado` command name.
 
 Install the latest release with `npm install -g moderado`. To stay on the
 self-contained 0.3.10 CLI, run `npm install -g moderado@0.3.10`.

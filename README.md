@@ -52,10 +52,11 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.8** | Latest release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
+| **0.4.10** | Current source | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_CLOUD_ENV` overrides. |
+| **0.4.8** | Latest published release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
-Both versions use the command name `moderado`. Install the latest release with `npm install -g moderado`. To keep using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
+Both versions use the command name `moderado`. `0.4.10` is not published yet; install the latest published release with `npm install -g moderado`. To keep using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
 
 Chocolatey is deliberately out of scope; the full channel runbook lives in
 [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
