@@ -68,8 +68,8 @@ describe('Moderado Gateway model picker discovery', () => {
     expect(authorization).toBeUndefined();
     expect(pickerState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ label: 'auto', value: 'model:auto' }),
-      expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one', tag: 'Free' }),
-      expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two', tag: 'Free' }),
+      expect.objectContaining({ label: 'vendor/route-one', value: 'model:vendor/route-one', tag: 'Price unknown' }),
+      expect.objectContaining({ label: 'vendor/route-two', value: 'model:vendor/route-two', tag: 'Price unknown' }),
     ]));
     expect(selected).toBe('vendor/route-one');
   });
@@ -77,6 +77,15 @@ describe('Moderado Gateway model picker discovery', () => {
   it('maps the visible auto choice to the Gateway model ID auto', async () => {
     pickerState.selected = 'model:auto';
     await expect(selectCompatibleModelOverlay(pickerOptions())).resolves.toBe('auto');
+  });
+
+  it('labels Gateway paid and free routes from access metadata', async () => {
+    responseBody = { data: [{ id: 'free-route', access: 'free' }, { id: 'paid-route', access: 'paid' }] };
+    await selectCompatibleModelOverlay(pickerOptions());
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'free-route', tag: 'Free' }),
+      expect.objectContaining({ label: 'paid-route', tag: 'Paid' }),
+    ]));
   });
 
   it('shows a safe diagnostic when the Gateway rejects model discovery', async () => {

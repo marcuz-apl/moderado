@@ -11,7 +11,7 @@ describe('shared provider presets', () => {
     expect(CONNECT_PROVIDER_PRESET_IDS).toContain('openai-compatible');
   });
 
-  it('declares Moderado Gateway as a keyless auto route', () => {
+  it('declares Moderado Gateway as a public catalog with key-gated free routes', () => {
     expect(CONNECT_PROVIDER_PRESET_META.find((item) => item.id === 'moderado-cloud')).toMatchObject({
       kind: 'openai-compatible',
       baseUrl: 'https://mod.alfazen.org/v1',
@@ -38,11 +38,14 @@ describe('shared provider presets', () => {
     expect(isFreeModelOption({ id: 'orcarouter/free' }, unknown, freeModelPolicyFor('openrouter'))).toBe(false);
   });
 
-  it('uses the Moderado Cloud free catalog for cost even when generic model classification says paid', () => {
+  it('uses Gateway route access for cost and leaves unannotated routes unknown', () => {
     const cloudFreePolicy = freeModelPolicyFor('moderado-cloud');
     const genericPaidClassification = { modelId: 'openai/gpt-oss-20b', accessTier: 'paid', toolSupport: 'supported', source: 'official_metadata' } as const;
 
-    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b' }, genericPaidClassification, cloudFreePolicy)).toBe(true);
+    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b' }, genericPaidClassification, cloudFreePolicy)).toBe(false);
+    expect(isFreeModelOption({ id: 'auto' }, { ...genericPaidClassification, modelId: 'auto', source: 'heuristic' }, cloudFreePolicy)).toBe(false);
     expect(isFreeModelOption({ id: 'openai/gpt-oss-20b', pricing: { prompt: '0.001', completion: '0.002' } }, genericPaidClassification, cloudFreePolicy)).toBe(false);
+    expect(isFreeModelOption({ id: 'paid-route', access: 'paid' }, genericPaidClassification, cloudFreePolicy)).toBe(false);
+    expect(isFreeModelOption({ id: 'free-route', access: 'free' }, genericPaidClassification, cloudFreePolicy)).toBe(true);
   });
 });

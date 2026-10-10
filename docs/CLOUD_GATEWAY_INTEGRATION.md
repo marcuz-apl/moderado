@@ -9,13 +9,13 @@ Let Moderado CLI use configured routes through the public Gateway, while preserv
 
 ## Existing support
 
-CLI supports keyless Gateway inference through `/v1/models` and `/v1/chat/completions`; account authorization is optional and uses the website OAuth flow. `/login` selects the Gateway, while `/connect` selects a direct provider such as OpenRouter, NVIDIA NIM, Agnes AI, OrcaRouter, Ollama, LM Studio, or a custom OpenAI-compatible endpoint.
+CLI lists Gateway routes without a key through `/v1/models`. Free-route inference through `/v1/chat/completions` requires a valid Moderado website API key; paid routes remain open. Browser authorization uses the website OAuth flow. `/login` selects the Gateway, while `/connect` selects a direct provider such as OpenRouter, NVIDIA NIM, Agnes AI, OrcaRouter, Ollama, LM Studio, or a custom OpenAI-compatible endpoint.
 
 ## CLI work
 
-1. Use `/login` for the **Moderado Gateway** profile. Offer keyless access or optional browser authorization/manual `mrd_…` key for account features. Production uses `https://mod.alfazen.org/v1`; local development uses `http://127.0.0.1:4788/v1`. Keep existing saved BYOK/local profiles independent.
+1. Use `/login` for the **Moderado Gateway** profile. Offer browser authorization or a manual `mrd_…` website key for free routes; a keyless profile may list routes and use paid routes. Production uses `https://mod.alfazen.org/v1`; local development uses `http://127.0.0.1:4788/v1`. Keep existing saved BYOK/local profiles independent.
 2. For browser auth, use `client_id=moderado-cli`, random state, PKCE S256, an exact loopback callback, then exchange at `https://mod.alfazen.org/oauth/token`. Verify state and bind the exact callback/client ID; reject redirects during token exchange. The exchanged access key expires in 30 days; there is no refresh token, so `/login` must allow reauthorization. Avoid logging or writing key material to plain config; use existing credential storage where available.
-3. Fetch the Gateway inventory from unauthenticated `GET /v1/models`. Preserve route IDs as model identifiers and let `/model` browse configured routes. Send `auto` to the Gateway so it follows configured routing; a pinned route targets its selected route. Keep local/BYOK profiles independent.
+3. Fetch the Gateway inventory from unauthenticated `GET /v1/models`. Preserve route IDs and `access` (`free` or `paid`) and let `/model` browse configured routes. Send the stored website key on Gateway inference. Send `auto` to the Gateway so it follows configured routing and may choose either access tier; a pinned route targets its selected route. Keep local/BYOK profiles independent.
 4. The current Gateway contract does not promise fallback status events; routing decisions happen in the Gateway and providers. Keep client request handling compatible with the published contract and surface typed errors without exposing upstream details.
 5. Forward supported OpenAI-compatible request fields to the selected provider; the Gateway rewrites only the public model ID. The provider/model determines accepted fields, payload sizes, and limits. The CLI executes tool calls.
 6. Keep provider discovery, OAuth, and error handling covered by offline fake-server tests. Tests must not make live provider calls.
@@ -29,4 +29,4 @@ CLI supports keyless Gateway inference through `/v1/models` and `/v1/chat/comple
 
 ## Implementation status
 
-The CLI integration supports public, keyless Gateway inference and optional browser authorization for account features. The Gateway runs locally with the website service on port `4788`; the public base URL is `https://mod.alfazen.org/v1`.
+The CLI integration supports public model listing, website-key authorization for free Gateway routes, and keyless access to paid routes. The Gateway runs locally with the website service on port `4788`; the public base URL is `https://mod.alfazen.org/v1`.

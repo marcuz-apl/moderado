@@ -132,14 +132,10 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
   {
     id: 'moderado-cloud',
     label: 'Moderado Cloud',
-    description: 'Use the public Moderado Gateway without an account, or sign in for account routes.',
+    description: 'Browse public Gateway routes; sign in with a website key for free routes.',
     kind: 'openai-compatible',
     baseUrl: MODERADO_CLOUD_BASE_URL,
     defaultModel: 'auto',
-    // Moderado Cloud only exposes free routes; the Gateway model catalog does
-    // not include per-route pricing metadata to identify them individually.
-    freeCatalog: true,
-    freeCatalogOverridesClassification: true,
     requiresApiKey: false,
   },
   {
@@ -246,10 +242,11 @@ export function isDeclaredFreeModelId(modelId: string, policy?: ProviderFreePoli
 
 /** Explicit zero prices or curated/preset declarations qualify; paid prices win. */
 export function isFreeModelOption(
-  entry: Pick<ModelInventoryEntry, 'id' | 'pricing'>,
+  entry: Pick<ModelInventoryEntry, 'id' | 'pricing' | 'access'>,
   classification: ModelClassification,
   policy?: ProviderFreePolicy,
 ): boolean {
+  if (entry.access) return entry.access === 'free';
   // A reported nonzero price outranks any blanket preset declaration.
   if (entry.pricing && Object.values(entry.pricing).some(price => price.trim() === '' || !Number.isFinite(Number(price)) || Number(price) !== 0)) return false;
   if (isFreeModelEntry(entry)) return true;

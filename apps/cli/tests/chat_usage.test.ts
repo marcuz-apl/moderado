@@ -67,7 +67,7 @@ it('shows zero cost for estimated Moderado Cloud usage across a generically paid
   });
   vi.spyOn(config, 'resolveApiKey').mockReturnValue(undefined);
   vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
-    { id: 'openai/gpt-oss-20b', object: 'model', owned_by: 'openai' },
+    { id: 'openai/gpt-oss-20b', object: 'model', owned_by: 'openai', access: 'free' },
   ]);
   const sessionStore = new SessionStore(home);
   const previousSession = createSession(fs.realpathSync(home), {
@@ -75,7 +75,7 @@ it('shows zero cost for estimated Moderado Cloud usage across a generically paid
   });
   previousSession.usage = {
     promptTokens: 40, completionTokens: 10, totalTokens: 50,
-    estimated: true, available: true, costKnown: false,
+    estimated: true, available: true, costKnown: true, costUsd: 0,
   };
   sessionStore.save(previousSession);
   const controller = new AbortController();

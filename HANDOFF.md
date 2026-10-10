@@ -307,3 +307,12 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 | curl installer | 0.4.8 | tracks latest |
 | Homebrew tap | **0.4.8** | `72cbaba` |
 | Scoop bucket | **0.4.8** | `952c93f` |
+
+## Gateway website-key integration (2026-10-09)
+
+- Uncommitted CLI changes send the stored Moderado website key for Gateway inference. Public model listing and keyless paid-route inference remain supported. Gateway access metadata labels free and paid routes; auto has no blanket free-cost assumption.
+- npm run build passed. npm test -- --run passed: 515 tests in 62 files. git diff --check passed with line-ending advisories only. Tests use fake providers.
+- Git status: modified README.md, docs/CLOUD_GATEWAY_INTEGRATION.md, CLI command/UI and tests, contracts model schema, provider preset and tests. No commit, tag, or release.
+- Decision: a free route requires a valid, unexpired, unrevoked Moderado website API key; paid routes and public discovery do not. The Gateway may choose either access type for auto.
+- Blocker: none for code changes. This historical file already contains invalid UTF-8 bytes, so the note was appended without rewriting its existing bytes.
+- Smallest next action: review and commit the CLI change with the corresponding Gateway and IDE contract updates when ready.

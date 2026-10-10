@@ -26,6 +26,10 @@ import { buildWorkspaceMap } from '../repo_map.js';
 import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
 import { discoverSkills, formatSkillContext, formatSkillsList, getEnabledSkillNames, selectEnabledSkills, setSkillEnabled, UserSkill } from '../skills.js';
 
+export function createConnectionProvider(connection: ProviderConnection): NvidiaAdapter {
+  return new NvidiaAdapter({ apiKey: connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
+}
+
 export function formatSessionExitSummary(session: StoredSession, modelId?: string): string {
   const usage = session.usage;
   const tokens = usage.available
@@ -829,7 +833,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const activateConnection = (connection: ProviderConnection, explicitModel?: string): void => {
     activeConnection = connection;
     currentModel = explicitModel ?? connection.defaultModel ?? (connection.kind === 'nvidia-nim' ? 'auto' : undefined);
-    provider = new NvidiaAdapter({ apiKey: connection.id === 'moderado-cloud' ? undefined : connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
+    provider = createConnectionProvider(connection);
   };
   if (activeConnection) activateConnection(activeConnection, args.model);
 
@@ -1654,10 +1658,13 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (!activeConnection || !isAuthenticationFailure(error)) throw error;
         if (thinkingTimer) clearInterval(thinkingTimer);
         const cloudOAuth = isModeradoCloudOAuthConnection(activeConnection);
-        process.stdout.write(cloudOAuth
+        const cloudWithoutKey = activeConnection.id === 'moderado-cloud' && !activeConnection.apiKey;
+        process.stdout.write(cloudWithoutKey
+          ? '\nThis free Gateway route requires a Moderado website API key. Sign in or enter a key to retry once.\n'
+          : cloudOAuth
           ? '\nModerado Cloud rejected this browser login. Sign in again to retry once.\n'
           : `\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
-        const replacement = cloudOAuth
+        const replacement = cloudOAuth || cloudWithoutKey
           ? await loginModeradoCloudInteractive({ signal, gatewayUrl: activeConnection.baseUrl })
           : await replaceProviderKeyInteractive(activeConnection, { signal });
         if (!replacement) throw error;

@@ -157,7 +157,7 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
   };
 }
 
-/** Build a public Gateway profile or a keyed account profile. */
+/** Build a public paid-route profile or a keyed Gateway profile. */
 export function buildModeradoCloudConnection(apiKey?: string, credentialExpiresAt?: number, gatewayUrl?: string): ProviderConnection {
   const key = apiKey?.trim();
   if (key && !/^mrd_.+/.test(key)) throw new Error('Enter a Moderado Cloud key starting with mrd_.');
@@ -232,9 +232,9 @@ export async function loginModeradoCloudInteractive(options: PopupConnectionOpti
     process.env.MODERADO_CLOUD_BASE_URL ?? options.gatewayUrl,
   );
   const loginChoices = [
-    { label: 'Use public Gateway', value: 'public', description: `Connect without an account or API key. Base URL: ${baseUrl}` },
-    { label: 'Sign in with browser', value: 'browser', description: `Authorize Moderado Cloud in your browser. Base URL: ${baseUrl}` },
-    { label: 'Enter an API key', value: 'manual', description: `Paste a Moderado Cloud key starting with mrd_. Base URL: ${baseUrl}` },
+    { label: 'Sign in with browser', value: 'browser', description: `Get a website key for free Gateway routes. Base URL: ${baseUrl}` },
+    { label: 'Enter an API key', value: 'manual', description: `Paste a Moderado Cloud key starting with mrd_ for free routes. Base URL: ${baseUrl}` },
+    { label: 'Use public Gateway', value: 'public', description: `Browse all routes and use paid routes without a key. Free routes require a website key. Base URL: ${baseUrl}` },
   ];
   const method = options.drawFrame
     ? await selectListPopup('Connect Moderado Cloud', loginChoices, { drawFrame: options.drawFrame, signal: options.signal })

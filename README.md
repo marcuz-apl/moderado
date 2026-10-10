@@ -119,10 +119,11 @@ Maintainers can install a verified release artifact directly with
 
 ### Connect to the Moderado Gateway
 
-Run `/login` in the TUI and choose the public Gateway for keyless inference.
-Browser authorization or a Moderado Cloud `mrd_` API key is optional for account
-features. `/model` lists configured Gateway routes: `auto` follows Gateway
-routing, while selecting a route pins requests to it. Existing BYOK and local
+Run `/login` in the TUI and sign in with the browser or enter a Moderado Cloud
+`mrd_` website API key to use free Gateway routes. The public Gateway option
+lists all routes and can use paid routes without a key. `/model` lists configured
+Gateway routes: `auto` follows Gateway routing and may select a free or paid
+route, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
 Use `/connect` to connect directly to OpenRouter, NVIDIA NIM, Agnes AI,
@@ -165,7 +166,7 @@ Run `moderado` to open the TUI immediately. A fresh installation does not requir
 an API key or a preselected model. The welcome card shows **No model connected —
 use `/login`** until you add one.
 
-Use `/login` for the public Moderado Gateway and `/model` to browse configured routes.
+Use `/login` for the Moderado Gateway and `/model` to browse configured routes.
 Cloud `auto` follows the Gateway's configured pool; choosing a route in `/model`
 pins it for subsequent requests. Existing direct BYOK and local profiles remain
 available separately.

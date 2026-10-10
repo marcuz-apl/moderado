@@ -47,6 +47,7 @@ export interface CompatibleModelSelectorOptions {
 export interface CompatibleModelEntry {
   id: string;
   pricing?: Record<string, string>;
+  access?: 'free' | 'paid';
 }
 
 let cachedInventory: { id: string }[] | null = null;
@@ -156,9 +157,9 @@ function compatibleModelPopupItem(model: CompatibleModelEntry, providerName: str
   return {
     label: model.id,
     value: model.id,
-    tag: isFree ? 'Free' : 'Price unknown',
+    tag: isFree ? 'Free' : model.access === 'paid' ? 'Paid' : 'Price unknown',
     description: isFree
-      ? `${providerName} free model`
+      ? model.access === 'free' && providerName === 'Moderado Cloud' ? `${providerName} free model · website API key required` : `${providerName} free model`
       : price
         ? `${providerName} model · input $${Number(price) * 1_000_000}/M tokens`
         : `${providerName} model · pricing unavailable`,
@@ -178,7 +179,7 @@ export async function selectCompatibleModelOverlay(
     layerPromptBox(drawFrame, `\x1b[36mQuerying ${providerName} model catalog...\x1b[0m`);
     const provider = new NvidiaAdapter({ apiKey, baseUrl, providerId, providerName });
     models = (await provider.discoverModels(signal))
-      .map((model) => ({ id: model.id, pricing: model.pricing }))
+      .map((model) => ({ id: model.id, pricing: model.pricing, access: model.access }))
       .sort((a, b) => a.id.localeCompare(b.id));
   } catch (error) {
     // Explicit model entry remains available when a provider does not expose /models.

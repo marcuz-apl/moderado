@@ -24,6 +24,8 @@ export const ModelInventoryEntrySchema = z.object({
   parent: z.string().optional(),
   /** Optional OpenAI-compatible per-token pricing, supplied as decimal strings. */
   pricing: z.record(z.string(), z.string()).optional(),
+  /** Gateway route access policy; absent for other OpenAI-compatible catalogs. */
+  access: z.enum(['free', 'paid']).optional(),
   /** Optional provider-advertised request parameters, used for capability checks. */
   supported_parameters: z.array(z.string()).optional(),
 });
