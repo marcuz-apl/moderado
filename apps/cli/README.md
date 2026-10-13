@@ -94,13 +94,34 @@ Gateway and direct providers; `/login` is no longer offered. The previous
 self-contained and works without the Gateway. All three use the `moderado`
 command name.
 
-Install the latest release with `npm install -g moderado`. To stay on the
-self-contained 0.3.10 CLI, run `npm install -g moderado@0.3.10`.
+Install the latest release with `npm install -g moderado`. To install a specific
+version, run `npm install -g moderado@<version>`. Prebuilt binaries and the curl
+installer are documented in the root README. Windows installation options are
+npm and Scoop. See `docs/DISTRIBUTION.md` for package-manager details.
 
-Any npm-compatible installer works (bun add -g moderado,
-pnpm add -g moderado, npx -y moderado@latest --help). Prebuilt binaries and the
-curl installer are documented in the root README. Windows installation options
-are npm and Scoop. See `docs/DISTRIBUTION.md` in the repository.
+### Update an existing installation
+
+```bash
+moderado update   # latest release within the installed major version
+moderado upgrade  # latest release, including a major version change
+```
+
+Both commands update the current installation in place and report the installed
+and target versions. If already current, the command reports that and exits
+successfully. Restart Moderado after a successful update to use the new version.
+
+Global npm installs and standalone binaries installed by the Moderado installer
+are updated in place. The npm update preserves the existing global prefix and
+does not update other global packages. Homebrew and Scoop installations remain
+managed by their package managers: use `brew upgrade moderado` or
+`scoop update moderado`. Other npm-compatible package managers should be updated
+with the manager that installed Moderado.
+
+If Moderado cannot safely identify or replace the installation, it exits with
+an actionable error and leaves the current installation intact. Update it
+manually with its original installer or package manager, for example
+`npm install -g moderado` or the Homebrew/Scoop command above. An interrupted
+update reports cancellation; run the command again when ready.
 To build from source instead:
 
 ```bash

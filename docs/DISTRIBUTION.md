@@ -18,6 +18,37 @@ Chocolatey is out of scope.
 CI builds the binaries and release artifacts. After a release, refresh the
 Homebrew and Scoop manifests from the verified release assets.
 
+## End-user updates
+
+Run `moderado update` to install the latest published release within the
+installed major version. Run `moderado upgrade` to install the latest published
+release, including a major version change. Both commands target the current
+installation channel, show the installed and target versions, and report the
+outcome. An already-current installation exits successfully. Restart Moderado
+after a successful update. Cancellation or an unsafe/failed update exits
+nonzero; rerun after cancellation, or use the manual command for the original
+installer when the installation cannot be identified safely.
+
+The CLI updates global npm installations in place with the selected version,
+preserving the global npm prefix and leaving unrelated global packages alone.
+Moderado-managed standalone binaries installed by the curl installer are also
+updated in place after release metadata, artifact checksums, and the manifest
+are verified. A failed download or verification leaves the installed binary
+untouched. The CLI does not migrate between installation channels.
+
+Installations managed by Homebrew or Scoop must be updated through those tools:
+
+```bash
+brew upgrade moderado
+scoop update moderado
+```
+
+For an installation that cannot be safely identified or replaced, the CLI fails
+closed and prints manual guidance. Use the installer or package manager that
+originally installed Moderado, for example `npm install -g moderado`,
+`brew upgrade moderado`, or `scoop update moderado`. Other npm-compatible
+installers should likewise be updated with their original package manager.
+
 ---
 
 ## 1. curl installer (`scripts/install.sh`)
