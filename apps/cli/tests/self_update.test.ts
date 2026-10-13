@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { realpathSync } from 'node:fs';
@@ -15,6 +15,7 @@ import {
   SelfUpdateError,
   runNpmUpdate,
   updateStandalone,
+  handleSelfUpdateCommand,
 } from '../src/self_update.js';
 
 const release = (tag_name: string, extra: Record<string, unknown> = {}) => ({
@@ -299,6 +300,37 @@ describe('release selection', () => {
 
   it('reports no compatible release when only another major is available', () => {
     expect(() => selectUpdateRelease(releases, 'v3.0.0+2610135', 'update')).toThrow(/no compatible release/i);
+  });
+});
+
+describe('self update command handler', () => {
+  it('reports the installed version and succeeds when already current', async () => {
+    const originalFetch = globalThis.fetch;
+    const output = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+    globalThis.fetch = (async () => new Response(JSON.stringify([release('v0.4.17')]))) as typeof fetch;
+    try {
+      expect(await handleSelfUpdateCommand('update', 'v0.4.17+261013f', new AbortController().signal)).toBe(0);
+      expect(output.mock.calls.map(([chunk]) => String(chunk)).join(' ')).toMatch(/already current/i);
+      expect(output.mock.calls.map(([chunk]) => String(chunk)).join(' ')).toContain('v0.4.17');
+    } finally {
+      globalThis.fetch = originalFetch;
+      output.mockRestore();
+    }
+  });
+
+  it('returns nonzero when release lookup fails and when cancelled', async () => {
+    const originalFetch = globalThis.fetch;
+    const output = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    globalThis.fetch = (async () => new Response('unavailable', { status: 503 })) as typeof fetch;
+    try {
+      expect(await handleSelfUpdateCommand('upgrade', 'v0.4.17+261013f', new AbortController().signal)).toBe(1);
+      const controller = new AbortController();
+      controller.abort();
+      expect(await handleSelfUpdateCommand('upgrade', 'v0.4.17+261013f', controller.signal)).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      output.mockRestore();
+    }
   });
 });
 

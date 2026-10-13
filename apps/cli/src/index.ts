@@ -11,6 +11,7 @@ import { handleDoctorCommand } from './commands/doctor.js';
 import { writeDiagnosticLog } from './diagnostic_log.js';
 import { handleSkillsCommand } from './commands/skills.js';
 import { INJECTED_VERSION } from './injected_version.js';
+import { handleSelfUpdateCommand } from './self_update.js';
 
 /**
  * Injected at build time by `scripts/binaries.mjs` via `pkg --define`. `pkg`
@@ -73,7 +74,9 @@ async function main(): Promise<void> {
 
   let exitCode = 0;
   try {
-    if (args.command === 'doctor') { exitCode = await handleDoctorCommand(args); } else if (args.command === 'skills') {
+    if (args.command === 'update' || args.command === 'upgrade') {
+      exitCode = await handleSelfUpdateCommand(args.command, getVersion(), abortController.signal);
+    } else if (args.command === 'doctor') { exitCode = await handleDoctorCommand(args); } else if (args.command === 'skills') {
       exitCode = handleSkillsCommand(args.skillAction, args.skillName);
     } else if (args.command === 'models') {
       exitCode = await handleModelsCommand(args);

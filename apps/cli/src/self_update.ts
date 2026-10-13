@@ -407,3 +407,47 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
     }
   }
 }
+
+export async function handleSelfUpdateCommand(
+  mode: 'update' | 'upgrade', installedVersion: string, signal: AbortSignal,
+): Promise<number> {
+  const write = (message: string) => process.stdout.write(`${message}\n`);
+  try {
+    if (signal.aborted) throw new SelfUpdateError('Update cancelled. Run the command again when ready.');
+    const releases = await fetchPublishedReleases(fetch, signal);
+    let release: UpdateRelease;
+    try {
+      release = selectUpdateRelease(releases, installedVersion, mode);
+    } catch (error) {
+      if (error instanceof SelfUpdateError && error.message === 'Already current') {
+        write(`Installed version: ${installedVersion}`);
+        write('Already current.');
+        return 0;
+      }
+      throw error;
+    }
+    write(`Installed version: ${installedVersion}`);
+    write(`Target version: ${release.tag_name}`);
+    const channel = detectInstallChannel(process.argv[1]);
+    if (channel.channel === 'package-manager') {
+      write(`Update with your package manager: ${channel.guidance}`);
+      return 0;
+    }
+    if (channel.channel === 'unknown') {
+      throw new SelfUpdateError(`Cannot safely identify this installation. ${channel.guidance}`);
+    }
+    if (signal.aborted) throw new SelfUpdateError('Update cancelled. Run the command again when ready.');
+    if (channel.channel === 'npm') {
+      await runNpmUpdate(release.tag_name, process.platform, process.env.npm_execpath, channel.prefix);
+    } else {
+      await updateStandalone({
+        release, executablePath: process.argv[1] ?? '', platform: process.platform, architecture: process.arch,
+      });
+    }
+    write(`Updated successfully to ${release.tag_name}. Restart Moderado to use the new version.`);
+    return 0;
+  } catch (error) {
+    process.stderr.write(`Update failed: ${error instanceof Error ? error.message : String(error)}\n`);
+    return 1;
+  }
+}
