@@ -8,6 +8,11 @@ describe('CLI Argument Parser', () => {
     expect(args.json).toBe(true);
   });
 
+  it('parses explicit update and upgrade commands', () => {
+    expect(parseCliArgs(['update'])).toMatchObject({ command: 'update', task: undefined });
+    expect(parseCliArgs(['upgrade'])).toMatchObject({ command: 'upgrade', task: undefined });
+  });
+
   it('parses run command with task and options', () => {
     const args = parseCliArgs([
       'run',

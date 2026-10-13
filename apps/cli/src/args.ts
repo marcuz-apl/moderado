@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 
 export interface CliParsedArgs {
-  command?: 'models' | 'run' | 'doctor' | 'skills';
+  command?: 'models' | 'run' | 'doctor' | 'skills' | 'update' | 'upgrade';
   task?: string;
   skillAction?: 'on' | 'off';
   skillName?: string;
@@ -56,7 +56,7 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
   });
 
   const positionals = parsed.positionals;
-  let command: 'models' | 'run' | 'doctor' | 'skills' | undefined;
+  let command: 'models' | 'run' | 'doctor' | 'skills' | 'update' | 'upgrade' | undefined;
   let task: string | undefined;
   let skillAction: 'on' | 'off' | undefined;
   let skillName: string | undefined;
@@ -71,6 +71,8 @@ export function parseCliArgs(args: string[] = process.argv.slice(2)): CliParsedA
       } else skillName = positionals[1];
     } else if (first === 'models') {
       command = 'models';
+    } else if (first === 'update' || first === 'upgrade') {
+      command = first;
     } else if (first === 'run') {
       command = 'run';
       task = positionals.slice(1).join(' ');
@@ -117,6 +119,8 @@ export function getHelpText(): string {
 
 USAGE:
   moderado models [options]
+  moderado update
+  moderado upgrade
   moderado run "<task>" [options]
   moderado "<task>" [options]
 
@@ -125,6 +129,8 @@ COMMANDS:
   run "<task>"           Execute a bounded coding task in the workspace\n  skills                 List built-in and user skills
   skills on|off NAME     Enable or disable a user skill
   doctor                 Check local Moderado setup
+  update                 Update within the current major version
+  upgrade                Upgrade across major versions
 
 OPTIONS:
   -w, --workspace <path> Target workspace directory (default: current directory)
