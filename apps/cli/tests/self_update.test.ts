@@ -270,7 +270,7 @@ describe('release metadata', () => {
     });
   });
 
-  it.each([null, [], {}, { tag_name: 'v1.2.3' }, release('v1.2.3', { draft: 'false' }), release('v1.2.3', { html_url: 'javascript:alert(1)' })])(
+  it.each([null, [], {}, { tag_name: 'v1.2.3' }, release('v1.2.3', { draft: 'false' }), release('v1.2.3', { html_url: 'javascript:alert(1)' }), release('v1.2.3', { html_url: 'https://user:pass@github.com/marcuz-apl/moderado/releases/tag/v1.2.3' })])(
     'rejects malformed release shape %#', (value) => {
       expect(() => parseReleaseMetadata(value)).toThrow(SelfUpdateError);
     },

@@ -85,7 +85,7 @@ export function parseReleaseMetadata(value: unknown): UpdateRelease | null {
   } catch {
     throw new SelfUpdateError(`Invalid GitHub release URL for ${release.tag_name}`);
   }
-  if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.port ||
+  if (url.protocol !== 'https:' || url.hostname !== 'github.com' || url.port || url.username || url.password ||
       url.pathname !== `${RELEASE_TAG_PATH}${release.tag_name}` || url.search || url.hash) {
     throw new SelfUpdateError(`Invalid GitHub release URL for ${release.tag_name}`);
   }
