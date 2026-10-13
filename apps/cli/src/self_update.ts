@@ -1,7 +1,9 @@
 import { spawn } from 'node:child_process';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { chmod, rename, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 
 const RELEASES_URL = 'https://api.github.com/repos/marcuz-apl/moderado/releases?per_page=100';
 const RELEASE_TAG_PATH = '/marcuz-apl/moderado/releases/tag/';
@@ -247,4 +249,107 @@ export async function runNpmUpdate(
       else reject(new SelfUpdateError(`npm update failed (exit ${code ?? 'unknown'}): ${stderr.trim() || stdout.trim()}`));
     });
   });
+}
+
+export type StandaloneUpdateOptions = {
+  release: UpdateRelease;
+  executablePath: string;
+  platform: string;
+  architecture: string;
+  fetchImpl?: typeof fetch;
+};
+
+type ReleaseArtifact = {
+  target: string; filename: string; platform: string; architecture: string;
+  size: number; checksum: string; signed: false;
+};
+
+export async function updateStandalone(options: StandaloneUpdateOptions): Promise<void> {
+  const { release, executablePath, platform, architecture } = options;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  if (!executablePath || !release || !/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(release.tag_name)) {
+    throw new SelfUpdateError('Cannot update standalone binary: invalid release or executable path');
+  }
+  const targets: Record<string, { target: string; filename: string }> = {
+    'win32-x64': { target: 'node22-win-x64', filename: 'moderado-win-x64.exe' },
+    'darwin-arm64': { target: 'node22-macos-arm64', filename: 'moderado-macos-arm64' },
+    'linux-x64': { target: 'node22-linux-x64', filename: 'moderado-linux-x64' },
+  };
+  const targetDetails = new Map(Object.entries(targets).map(([hostKey, value]) => {
+    const [targetPlatform, targetArchitecture] = hostKey.split('-');
+    return [value.target, { ...value, platform: targetPlatform, architecture: targetArchitecture }] as const;
+  }));
+  const host = targets[`${platform}-${architecture}`];
+  if (!host) throw new SelfUpdateError(`Unsupported standalone platform: ${platform} ${architecture}`);
+  const base = `https://github.com/marcuz-apl/moderado/releases/download/${release.tag_name}`;
+  const get = async (url: string): Promise<Response> => {
+    let response: Response;
+    try { response = await fetchImpl(url); } catch (error) {
+      throw new SelfUpdateError(`Standalone update download failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (!response.ok) throw new SelfUpdateError(`Standalone update download failed: HTTP ${response.status}`);
+    return response;
+  };
+  let manifest: unknown;
+  try { manifest = await (await get(`${base}/manifest.json`)).json(); } catch (error) {
+    if (error instanceof SelfUpdateError) throw error;
+    throw new SelfUpdateError('Standalone release manifest is malformed');
+  }
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) throw new SelfUpdateError('Standalone release manifest is malformed');
+  const data = manifest as Record<string, unknown>;
+  if (data.version !== release.tag_name || !Array.isArray(data.artifacts)) throw new SelfUpdateError('Standalone release manifest version or artifacts are invalid');
+  const seen = new Set<string>();
+  let artifact: ReleaseArtifact | undefined;
+  for (const item of data.artifacts) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) throw new SelfUpdateError('Standalone release manifest contains an invalid artifact');
+    const entry = item as Record<string, unknown>;
+    if (typeof entry.target !== 'string' || seen.has(entry.target)) throw new SelfUpdateError('Standalone release manifest contains duplicate targets');
+    seen.add(entry.target);
+    if (typeof entry.filename !== 'string' || basename(entry.filename) !== entry.filename || /[\\/\0]/.test(entry.filename) ||
+        typeof entry.platform !== 'string' || typeof entry.architecture !== 'string' ||
+        !Number.isSafeInteger(entry.size) || (entry.size as number) < 1 ||
+        typeof entry.checksum !== 'string' || !/^[a-f0-9]{64}$/.test(entry.checksum) || entry.signed !== false) {
+      throw new SelfUpdateError('Standalone release manifest contains an invalid artifact');
+    }
+    const expected = targetDetails.get(entry.target);
+    if (!expected || entry.filename !== expected.filename || entry.platform !== expected.platform || entry.architecture !== expected.architecture) {
+      throw new SelfUpdateError('Standalone release manifest contains an unsupported artifact target');
+    }
+    if (entry.target === host.target && entry.platform === platform && entry.architecture === architecture) {
+      artifact = entry as ReleaseArtifact;
+    }
+  }
+  if (!artifact || artifact.filename !== host.filename) throw new SelfUpdateError(`Standalone release has no artifact for ${platform} ${architecture}`);
+  const [artifactResponse, sidecarResponse] = await Promise.all([
+    get(`${base}/${artifact.filename}`), get(`${base}/${artifact.filename}.sha256`),
+  ]);
+  let bytes: Uint8Array;
+  let sidecar: string;
+  try {
+    const [buffer, text] = await Promise.all([artifactResponse.arrayBuffer(), sidecarResponse.text()]);
+    bytes = new Uint8Array(buffer);
+    sidecar = text;
+  } catch {
+    throw new SelfUpdateError('Standalone update download was truncated');
+  }
+  const checksum = createHash('sha256').update(bytes).digest('hex');
+  if (sidecar !== `${artifact.checksum}  ${artifact.filename}\n` || checksum !== artifact.checksum) {
+    throw new SelfUpdateError(`Standalone artifact checksum verification failed for ${artifact.filename}`);
+  }
+  if (bytes.byteLength !== artifact.size) throw new SelfUpdateError(`Standalone artifact size verification failed for ${artifact.filename}`);
+  const stagedPath = join(dirname(executablePath), `.${basename(executablePath)}.${randomUUID()}.tmp`);
+  try {
+    await writeFile(stagedPath, bytes, { flag: 'wx' });
+    if (platform !== 'win32') await chmod(stagedPath, 0o755);
+    try {
+      await rename(stagedPath, executablePath);
+    } catch (error) {
+      const detail = platform === 'win32'
+        ? 'Restart the terminal and retry, or install manually with scripts/install.sh.'
+        : 'Check that the executable directory is writable and retry.';
+      throw new SelfUpdateError(`Could not replace standalone executable. ${detail} (${error instanceof Error ? error.message : String(error)})`);
+    }
+  } finally {
+    await unlink(stagedPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+  }
 }

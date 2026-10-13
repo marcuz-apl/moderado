@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { realpathSync } from 'node:fs';
-import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { createServer } from 'node:http';
 import {
   buildNpmUpdateInvocation,
   detectInstallChannel,
@@ -12,6 +14,7 @@ import {
   selectUpdateRelease,
   SelfUpdateError,
   runNpmUpdate,
+  updateStandalone,
 } from '../src/self_update.js';
 
 const release = (tag_name: string, extra: Record<string, unknown> = {}) => ({
@@ -52,6 +55,27 @@ async function withFixtureNode<T>(node: string, run: () => T | Promise<T>): Prom
   } finally {
     process.execPath = original;
   }
+}
+
+async function localArtifactServer(files: Map<string, Buffer>) {
+  const server = createServer((request, response) => {
+    const body = files.get(request.url ?? '');
+    if (!body) { response.writeHead(404).end(); return; }
+    response.end(body);
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('Fixture server did not bind');
+  return {
+    fetchImpl: (async (input: string | URL | Request, init?: RequestInit) => {
+      const filename = new URL(String(input)).pathname.split('/').pop();
+      return fetch(`http://127.0.0.1:${address.port}/${filename}`, init);
+    }) as typeof fetch,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve());
+      server.closeAllConnections();
+    }),
+  };
 }
 
 describe('install channel', () => {
@@ -332,4 +356,75 @@ describe('fetchPublishedReleases', () => {
     };
     await fetchPublishedReleases(fetchImpl as typeof fetch, controller.signal);
   });
+});
+
+describe('standalone update', () => {
+  it('replaces the executable only after the local release artifact is verified', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-'));
+    const executable = join(root, 'moderado');
+    const artifact = Buffer.from('new standalone executable');
+    const checksum = createHash('sha256').update(artifact).digest('hex');
+    const filename = 'moderado-linux-x64';
+    const manifest = { version: 'v1.2.3', revision: 'abc', artifacts: [{ target: 'node22-linux-x64', filename, platform: 'linux', architecture: 'x64', size: artifact.length, checksum, signed: false }] };
+    const files = new Map<string, Buffer>([
+      ['/manifest.json', Buffer.from(JSON.stringify(manifest))],
+      [`/${filename}`, artifact],
+      [`/${filename}.sha256`, Buffer.from(`${checksum}  ${filename}\n`)],
+    ]);
+    const server = createServer((request, response) => {
+      const body = files.get(request.url ?? '');
+      if (!body) { response.writeHead(404).end(); return; }
+      response.end(body);
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Fixture server did not bind');
+    const fetchFixture: typeof fetch = async (input, init) => {
+      const original = new URL(String(input));
+      const url = `http://127.0.0.1:${address.port}${original.pathname.split('/').slice(-1)[0] === 'manifest.json' ? '/manifest.json' : `/${original.pathname.split('/').slice(-1)[0]}`}`;
+      return fetch(url, init);
+    };
+    await writeFile(executable, 'old executable');
+    try {
+      await updateStandalone({ release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'linux', architecture: 'x64', fetchImpl: fetchFixture });
+      expect(await readFile(executable)).toEqual(artifact);
+      expect((await readdir(root)).sort()).toEqual(['moderado']);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      server.closeAllConnections();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each(['missing host artifact', 'malformed manifest', 'bad sidecar', 'manifest checksum mismatch', 'truncated artifact', 'network failure'])(
+    'preserves the executable and removes staged files after %s', async (failure) => {
+      const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-failure-'));
+      const executable = join(root, 'moderado');
+      const artifact = Buffer.from('new standalone executable');
+      const checksum = createHash('sha256').update(artifact).digest('hex');
+      const filename = 'moderado-linux-x64';
+      const manifest = { version: 'v1.2.3', revision: 'abc', artifacts: [{ target: 'node22-linux-x64', filename, platform: 'linux', architecture: 'x64', size: artifact.length, checksum, signed: false }] };
+      let downloaded = artifact;
+      let sidecar = Buffer.from(`${checksum}  ${filename}\n`);
+      if (failure === 'missing host artifact') manifest.artifacts = [];
+      if (failure === 'bad sidecar') sidecar = Buffer.from('not a checksum');
+      if (failure === 'manifest checksum mismatch') manifest.artifacts[0].checksum = '0'.repeat(64);
+      if (failure === 'truncated artifact') downloaded = artifact.subarray(0, 4);
+      const manifestBody = Buffer.from(failure === 'malformed manifest' ? '{' : JSON.stringify(manifest));
+      const files = new Map<string, Buffer>([
+        ['/manifest.json', manifestBody], [`/${filename}`, downloaded], [`/${filename}.sha256`, sidecar],
+      ]);
+      if (failure === 'network failure') files.delete('/manifest.json');
+      const server = await localArtifactServer(files);
+      await writeFile(executable, 'old executable');
+      try {
+        await expect(updateStandalone({ release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'linux', architecture: 'x64', fetchImpl: server.fetchImpl })).rejects.toThrow();
+        expect(await readFile(executable, 'utf8')).toBe('old executable');
+        expect((await readdir(root)).sort()).toEqual(['moderado']);
+      } finally {
+        await server.close();
+        await rm(root, { recursive: true, force: true });
+      }
+    },
+  );
 });
