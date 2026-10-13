@@ -20,6 +20,11 @@ Homebrew and Scoop manifests from the verified release assets.
 
 ## End-user updates
 
+The `moderado update` and `moderado upgrade` commands are available starting
+with v0.4.18. The published v0.4.8 release described above does not include
+them, so install v0.4.18 or later with the original installer before using
+these commands.
+
 Run `moderado update` to install the latest published release within the
 installed major version. Run `moderado upgrade` to install the latest published
 release, including a major version change. Both commands target the current
@@ -31,10 +36,13 @@ installer when the installation cannot be identified safely.
 
 The CLI updates global npm installations in place with the selected version,
 preserving the global npm prefix and leaving unrelated global packages alone.
-Moderado-managed standalone binaries installed by the curl installer are also
-updated in place after release metadata, artifact checksums, and the manifest
-are verified. A failed download or verification leaves the installed binary
-untouched. The CLI does not migrate between installation channels.
+It recognizes Moderado-managed standalone binaries installed at the default
+`~/.local/bin/moderado` path by the curl installer. Those binaries are updated
+in place after release metadata, artifact checksums, and the manifest are
+verified. A failed download or verification leaves the installed binary
+untouched. A standalone install made with a custom installer `--dir` path is
+not recognized for in-place updates; use the original installer to update it.
+The CLI does not migrate between installation channels.
 
 Installations managed by Homebrew or Scoop must be updated through those tools:
 

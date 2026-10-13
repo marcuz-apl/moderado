@@ -101,6 +101,10 @@ npm and Scoop. See `docs/DISTRIBUTION.md` for package-manager details.
 
 ### Update an existing installation
 
+These commands are available starting with Moderado v0.4.18. The currently
+published v0.4.10 release does not include them; install v0.4.18 or later with
+the original installer before using these commands.
+
 ```bash
 moderado update   # latest release within the installed major version
 moderado upgrade  # latest release, including a major version change
@@ -110,12 +114,14 @@ Both commands update the current installation in place and report the installed
 and target versions. If already current, the command reports that and exits
 successfully. Restart Moderado after a successful update to use the new version.
 
-Global npm installs and standalone binaries installed by the Moderado installer
-are updated in place. The npm update preserves the existing global prefix and
-does not update other global packages. Homebrew and Scoop installations remain
-managed by their package managers: use `brew upgrade moderado` or
-`scoop update moderado`. Other npm-compatible package managers should be updated
-with the manager that installed Moderado.
+Global npm installs and standalone binaries installed at the default
+`~/.local/bin/moderado` path by the Moderado installer are updated in place.
+The npm update preserves the existing global prefix and does not update other
+global packages. Standalone installs made with a custom `--dir` path are not
+recognized for in-place updates and require the original installer. Homebrew
+and Scoop installations remain managed by their package managers: use
+`brew upgrade moderado` or `scoop update moderado`. Other npm-compatible package
+managers should be updated with the manager that installed Moderado.
 
 If Moderado cannot safely identify or replace the installation, it exits with
 an actionable error and leaves the current installation intact. Update it
