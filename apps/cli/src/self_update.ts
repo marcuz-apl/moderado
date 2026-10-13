@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { realpathSync } from 'node:fs';
+import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -132,7 +132,7 @@ export async function fetchPublishedReleases(
 }
 
 export type InstallChannel =
-  | { channel: 'npm' }
+  | { channel: 'npm'; prefix: string }
   | { channel: 'standalone' }
   | { channel: 'package-manager'; manager: 'homebrew' | 'scoop'; guidance: string }
   | { channel: 'unknown'; guidance: string };
@@ -140,11 +140,12 @@ export type InstallChannel =
 export function detectInstallChannel(executablePath: string | undefined, platform: string = process.platform): InstallChannel {
   const unknown: InstallChannel = { channel: 'unknown', guidance: 'Update this installation with its original installer or package manager.' };
   if (!executablePath) return unknown;
-  let resolved = executablePath;
+  let resolved: string;
   try {
     resolved = realpathSync(executablePath);
+    if (!statSync(resolved).isFile()) return unknown;
   } catch {
-    // The path may be supplied for inspection before it exists.
+    return unknown;
   }
   const path = resolved.replace(/\\/g, '/');
   const matchPath = platform === 'win32' ? path.toLowerCase() : path;
@@ -154,37 +155,65 @@ export function detectInstallChannel(executablePath: string | undefined, platfor
   if (platform === 'win32' && /^(?:[a-z]:\/|\/)[^\n]*\/scoop\/apps\/moderado\/(?:current|[^/]+)\/moderado-win-x64\.exe$/.test(matchPath)) {
     return { channel: 'package-manager', manager: 'scoop', guidance: 'scoop update moderado' };
   }
-  if (platform === 'win32') {
-    if (/\/appdata\/roaming\/npm\/node_modules\/moderado\/dist\/index\.js$/.test(matchPath) && !matchPath.includes('/_npx/')) {
-      return { channel: 'npm' };
+  const npmLayout = platform === 'win32'
+    ? /^(.*\/appdata\/roaming\/npm)\/node_modules\/moderado\/dist\/index\.js$/.exec(matchPath)
+    : /^(.*)\/lib\/node_modules\/moderado\/dist\/index\.js$/.exec(matchPath);
+  if (npmLayout && !matchPath.includes('/_npx/')) {
+    try {
+      const packageJson = JSON.parse(readFileSync(join(dirname(dirname(resolved)), 'package.json'), 'utf8')) as Record<string, unknown>;
+      const bin = packageJson.bin;
+      if (packageJson.name === 'moderado' && bin && typeof bin === 'object' && !Array.isArray(bin) &&
+          (bin as Record<string, unknown>).moderado === './dist/index.js') {
+        return { channel: 'npm', prefix: path.slice(0, npmLayout[1].length) || '/' };
+      }
+    } catch {
+      return unknown;
     }
-  } else if (/(?:^|\/)lib\/node_modules\/moderado\/dist\/index\.js$/.test(matchPath) && !matchPath.includes('/_npx/')) {
-    return { channel: 'npm' };
   }
-  if (platform !== 'win32' && matchPath === join(homedir(), '.local', 'bin', 'moderado').replace(/\\/g, '/')) {
+  if (platform !== 'win32' && matchPath === join(homedir(), '.local', 'bin', 'moderado').replace(/\\/g, '/') &&
+      resolved === realpathSync(process.execPath)) {
     return { channel: 'standalone' };
   }
   return unknown;
 }
 
+function verifiedNpmCli(path: string): string | null {
+  let resolved: string;
+  try {
+    resolved = realpathSync(path);
+    if (!statSync(resolved).isFile() || !resolved.replace(/\\/g, '/').endsWith('/node_modules/npm/bin/npm-cli.js')) return null;
+    const packageJson = JSON.parse(readFileSync(join(dirname(dirname(resolved)), 'package.json'), 'utf8')) as Record<string, unknown>;
+    const bin = packageJson.bin;
+    return packageJson.name === 'npm' && bin && typeof bin === 'object' && !Array.isArray(bin) &&
+      (bin as Record<string, unknown>).npm === 'bin/npm-cli.js' ? resolved : null;
+  } catch {
+    return null;
+  }
+}
+
 export function buildNpmUpdateInvocation(
-  version: string, platform: string = process.platform, npmExecPath?: string,
+  version: string, platform: string = process.platform, npmExecPath?: string, prefix?: string,
 ): { command: string; args: string[] } {
   const { major, minor, patch } = parseVersion(version);
-  const args = ['install', '--global', `moderado@${major}.${minor}.${patch}`];
-  if (npmExecPath || platform === 'win32') {
-    return {
-      command: process.execPath,
-      args: [npmExecPath ?? join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'), ...args],
-    };
+  if (prefix !== undefined && (!prefix || !/^(?:\/|[a-zA-Z]:[\\/])/.test(prefix) || prefix.includes('\0'))) {
+    throw new SelfUpdateError('Cannot update: npm install prefix must be an absolute path');
   }
-  return { command: 'npm', args };
+  const adjacentNpm = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const posixNpm = join(dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
+  const npmCli = npmExecPath === undefined
+    ? (platform === 'win32' ? [adjacentNpm, posixNpm] : [posixNpm, adjacentNpm])
+      .map(verifiedNpmCli).find((path) => path !== null)
+    : verifiedNpmCli(npmExecPath);
+  if (!npmCli) throw new SelfUpdateError('Cannot locate a verified npm CLI; update manually with npm install -g moderado');
+  const args = [npmCli, 'install', '--global', ...(prefix === undefined ? [] : ['--prefix', prefix]), `moderado@${major}.${minor}.${patch}`];
+  return { command: process.execPath, args };
 }
 
 export async function runNpmUpdate(
   version: string, platform: string = process.platform, npmExecPath: string | undefined = process.env.npm_execpath,
+  prefix?: string,
 ): Promise<{ stdout: string; stderr: string }> {
-  const { command, args } = buildNpmUpdateInvocation(version, platform, npmExecPath);
+  const { command, args } = buildNpmUpdateInvocation(version, platform, npmExecPath, prefix);
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
     if (/(?:_API_KEY|_TOKEN|_SECRET_ACCESS_KEY)$/i.test(key) || /^(?:AWS_ACCESS_KEY_ID|GH_TOKEN)$/i.test(key)) {

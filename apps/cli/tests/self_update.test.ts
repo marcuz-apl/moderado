@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { realpathSync } from 'node:fs';
+import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import {
   buildNpmUpdateInvocation,
   detectInstallChannel,
@@ -21,32 +22,63 @@ const release = (tag_name: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+async function npmInstallFixture() {
+  const prefix = await mkdtemp(join(tmpdir(), 'moderado-prefix-'));
+  const packageDir = join(prefix, 'lib', 'node_modules', 'moderado');
+  const script = join(packageDir, 'dist', 'index.js');
+  await mkdir(join(packageDir, 'dist'), { recursive: true });
+  await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'moderado', bin: { moderado: './dist/index.js' } }));
+  await writeFile(script, '');
+  return { prefix, packageDir, script, cleanup: () => rm(prefix, { recursive: true, force: true }) };
+}
+
+async function npmCliFixture(source: string) {
+  const root = await mkdtemp(join(tmpdir(), 'moderado-npm-cli-'));
+  const packageDir = join(root, 'node_modules', 'npm');
+  const script = join(packageDir, 'bin', 'npm-cli.js');
+  await mkdir(join(packageDir, 'bin'), { recursive: true });
+  await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'npm', bin: { npm: 'bin/npm-cli.js' } }));
+  await writeFile(script, source);
+  return { root, script, cleanup: () => rm(root, { recursive: true, force: true }) };
+}
+
 describe('install channel', () => {
-  it.each([
-    ['/usr/local/lib/node_modules/moderado/dist/index.js', 'linux'],
-    ['/home/alice/.nvm/versions/node/v20/lib/node_modules/moderado/dist/index.js', 'linux'],
-    ['C:\\Users\\alice\\AppData\\Roaming\\npm\\node_modules\\moderado\\dist\\index.js', 'win32'],
-  ])('recognizes an npm package CLI at %s', (path, platform) => {
-    expect(detectInstallChannel(path, platform)).toEqual({ channel: 'npm' });
+  it('derives and preserves the active npm global prefix from a real Moderado package', async () => {
+    const fixture = await npmInstallFixture();
+    try {
+      expect(detectInstallChannel(fixture.script, 'linux')).toEqual({ channel: 'npm', prefix: realpathSync(fixture.prefix) });
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
-  it('recognizes only the installer managed standalone location', () => {
-    expect(detectInstallChannel(join(homedir(), '.local', 'bin', 'moderado'), 'linux')).toEqual({ channel: 'standalone' });
-    expect(detectInstallChannel('/tmp/moderado', 'linux').channel).toBe('unknown');
+  it('does not trust missing, renamed, or symlinked package files', async () => {
+    const fixture = await npmInstallFixture();
+    const outside = join(fixture.prefix, 'outside.js');
+    try {
+      expect(detectInstallChannel(join(fixture.packageDir, 'dist', 'missing.js'), 'linux').channel).toBe('unknown');
+      await writeFile(join(fixture.packageDir, 'package.json'), JSON.stringify({ name: 'other', bin: { moderado: './dist/index.js' } }));
+      expect(detectInstallChannel(fixture.script, 'linux').channel).toBe('unknown');
+      await writeFile(join(fixture.packageDir, 'package.json'), JSON.stringify({ name: 'moderado', bin: { moderado: './dist/index.js' } }));
+      await rm(fixture.script);
+      await writeFile(outside, '');
+      await symlink(outside, fixture.script);
+      expect(detectInstallChannel(fixture.script, 'linux').channel).toBe('unknown');
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
-  it.each([
-    ['/opt/homebrew/Cellar/moderado/0.4.15/bin/moderado', 'darwin', 'homebrew', 'brew upgrade moderado'],
-    ['C:\\Users\\alice\\scoop\\apps\\moderado\\current\\moderado-win-x64.exe', 'win32', 'scoop', 'scoop update moderado'],
-  ])('guides package-manager updates for %s', (path, platform, manager, guidance) => {
-    expect(detectInstallChannel(path, platform)).toEqual({ channel: 'package-manager', manager, guidance });
+  it('does not identify a nonexistent installer binary as managed standalone', () => {
+    expect(detectInstallChannel(join(homedir(), '.local', 'bin', 'moderado'), 'linux').channel).toBe('unknown');
   });
-
   it.each([
     ['/home/alice/project/node_modules/moderado/dist/index.js', 'linux'],
     ['/home/alice/.npm/_npx/123/node_modules/moderado/dist/index.js', 'linux'],
     ['C:\\work\\npm\\node_modules\\moderado\\dist\\index.js', 'win32'],
     ['/opt/homebrew/bin/moderado', 'darwin'],
+    ['/opt/homebrew/Cellar/moderado/0.4.15/bin/moderado', 'darwin'],
+    ['C:\\Users\\alice\\scoop\\apps\\moderado\\current\\moderado-win-x64.exe', 'win32'],
     ['/tmp/node_modules/other/dist/index.js', 'linux'],
     ['', 'linux'],
   ])('does not infer ownership from ambiguous path %s', (path, platform) => {
@@ -55,24 +87,57 @@ describe('install channel', () => {
 });
 
 describe('npm update', () => {
-  it('targets one validated version and preserves the npm prefix on POSIX', () => {
-    expect(buildNpmUpdateInvocation('v0.4.16', 'linux')).toEqual({
-      command: 'npm', args: ['install', '--global', 'moderado@0.4.16'],
-    });
+  it('adds the actual install prefix to a one-off global update', async () => {
+    const fixture = await npmCliFixture('');
+    try {
+      expect(buildNpmUpdateInvocation('v0.4.16', 'linux', fixture.script, '/tmp/custom-prefix')).toEqual({
+        command: process.execPath,
+        args: [realpathSync(fixture.script), 'install', '--global', '--prefix', '/tmp/custom-prefix', 'moderado@0.4.16'],
+      });
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
-  it('uses the current npm script through Node when available', () => {
-    expect(buildNpmUpdateInvocation('v1.2.3', 'win32', 'C:\\nodejs\\node_modules\\npm\\bin\\npm-cli.js')).toEqual({
-      command: process.execPath,
-      args: ['C:\\nodejs\\node_modules\\npm\\bin\\npm-cli.js', 'install', '--global', 'moderado@1.2.3'],
-    });
+  it('rejects an arbitrary npm_execpath and unsafe prefix', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'moderado-wrong-npm-'));
+    const script = join(root, 'npm-cli.js');
+    await writeFile(script, '');
+    try {
+      expect(() => buildNpmUpdateInvocation('v0.4.16', 'linux', script)).toThrow(/npm/i);
+      expect(() => buildNpmUpdateInvocation('v0.4.16', 'linux', undefined, 'relative-prefix')).toThrow(/prefix/i);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  it('targets one validated version with a verified npm CLI on POSIX', async () => {
+    const fixture = await npmCliFixture('');
+    try {
+      expect(buildNpmUpdateInvocation('v0.4.16', 'linux', fixture.script)).toEqual({
+        command: process.execPath, args: [realpathSync(fixture.script), 'install', '--global', 'moderado@0.4.16'],
+      });
+    } finally {
+      await fixture.cleanup();
+    }
   });
 
-  it('uses Node with its npm CLI on Windows when no current npm script is known', () => {
-    expect(buildNpmUpdateInvocation('v1.2.3', 'win32')).toEqual({
-      command: process.execPath,
-      args: [join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'), 'install', '--global', 'moderado@1.2.3'],
-    });
+  it('uses the current verified npm script through Node on Windows', async () => {
+    const fixture = await npmCliFixture('');
+    try {
+      expect(buildNpmUpdateInvocation('v1.2.3', 'win32', fixture.script)).toEqual({
+        command: process.execPath,
+        args: [realpathSync(fixture.script), 'install', '--global', 'moderado@1.2.3'],
+      });
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
+  it('uses a verified Node adjacent npm CLI when no current script is known', () => {
+    const invocation = buildNpmUpdateInvocation('v1.2.3', 'win32');
+    expect(invocation.command).toBe(process.execPath);
+    expect(invocation.args.slice(1)).toEqual(['install', '--global', 'moderado@1.2.3']);
+    expect(invocation.args[0]).toMatch(/\/node_modules\/npm\/bin\/npm-cli\.js$/);
   });
 
   it.each(['1.2.3', 'v1.2.3; echo bad', 'v1.2.3+build'])('rejects invalid target %s', (target) => {
@@ -80,43 +145,40 @@ describe('npm update', () => {
   });
 
   it('runs an argv-only npm child without provider credentials', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'moderado-npm-run-'));
-    const script = join(dir, 'npm.cjs');
-    await writeFile(script, "process.stdout.write(JSON.stringify({ args: process.argv.slice(2), key: process.env.NVIDIA_API_KEY, token: process.env.MODERADO_TOKEN, prefix: process.env.npm_config_prefix }));");
+    const fixture = await npmCliFixture("process.stdout.write(JSON.stringify({ args: process.argv.slice(2), key: process.env.NVIDIA_API_KEY, token: process.env.MODERADO_TOKEN, prefix: process.env.npm_config_prefix }));");
     const previous = { key: process.env.NVIDIA_API_KEY, token: process.env.MODERADO_TOKEN, prefix: process.env.npm_config_prefix };
     process.env.NVIDIA_API_KEY = 'secret-key';
     process.env.MODERADO_TOKEN = 'secret-token';
     process.env.npm_config_prefix = '/custom/prefix';
     try {
-      const result = await runNpmUpdate('v0.4.16', process.platform, script);
-      expect(JSON.parse(result.stdout)).toEqual({ args: ['install', '--global', 'moderado@0.4.16'], prefix: '/custom/prefix' });
+      const result = await runNpmUpdate('v0.4.16', process.platform, fixture.script, '/actual/install');
+      expect(JSON.parse(result.stdout)).toEqual({
+        args: ['install', '--global', '--prefix', '/actual/install', 'moderado@0.4.16'],
+        prefix: '/custom/prefix',
+      });
     } finally {
       if (previous.key === undefined) delete process.env.NVIDIA_API_KEY; else process.env.NVIDIA_API_KEY = previous.key;
       if (previous.token === undefined) delete process.env.MODERADO_TOKEN; else process.env.MODERADO_TOKEN = previous.token;
       if (previous.prefix === undefined) delete process.env.npm_config_prefix; else process.env.npm_config_prefix = previous.prefix;
-      await rm(dir, { recursive: true, force: true });
+      await fixture.cleanup();
     }
   });
 
   it('reports npm nonzero exits', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'moderado-npm-fail-'));
-    const script = join(dir, 'npm.cjs');
-    await writeFile(script, "process.stderr.write('package unavailable'); process.exitCode = 7;");
+    const fixture = await npmCliFixture("process.stderr.write('package unavailable'); process.exitCode = 7;");
     try {
-      await expect(runNpmUpdate('v0.4.16', process.platform, script)).rejects.toThrow(/package unavailable/);
+      await expect(runNpmUpdate('v0.4.16', process.platform, fixture.script)).rejects.toThrow(/package unavailable/);
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await fixture.cleanup();
     }
   });
 
   it('stops an npm child that exceeds the output cap', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'moderado-npm-output-'));
-    const script = join(dir, 'npm.cjs');
-    await writeFile(script, "process.stdout.write('x'.repeat(70000));");
+    const fixture = await npmCliFixture("process.stdout.write('x'.repeat(70000));");
     try {
-      await expect(runNpmUpdate('v0.4.16', process.platform, script)).rejects.toThrow(/output limit/i);
+      await expect(runNpmUpdate('v0.4.16', process.platform, fixture.script)).rejects.toThrow(/output limit/i);
     } finally {
-      await rm(dir, { recursive: true, force: true });
+      await fixture.cleanup();
     }
   });
 });
