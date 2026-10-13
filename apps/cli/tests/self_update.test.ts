@@ -458,6 +458,38 @@ describe('standalone update', () => {
     }
   });
 
+  it('preserves the executable when cancellation arrives during staged-file chmod', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-abort-stage-'));
+    const executable = join(root, 'moderado');
+    const artifact = Buffer.from('replacement executable');
+    const checksum = createHash('sha256').update(artifact).digest('hex');
+    const filename = 'moderado-linux-x64';
+    const manifest = { version: 'v1.2.3', artifacts: [{ target: 'node22-linux-x64', filename, platform: 'linux', architecture: 'x64', size: artifact.length, checksum, signed: false }] };
+    const controller = new AbortController();
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.endsWith('/manifest.json')) return new Response(JSON.stringify(manifest));
+      if (url.endsWith('.sha256')) return new Response(`${checksum}  ${filename}\n`);
+      return new Response(artifact);
+    };
+    await writeFile(executable, 'original executable');
+    try {
+      await expect(updateStandalone({
+        release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'linux', architecture: 'x64', fetchImpl,
+        signal: controller.signal,
+        chmodImpl: async (path, mode) => {
+          const { chmod } = await import('node:fs/promises');
+          await chmod(path, mode);
+          controller.abort();
+        },
+      })).rejects.toThrow(/cancelled/i);
+      expect(await readFile(executable, 'utf8')).toBe('original executable');
+      expect((await readdir(root)).sort()).toEqual(['moderado']);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('replaces the executable only after the local release artifact is verified', async () => {
     const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-'));
     const executable = join(root, 'moderado');

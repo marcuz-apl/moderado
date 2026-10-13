@@ -300,6 +300,7 @@ export type StandaloneUpdateOptions = {
   architecture: string;
   fetchImpl?: typeof fetch;
   renameImpl?: typeof rename;
+  chmodImpl?: typeof chmod;
   signal?: AbortSignal;
 };
 
@@ -406,7 +407,8 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
     }
     await file.close();
     file = undefined;
-    if (platform !== 'win32') await chmod(stagedPath, 0o755);
+    if (platform !== 'win32') await (options.chmodImpl ?? chmod)(stagedPath, 0o755);
+    if (signal?.aborted) throw new SelfUpdateError('Standalone update cancelled');
     try {
       await (options.renameImpl ?? rename)(stagedPath, executablePath);
     } catch (error) {
