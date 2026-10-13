@@ -1,11 +1,11 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-The latest published CLI is `moderado@0.4.10`, the Gateway-integrated release:
-`/login` uses the Gateway for model routes and inference, while `/connect`
-supports direct provider connections. The previous `0.3.10` release is
-self-contained and does not require the Gateway. Both versions use the
-`moderado` command name. Install the current version with `npm install -g
-moderado`; pin `moderado@0.3.10` to keep the previous self-contained CLI.
+The latest published CLI is `moderado@0.4.10`. Its unified `/connect` flow
+supports the Gateway and direct provider connections; `/login` is no longer
+offered. The previous `0.4.8` release uses `/login` for the Gateway, and the
+earlier `0.3.10` release is self-contained and does not require the Gateway.
+All three use the `moderado` command name. Install the current version with
+`npm install -g moderado`; pin `moderado@0.3.10` to keep the self-contained CLI.
 
 The GitHub Release `v0.4.10` includes binaries, checksum sidecars, a
 `manifest.json`, and reviewable distribution manifests. The Homebrew tap
