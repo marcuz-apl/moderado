@@ -1,3 +1,8 @@
+import { spawn } from 'node:child_process';
+import { realpathSync } from 'node:fs';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+
 const RELEASES_URL = 'https://api.github.com/repos/marcuz-apl/moderado/releases?per_page=100';
 const RELEASE_TAG_PATH = '/marcuz-apl/moderado/releases/tag/';
 const MAX_PAGES = 10;
@@ -124,4 +129,93 @@ export async function fetchPublishedReleases(
     if (page === MAX_PAGES && url !== null) throw new SelfUpdateError(`GitHub release lookup exceeded ${MAX_PAGES} pages`);
   }
   return releases;
+}
+
+export type InstallChannel =
+  | { channel: 'npm' }
+  | { channel: 'standalone' }
+  | { channel: 'package-manager'; manager: 'homebrew' | 'scoop'; guidance: string }
+  | { channel: 'unknown'; guidance: string };
+
+export function detectInstallChannel(executablePath: string | undefined, platform: string = process.platform): InstallChannel {
+  const unknown: InstallChannel = { channel: 'unknown', guidance: 'Update this installation with its original installer or package manager.' };
+  if (!executablePath) return unknown;
+  let resolved = executablePath;
+  try {
+    resolved = realpathSync(executablePath);
+  } catch {
+    // The path may be supplied for inspection before it exists.
+  }
+  const path = resolved.replace(/\\/g, '/');
+  const matchPath = platform === 'win32' ? path.toLowerCase() : path;
+  if (platform === 'darwin' && /^\/(?:opt\/homebrew|usr\/local)\/Cellar\/moderado\/[^/]+\/bin\/moderado$/.test(matchPath)) {
+    return { channel: 'package-manager', manager: 'homebrew', guidance: 'brew upgrade moderado' };
+  }
+  if (platform === 'win32' && /^(?:[a-z]:\/|\/)[^\n]*\/scoop\/apps\/moderado\/(?:current|[^/]+)\/moderado-win-x64\.exe$/.test(matchPath)) {
+    return { channel: 'package-manager', manager: 'scoop', guidance: 'scoop update moderado' };
+  }
+  if (platform === 'win32') {
+    if (/\/appdata\/roaming\/npm\/node_modules\/moderado\/dist\/index\.js$/.test(matchPath) && !matchPath.includes('/_npx/')) {
+      return { channel: 'npm' };
+    }
+  } else if (/(?:^|\/)lib\/node_modules\/moderado\/dist\/index\.js$/.test(matchPath) && !matchPath.includes('/_npx/')) {
+    return { channel: 'npm' };
+  }
+  if (platform !== 'win32' && matchPath === join(homedir(), '.local', 'bin', 'moderado').replace(/\\/g, '/')) {
+    return { channel: 'standalone' };
+  }
+  return unknown;
+}
+
+export function buildNpmUpdateInvocation(
+  version: string, platform: string = process.platform, npmExecPath?: string,
+): { command: string; args: string[] } {
+  const { major, minor, patch } = parseVersion(version);
+  const args = ['install', '--global', `moderado@${major}.${minor}.${patch}`];
+  if (npmExecPath || platform === 'win32') {
+    return {
+      command: process.execPath,
+      args: [npmExecPath ?? join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js'), ...args],
+    };
+  }
+  return { command: 'npm', args };
+}
+
+export async function runNpmUpdate(
+  version: string, platform: string = process.platform, npmExecPath: string | undefined = process.env.npm_execpath,
+): Promise<{ stdout: string; stderr: string }> {
+  const { command, args } = buildNpmUpdateInvocation(version, platform, npmExecPath);
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (/(?:_API_KEY|_TOKEN|_SECRET_ACCESS_KEY)$/i.test(key) || /^(?:AWS_ACCESS_KEY_ID|GH_TOKEN)$/i.test(key)) {
+      delete env[key];
+    }
+  }
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { shell: false, env, windowsHide: true, timeout: 120_000 });
+    let stdout = '';
+    let stderr = '';
+    let outputExceeded = false;
+    child.stdout.setEncoding('utf8');
+    child.stderr.setEncoding('utf8');
+    child.stdout.on('data', (chunk: string) => {
+      if (stdout.length + chunk.length > 64 * 1024) {
+        outputExceeded = true;
+        child.kill();
+      } else stdout += chunk;
+    });
+    child.stderr.on('data', (chunk: string) => {
+      if (stderr.length + chunk.length > 64 * 1024) {
+        outputExceeded = true;
+        child.kill();
+      } else stderr += chunk;
+    });
+    child.on('error', (error) => reject(new SelfUpdateError(`Could not start npm: ${error.message}`)));
+    child.on('close', (code, signal) => {
+      if (outputExceeded) reject(new SelfUpdateError('npm update exceeded the output limit'));
+      else if (signal) reject(new SelfUpdateError(`npm update stopped (${signal})`));
+      else if (code === 0) resolve({ stdout, stderr });
+      else reject(new SelfUpdateError(`npm update failed (exit ${code ?? 'unknown'}): ${stderr.trim() || stdout.trim()}`));
+    });
+  });
 }
