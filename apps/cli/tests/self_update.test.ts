@@ -323,8 +323,9 @@ describe('self update command handler', () => {
     try {
       expect(await handleSelfUpdateCommand('update', 'v0.4.17+261013f', new AbortController().signal)).toBe(0);
       expect(output.mock.calls.map(([chunk]) => String(chunk)).join(' ')).toMatch(/already current/i);
-      expect(output.mock.calls.map(([chunk]) => String(chunk)).join(' ')).toContain('v0.4.17');
-      expect(output.mock.calls.map(([chunk]) => String(chunk)).join(' ')).toContain('Target version: v0.4.17');
+      const lines = output.mock.calls.map(([chunk]) => String(chunk).trim());
+      expect(lines).toContain('Installed version: v0.4.17+261013f');
+      expect(lines).toContain('Target version: v0.4.17');
     } finally {
       globalThis.fetch = originalFetch;
       output.mockRestore();
