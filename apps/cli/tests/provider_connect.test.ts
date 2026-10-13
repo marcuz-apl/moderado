@@ -495,13 +495,9 @@ describe('unified provider connection', () => {
               for (const character of gatewayUrl) process.stdin.emit('keypress', character, { name: character });
               process.stdin.emit('keypress', '\r', { name: 'return' });
             });
-          } else if (frame.includes('Login · Active:') && !seen.has('login')) {
-            seen.add('login');
-            setImmediate(() => {
-              process.stdin.emit('keypress', undefined, { name: 'down' });
-              process.stdin.emit('keypress', undefined, { name: 'down' });
-              process.stdin.emit('keypress', '\r', { name: 'return' });
-            });
+          } else if (frame.includes('Moderado Gateway API key') && !seen.has('key')) {
+            seen.add('key');
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
           } else if (frame.includes('Moderado Cloud Models') && !seen.has('model')) {
             seen.add('model');
             setImmediate(() => {
@@ -512,7 +508,7 @@ describe('unified provider connection', () => {
         },
       });
       expect(result).toMatchObject({ id: 'moderado-cloud', defaultModel: 'vendor/route-one' });
-      expect([...seen]).toEqual(['provider', 'mode', 'url', 'login', 'model']);
+      expect([...seen]).toEqual(['provider', 'mode', 'url', 'key', 'model']);
     } finally {
       clearTimeout(timeout);
       if (previousEnvironment === undefined) delete process.env.MODERADO_CLOUD_ENV;

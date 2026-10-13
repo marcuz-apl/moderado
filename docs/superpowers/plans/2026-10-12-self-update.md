@@ -31,11 +31,11 @@
 - `CliParsedArgs.command` gains `'update' | 'upgrade'`.
 - `parseCliArgs(['update'])` and `parseCliArgs(['upgrade'])` return the corresponding command.
 
-- [ ] **Step 1: Add failing parser assertions** for both commands and ensure `moderado update` is not interpreted as a run task.
-- [ ] **Step 2: Run** `npm test -- apps/cli/tests/args.test.ts`; confirm the new assertions fail because both positionals currently become run tasks.
-- [ ] **Step 3: Add the two command literals** to the command union and recognize them before implicit task routing.
-- [ ] **Step 4: Add both commands to `getHelpText()`** with short descriptions distinguishing same-major update from cross-major upgrade.
-- [ ] **Step 5: Re-run** `npm test -- apps/cli/tests/args.test.ts`; confirm it passes.
+- [x] **Step 1: Add failing parser assertions** for both commands and ensure `moderado update` is not interpreted as a run task.
+- [x] **Step 2: Run** `npm test -- apps/cli/tests/args.test.ts`; confirm the new assertions fail because both positionals currently become run tasks.
+- [x] **Step 3: Add the two command literals** to the command union and recognize them before implicit task routing.
+- [x] **Step 4: Add both commands to `getHelpText()`** with short descriptions distinguishing same-major update from cross-major upgrade.
+- [x] **Step 5: Re-run** `npm test -- apps/cli/tests/args.test.ts`; confirm it passes.
 
 ### Task 2: Implement release metadata validation and target selection
 
