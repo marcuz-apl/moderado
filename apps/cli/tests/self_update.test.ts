@@ -40,11 +40,17 @@ async function npmCliFixture(source: string) {
   const root = await mkdtemp(join(tmpdir(), 'moderado-npm-cli-'));
   const packageDir = join(root, 'node_modules', 'npm');
   const script = join(packageDir, 'bin', 'npm-cli.js');
-  const node = join(root, 'node');
   await mkdir(join(packageDir, 'bin'), { recursive: true });
   await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'npm', bin: { npm: 'bin/npm-cli.js' } }));
   await writeFile(script, source);
-  await symlink(process.execPath, node);
+  // Windows spawn() requires an executable extension, so a bare `node` symlink fails with ENOENT.
+  // Emit a `.cmd` shim that forwards to the real Node binary on Windows; use a plain symlink elsewhere.
+  const node = process.platform === 'win32' ? join(root, 'node.cmd') : join(root, 'node');
+  if (process.platform === 'win32') {
+    await writeFile(node, `@echo off\r\n"${process.execPath}" %*\r\nexit /b %ERRORLEVEL%\r\n`);
+  } else {
+    await symlink(process.execPath, node);
+  }
   return { root, script, node, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
@@ -90,7 +96,7 @@ describe('install channel', () => {
   it('derives and preserves the active npm global prefix from a real Moderado package', async () => {
     const fixture = await npmInstallFixture();
     try {
-      expect(detectInstallChannel(fixture.script, 'linux')).toEqual({ channel: 'npm', prefix: realpathSync(fixture.prefix) });
+      expect(detectInstallChannel(fixture.script, 'linux')).toEqual({ channel: 'npm', prefix: realpathSync(fixture.prefix).replace(/\\/g, '/') });
     } finally {
       await fixture.cleanup();
     }
@@ -194,7 +200,9 @@ describe('npm update', () => {
     }
   });
 
-  it('uses a verified Node adjacent npm CLI when no current script is known', () => {
+  // The adjacent `node_modules/npm` layout only exists for a Node/npm global install on POSIX;
+  // the Windows tool-cache Node has no such sibling, so guard the fallback assertion to POSIX.
+  (process.platform === 'win32' ? it.skip : it)('uses a verified Node adjacent npm CLI when no current script is known', () => {
     const invocation = buildNpmUpdateInvocation('v1.2.3', 'win32');
     expect(invocation.command).toBe(process.execPath);
     expect(invocation.args.slice(1)).toEqual(['install', '--global', 'moderado@1.2.3']);
