@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
-import { chmod, rename, unlink, writeFile } from 'node:fs/promises';
+import { chmod, open, rename, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
@@ -257,6 +257,7 @@ export type StandaloneUpdateOptions = {
   platform: string;
   architecture: string;
   fetchImpl?: typeof fetch;
+  renameImpl?: typeof rename;
 };
 
 type ReleaseArtifact = {
@@ -323,33 +324,48 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
   const [artifactResponse, sidecarResponse] = await Promise.all([
     get(`${base}/${artifact.filename}`), get(`${base}/${artifact.filename}.sha256`),
   ]);
-  let bytes: Uint8Array;
-  let sidecar: string;
-  try {
-    const [buffer, text] = await Promise.all([artifactResponse.arrayBuffer(), sidecarResponse.text()]);
-    bytes = new Uint8Array(buffer);
-    sidecar = text;
-  } catch {
-    throw new SelfUpdateError('Standalone update download was truncated');
-  }
-  const checksum = createHash('sha256').update(bytes).digest('hex');
-  if (sidecar !== `${artifact.checksum}  ${artifact.filename}\n` || checksum !== artifact.checksum) {
-    throw new SelfUpdateError(`Standalone artifact checksum verification failed for ${artifact.filename}`);
-  }
-  if (bytes.byteLength !== artifact.size) throw new SelfUpdateError(`Standalone artifact size verification failed for ${artifact.filename}`);
   const stagedPath = join(dirname(executablePath), `.${basename(executablePath)}.${randomUUID()}.tmp`);
+  let file: Awaited<ReturnType<typeof open>> | undefined;
   try {
-    await writeFile(stagedPath, bytes, { flag: 'wx' });
+    if (!artifactResponse.body) throw new SelfUpdateError('Standalone artifact response had no body');
+    file = await open(stagedPath, 'wx', 0o600);
+    const reader = artifactResponse.body.getReader();
+    const hash = createHash('sha256');
+    let size = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > artifact.size) throw new SelfUpdateError(`Standalone artifact exceeds manifest size for ${artifact.filename}`);
+      hash.update(value);
+      let offset = 0;
+      while (offset < value.byteLength) {
+        const { bytesWritten } = await file.write(value, offset, value.byteLength - offset);
+        if (bytesWritten === 0) throw new SelfUpdateError('Could not write staged standalone artifact');
+        offset += bytesWritten;
+      }
+    }
+    if (size !== artifact.size) throw new SelfUpdateError(`Standalone artifact size verification failed for ${artifact.filename}`);
+    const [checksum, sidecar] = await Promise.all([Promise.resolve(hash.digest('hex')), sidecarResponse.text()]);
+    if (sidecar !== `${artifact.checksum}  ${artifact.filename}\n` || checksum !== artifact.checksum) {
+      throw new SelfUpdateError(`Standalone artifact checksum verification failed for ${artifact.filename}`);
+    }
+    await file.close();
+    file = undefined;
     if (platform !== 'win32') await chmod(stagedPath, 0o755);
     try {
-      await rename(stagedPath, executablePath);
+      await (options.renameImpl ?? rename)(stagedPath, executablePath);
     } catch (error) {
       const detail = platform === 'win32'
-        ? 'Restart the terminal and retry, or install manually with scripts/install.sh.'
+        ? `Restart the terminal and retry. If it still fails, run 'scoop update moderado' or download https://github.com/marcuz-apl/moderado/releases/download/${release.tag_name}/${artifact.filename} and replace the executable manually in PowerShell.`
         : 'Check that the executable directory is writable and retry.';
       throw new SelfUpdateError(`Could not replace standalone executable. ${detail} (${error instanceof Error ? error.message : String(error)})`);
     }
+  } catch (error) {
+    if (error instanceof SelfUpdateError) throw error;
+    throw new SelfUpdateError(`Standalone artifact download or staging failed: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
+    await file?.close();
     await unlink(stagedPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
   }
 }

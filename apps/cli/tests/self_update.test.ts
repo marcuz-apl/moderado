@@ -396,7 +396,7 @@ describe('standalone update', () => {
     }
   });
 
-  it.each(['missing host artifact', 'malformed manifest', 'bad sidecar', 'manifest checksum mismatch', 'truncated artifact', 'network failure'])(
+  it.each(['missing host artifact', 'malformed manifest', 'bad sidecar', 'manifest checksum mismatch', 'truncated artifact', 'oversized stream', 'network failure'])(
     'preserves the executable and removes staged files after %s', async (failure) => {
       const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-failure-'));
       const executable = join(root, 'moderado');
@@ -410,6 +410,7 @@ describe('standalone update', () => {
       if (failure === 'bad sidecar') sidecar = Buffer.from('not a checksum');
       if (failure === 'manifest checksum mismatch') manifest.artifacts[0].checksum = '0'.repeat(64);
       if (failure === 'truncated artifact') downloaded = artifact.subarray(0, 4);
+      if (failure === 'oversized stream') downloaded = Buffer.concat([artifact, Buffer.from('unexpected extra bytes')]);
       const manifestBody = Buffer.from(failure === 'malformed manifest' ? '{' : JSON.stringify(manifest));
       const files = new Map<string, Buffer>([
         ['/manifest.json', manifestBody], [`/${filename}`, downloaded], [`/${filename}.sha256`, sidecar],
@@ -427,4 +428,27 @@ describe('standalone update', () => {
       }
     },
   );
+
+  it('gives Windows-specific recovery steps when a running executable cannot be replaced', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'moderado-windows-update-'));
+    const executable = join(root, 'moderado-win-x64.exe');
+    await writeFile(executable, 'original remains');
+    const artifact = Buffer.from('new standalone executable');
+    const checksum = createHash('sha256').update(artifact).digest('hex');
+    const filename = 'moderado-win-x64.exe';
+    const manifest = { version: 'v1.2.3', revision: 'abc', artifacts: [{ target: 'node22-win-x64', filename, platform: 'win32', architecture: 'x64', size: artifact.length, checksum, signed: false }] };
+    const server = await localArtifactServer(new Map([
+      ['/manifest.json', Buffer.from(JSON.stringify(manifest))],
+      [`/${filename}`, artifact], [`/${filename}.sha256`, Buffer.from(`${checksum}  ${filename}\n`)],
+    ]));
+    try {
+      await expect(updateStandalone({ release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'win32', architecture: 'x64', fetchImpl: server.fetchImpl, renameImpl: async () => { throw new Error('image is in use'); } }))
+        .rejects.toThrow(/scoop update moderado.*PowerShell/i);
+      expect(await readFile(executable, 'utf8')).toBe('original remains');
+      expect((await readdir(root)).sort()).toEqual(['moderado-win-x64.exe']);
+    } finally {
+      await server.close();
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
