@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { homedir, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { realpathSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import {
   buildNpmUpdateInvocation,
   detectInstallChannel,
@@ -36,10 +36,22 @@ async function npmCliFixture(source: string) {
   const root = await mkdtemp(join(tmpdir(), 'moderado-npm-cli-'));
   const packageDir = join(root, 'node_modules', 'npm');
   const script = join(packageDir, 'bin', 'npm-cli.js');
+  const node = join(root, 'node');
   await mkdir(join(packageDir, 'bin'), { recursive: true });
   await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'npm', bin: { npm: 'bin/npm-cli.js' } }));
   await writeFile(script, source);
-  return { root, script, cleanup: () => rm(root, { recursive: true, force: true }) };
+  await symlink(process.execPath, node);
+  return { root, script, node, cleanup: () => rm(root, { recursive: true, force: true }) };
+}
+
+async function withFixtureNode<T>(node: string, run: () => T | Promise<T>): Promise<T> {
+  const original = process.execPath;
+  process.execPath = node;
+  try {
+    return await run();
+  } finally {
+    process.execPath = original;
+  }
 }
 
 describe('install channel', () => {
@@ -87,12 +99,25 @@ describe('install channel', () => {
 });
 
 describe('npm update', () => {
+  it('rejects a forged npm package outside the running Node installation without executing it', async () => {
+    const marker = join(tmpdir(), `moderado-forged-npm-${process.pid}`);
+    const fixture = await npmCliFixture(`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'executed');`);
+    try {
+      await expect(runNpmUpdate('v0.4.16', process.platform, fixture.script)).rejects.toThrow(/verified npm/i);
+      await expect(access(marker)).rejects.toThrow();
+    } finally {
+      await rm(marker, { force: true });
+      await fixture.cleanup();
+    }
+  });
   it('adds the actual install prefix to a one-off global update', async () => {
     const fixture = await npmCliFixture('');
     try {
-      expect(buildNpmUpdateInvocation('v0.4.16', 'linux', fixture.script, '/tmp/custom-prefix')).toEqual({
-        command: process.execPath,
-        args: [realpathSync(fixture.script), 'install', '--global', '--prefix', '/tmp/custom-prefix', 'moderado@0.4.16'],
+      await withFixtureNode(fixture.node, () => {
+        expect(buildNpmUpdateInvocation('v0.4.16', 'linux', fixture.script, '/tmp/custom-prefix')).toEqual({
+          command: fixture.node,
+          args: [realpathSync(fixture.script), 'install', '--global', '--prefix', '/tmp/custom-prefix', 'moderado@0.4.16'],
+        });
       });
     } finally {
       await fixture.cleanup();
@@ -113,8 +138,10 @@ describe('npm update', () => {
   it('targets one validated version with a verified npm CLI on POSIX', async () => {
     const fixture = await npmCliFixture('');
     try {
-      expect(buildNpmUpdateInvocation('v0.4.16', 'linux', fixture.script)).toEqual({
-        command: process.execPath, args: [realpathSync(fixture.script), 'install', '--global', 'moderado@0.4.16'],
+      await withFixtureNode(fixture.node, () => {
+        expect(buildNpmUpdateInvocation('v0.4.16', 'linux', fixture.script)).toEqual({
+          command: fixture.node, args: [realpathSync(fixture.script), 'install', '--global', 'moderado@0.4.16'],
+        });
       });
     } finally {
       await fixture.cleanup();
@@ -124,9 +151,11 @@ describe('npm update', () => {
   it('uses the current verified npm script through Node on Windows', async () => {
     const fixture = await npmCliFixture('');
     try {
-      expect(buildNpmUpdateInvocation('v1.2.3', 'win32', fixture.script)).toEqual({
-        command: process.execPath,
-        args: [realpathSync(fixture.script), 'install', '--global', 'moderado@1.2.3'],
+      await withFixtureNode(fixture.node, () => {
+        expect(buildNpmUpdateInvocation('v1.2.3', 'win32', fixture.script)).toEqual({
+          command: fixture.node,
+          args: [realpathSync(fixture.script), 'install', '--global', 'moderado@1.2.3'],
+        });
       });
     } finally {
       await fixture.cleanup();
@@ -151,7 +180,8 @@ describe('npm update', () => {
     process.env.MODERADO_TOKEN = 'secret-token';
     process.env.npm_config_prefix = '/custom/prefix';
     try {
-      const result = await runNpmUpdate('v0.4.16', process.platform, fixture.script, '/actual/install');
+      const result = await withFixtureNode(fixture.node, () =>
+        runNpmUpdate('v0.4.16', process.platform, fixture.script, '/actual/install'));
       expect(JSON.parse(result.stdout)).toEqual({
         args: ['install', '--global', '--prefix', '/actual/install', 'moderado@0.4.16'],
         prefix: '/custom/prefix',
@@ -167,7 +197,9 @@ describe('npm update', () => {
   it('reports npm nonzero exits', async () => {
     const fixture = await npmCliFixture("process.stderr.write('package unavailable'); process.exitCode = 7;");
     try {
-      await expect(runNpmUpdate('v0.4.16', process.platform, fixture.script)).rejects.toThrow(/package unavailable/);
+      await withFixtureNode(fixture.node, async () => {
+        await expect(runNpmUpdate('v0.4.16', process.platform, fixture.script)).rejects.toThrow(/package unavailable/);
+      });
     } finally {
       await fixture.cleanup();
     }
@@ -176,7 +208,9 @@ describe('npm update', () => {
   it('stops an npm child that exceeds the output cap', async () => {
     const fixture = await npmCliFixture("process.stdout.write('x'.repeat(70000));");
     try {
-      await expect(runNpmUpdate('v0.4.16', process.platform, fixture.script)).rejects.toThrow(/output limit/i);
+      await withFixtureNode(fixture.node, async () => {
+        await expect(runNpmUpdate('v0.4.16', process.platform, fixture.script)).rejects.toThrow(/output limit/i);
+      });
     } finally {
       await fixture.cleanup();
     }

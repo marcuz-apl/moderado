@@ -200,10 +200,10 @@ export function buildNpmUpdateInvocation(
   }
   const adjacentNpm = join(dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
   const posixNpm = join(dirname(process.execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  const npmCli = npmExecPath === undefined
-    ? (platform === 'win32' ? [adjacentNpm, posixNpm] : [posixNpm, adjacentNpm])
-      .map(verifiedNpmCli).find((path) => path !== null)
-    : verifiedNpmCli(npmExecPath);
+  const knownNpm = (platform === 'win32' ? [adjacentNpm, posixNpm] : [posixNpm, adjacentNpm])
+    .map(verifiedNpmCli).filter((path): path is string => path !== null);
+  const requestedNpm = npmExecPath === undefined ? undefined : verifiedNpmCli(npmExecPath);
+  const npmCli = npmExecPath === undefined ? knownNpm[0] : knownNpm.find((path) => path === requestedNpm);
   if (!npmCli) throw new SelfUpdateError('Cannot locate a verified npm CLI; update manually with npm install -g moderado');
   const args = [npmCli, 'install', '--global', ...(prefix === undefined ? [] : ['--prefix', prefix]), `moderado@${major}.${minor}.${patch}`];
   return { command: process.execPath, args };
