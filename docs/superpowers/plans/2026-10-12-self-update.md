@@ -65,12 +65,12 @@
 - Export `detectInstallChannel(executablePath, platform)` returning a discriminated result for `npm`, `standalone`, known package-manager ownership with update guidance, or `unknown`.
 - Export `buildNpmUpdateInvocation(version, platform, npmExecPath?)` returning `{ command, args }`.
 
-- [ ] **Step 1: Write failing tests** for known npm package layout detection, standalone executable detection, Homebrew/Scoop ownership guidance, ambiguous paths, and npm invocation arguments on POSIX and Windows.
-- [ ] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm these tests fail.
-- [ ] **Step 3: Inspect runtime paths from `process.argv[1]`, module URL, and platform** and implement detection only for verifiable layouts; unknown paths return an actionable unsupported result.
-- [ ] **Step 4: Build npm argv** to install only `moderado@<validated-version>` globally while preserving the user's npm prefix; use npm's current executable when `npm_execpath` is available, otherwise the platform npm executable.
-- [ ] **Step 5: Add a runner** based on `spawn(command, args, { shell: false, ... })`, remove provider/internal token environment variables, and surface spawn and nonzero-exit failures clearly.
-- [ ] **Step 6: Re-run** the focused tests and verify the runner never uses `shell: true` and never invokes a blanket global update.
+- [x] **Step 1: Write failing tests** for known npm package layout detection, standalone executable detection, Homebrew/Scoop ownership guidance, ambiguous paths, and npm invocation arguments on POSIX and Windows.
+- [x] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm these tests fail.
+- [x] **Step 3: Inspect runtime paths from `process.argv[1]`, module URL, and platform** and implement detection only for verifiable layouts; unknown paths return an actionable unsupported result.
+- [x] **Step 4: Build npm argv** to install only `moderado@<validated-version>` globally while preserving the user's npm prefix; use npm's current executable when `npm_execpath` is available, otherwise the platform npm executable.
+- [x] **Step 5: Add a runner** based on `spawn(command, args, { shell: false, ... })`, remove provider/internal token environment variables, and surface spawn and nonzero-exit failures clearly.
+- [x] **Step 6: Re-run** the focused tests and verify the runner never uses `shell: true` and never invokes a blanket global update.
 
 ### Task 4: Update standalone binaries from verified release artifacts
 
@@ -83,12 +83,12 @@
 - Export `updateStandalone(options)` where options provide the selected release, executable path, host platform/architecture, and injectable fetch implementation.
 - Reuse the release manifest contract: artifact filename/platform/architecture/checksum and `.sha256` sidecar must agree before installation.
 
-- [ ] **Step 1: Add local HTTP fixture tests** for valid artifact replacement, missing host artifact, malformed manifest, bad sidecar, manifest checksum mismatch, truncated/network failure, and cleanup of staged files.
-- [ ] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm the standalone tests fail.
-- [ ] **Step 3: Validate the release manifest** including version equality with the selected tag, unique artifact targets, supported host match, safe basename-only filename, integer size, 64-character lowercase SHA-256, and `signed: false` matching the published contract.
-- [ ] **Step 4: Download to a unique sibling temporary path**, verify the artifact digest against both the sidecar and manifest and verify size, then set executable permissions on POSIX.
-- [ ] **Step 5: Replace the executable with platform-aware behavior**: use same-volume rename where supported; on Windows handle running-image locks without deleting the original, and provide restart/manual instructions if replacement cannot safely complete. Always clean temporary files.
-- [ ] **Step 6: Re-run** the focused tests and confirm all network behavior is confined to the local fixture server.
+- [x] **Step 1: Add local HTTP fixture tests** for valid artifact replacement, missing host artifact, malformed manifest, bad sidecar, manifest checksum mismatch, truncated/network failure, and cleanup of staged files.
+- [x] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm the standalone tests fail.
+- [x] **Step 3: Validate the release manifest** including version equality with the selected tag, unique artifact targets, supported host match, safe basename-only filename, integer size, 64-character lowercase SHA-256, and `signed: false` matching the published contract.
+- [x] **Step 4: Download to a unique sibling temporary path**, verify the artifact digest against both the sidecar and manifest and verify size, then set executable permissions on POSIX.
+- [x] **Step 5: Replace the executable with platform-aware behavior**: use same-volume rename where supported; on Windows handle running-image locks without deleting the original, and provide restart/manual instructions if replacement cannot safely complete. Always clean temporary files.
+- [x] **Step 6: Re-run** the focused tests and confirm all network behavior is confined to the local fixture server.
 
 ### Task 5: Wire commands, cancellation, and user-facing messages
 
@@ -101,11 +101,11 @@
 - Export `handleSelfUpdateCommand(mode: 'update' | 'upgrade', installedVersion: string, signal: AbortSignal): Promise<number>`.
 - Route only explicit `update` and `upgrade` commands to this handler before starting chat or run sessions.
 
-- [ ] **Step 1: Add handler tests** for current-version success, successful npm and standalone dispatch, package-manager manual instructions, unknown install source, abort, and each updater failure returning nonzero.
-- [ ] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm handler tests fail.
-- [ ] **Step 3: Implement the handler** to resolve release target, report installed/target versions, return success when current, dispatch by detected source, and print exact manual update guidance for package-managed channels.
-- [ ] **Step 4: Wire command routing** in `index.ts` and pass the existing abort signal and resolved current version.
-- [ ] **Step 5: Run** `npm test -- apps/cli/tests/self_update.test.ts apps/cli/tests/args.test.ts`; confirm routing and handler tests pass.
+- [x] **Step 1: Add handler tests** for current-version success, successful npm and standalone dispatch, package-manager manual instructions, unknown install source, abort, and each updater failure returning nonzero.
+- [x] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm handler tests fail.
+- [x] **Step 3: Implement the handler** to resolve release target, report installed/target versions, return success when current, dispatch by detected source, and print exact manual update guidance for package-managed channels.
+- [x] **Step 4: Wire command routing** in `index.ts` and pass the existing abort signal and resolved current version.
+- [x] **Step 5: Run** `npm test -- apps/cli/tests/self_update.test.ts apps/cli/tests/args.test.ts`; confirm routing and handler tests pass.
 
 ### Task 6: Document the commands and validate the CLI build
 
