@@ -1,22 +1,18 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-10 16:17 UTC
-Branch: `master` at `a28e6fe` (tracking `origin/master`)
-Status: **Ready for review.** Unified `/connect` changes are uncommitted.
+Updated: 2026-10-13 02:44 UTC
+Branch: `master` at `88e1f92` (tracking `origin/master`)
+Status: **Ready for review.** Gateway mode precedence and direct masked-key entry are implemented.
 
 ## Summary
 
-The CLI now uses `/connect` for all providers, including the Moderado Gateway. Choosing the Gateway opens saved-key, browser sign-in, manual-key, and public access choices, then its model route picker. The `/login` slash command has been removed. Gateway sign-in can still be cancelled with Esc or Ctrl+C while waiting for a browser callback.
+Moderado Gateway mode selection now controls the prefilled Base URL even when a saved URL from the other mode exists. After confirming the URL, `/connect` shows a masked API-key field directly. Enter reuses a saved key; an empty value continues keyless public access.
 
 ## Completed
 
-- Added Moderado Gateway to the provider picker in `apps/cli/src/ui/provider_connect.ts`, with route selection after Gateway connection.
-- Passed active provider and saved Gateway context from `apps/cli/src/commands/chat.ts`; reused secure credential storage and activation. First-prompt setup now renders the same popup flow.
-- Removed `/login` from slash commands, help, and TUI input handling; updated both READMEs and the Gateway integration guide. Published 0.4.8 still uses `/login`.
-- Wrapped popup descriptions and constrained the footer inside the border in `apps/cli/src/ui/popup.ts`.
-- Added offline connection-flow regressions and aligned CLI package metadata to the existing `VERSION` base version 0.4.9.
-- Reviewed cancellation copy: closing the Gateway model picker retains the current route, usually `auto`.
-- Checked Gateway mode handling: the CLI selects a configured URL but does not query the server's runtime mode. A remote NAS Gateway requires an HTTPS URL; `MODERADO_CLOUD_ENV=production` forces the built-in public URL.
+- Fixed Dev/Prod mode precedence in `apps/cli/src/ui/provider_connect.ts`.
+- Replaced the Gateway auth method menu with direct API-key entry; saved credentials are masked, and browser sign-in is no longer an option in this `/connect` step.
+- Added regressions for Dev Mode with a saved Production URL, the masked saved key, editable URL display, and Enter-to-reuse.
 
 ## In progress
 
@@ -24,36 +20,32 @@ The CLI now uses `/connect` for all providers, including the Moderado Gateway. C
 
 ## Working tree
 
-- Modified `HANDOFF.md`, both READMEs, `docs/CLOUD_GATEWAY_INTEGRATION.md`, `apps/cli/package.json`, `package-lock.json`, CLI chat/UI files, and their focused tests. See `git status --short` for the exact list.
+- Modified `HANDOFF.md`, `apps/cli/src/ui/provider_connect.ts`, and `apps/cli/tests/provider_connect.test.ts`.
 
 ## Checks
 
-- `npm test` — PASS (62 files, 525 tests).
-- `npm run build` — PASS.
-- `git diff --check` — PASS before this handoff edit.
-- `rg -n '/login|onLogin' apps/cli/src` — no matches.
+- `npm test -- apps/cli/tests/provider_connect.test.ts -t "saved Gateway key masked|Dev Mode|editable value"` - PASS (3 tests).
+- `npm run typecheck` - PASS.
+- `npm test -- apps/cli/tests/provider_connect.test.ts` - FAIL (9 tests; loopback server tests are blocked by `listen EPERM` in this environment).
+- `git diff --check` and Node TypeScript syntax checks - PASS.
 
 ## Decisions and context
 
-- The user chose one command instead of retaining `/login` as an alias.
-- The Gateway key remains in the credential store; the popup offers a saved key only when it can be resolved.
-- Cancelling Gateway model selection keeps its current route, usually `auto`. The picker now says so.
-- The CLI does not infer a NAS Gateway's runtime mode from its URL. The configured URL is sufficient for routing.
-- Current source behavior differs from the published 0.4.8 release. Release-specific documentation retains that distinction.
+- Selected Gateway mode determines the initial URL; a saved URL from the other mode does not override it.
+- Provider Base URLs must use HTTPS, except loopback HTTP, and end in `/v1`.
+- The API-key prompt reuses a saved key on Enter and allows keyless public access when empty.
 
 ## Blockers
 
-- None.
+- Tests that bind loopback servers cannot run in this environment; the targeted Gateway mode and masked-key regressions pass.
 
 ## Next action
 
-1. Review the unified `/connect` popup locally with `npm run moderado`, then commit if it behaves as expected.
+1. Review `/connect` in a socket-enabled local terminal and confirm the new Gateway key prompt and existing provider URLs behave as expected.
 
 ## Resume notes
 
-- Focused suite: `npx vitest run apps/cli/tests/provider_connect.test.ts apps/cli/tests/welcome.test.ts apps/cli/tests/chat.test.ts`.
-
-The release records below are historical and are not current verification.
+- Focused regressions: `npm test -- apps/cli/tests/provider_connect.test.ts -t "saved Gateway key masked|Dev Mode|editable value"`.
 
 ## Release record (v0.3.10)
 

@@ -42,7 +42,7 @@ export interface ProviderPreset {
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
   { label: 'Moderado Gateway', value: 'moderado-cloud', tag: 'Gateway', description: 'Use browser sign-in, a saved key, a new key, or public access.' },
-  { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', description: 'Use NVIDIA NIM with automatic free-model routing.' },
+  { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', displayName: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', description: 'Use NVIDIA NIM with automatic free-model routing.' },
   { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
   { label: 'OrcaRouter', value: 'orcarouter', tag: 'Free Models', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', defaultModel: 'orcarouter/free', description: 'Connect OrcaRouter for adaptive model routing.' },
@@ -91,17 +91,21 @@ export function renderConnectionPrompt(label: string, value: string, secret = fa
     '',
     `  \x1b[1;38;5;75m❯\x1b[0m ${shown}\x1b[7m \x1b[0m`,
     '',
-    '\x1b[38;5;244mEnter continue · Esc cancel\x1b[0m',
+    '\x1b[38;5;244mEnter continue · Ctrl+A clear to edit · Esc cancel\x1b[0m',
   ], 64);
 }
 
-async function askPopupText(label: string, options: PopupConnectionOptions, secret = false): Promise<string | undefined> {
+async function askPopupText(label: string, options: PopupConnectionOptions, secret = false, initialValue = ''): Promise<string | undefined> {
   if (!options.drawFrame) {
-    return secret ? askSecret(`${label}: `, { signal: options.signal }) : askQuestion(`${label}: `, { signal: options.signal });
+    const shownInitialValue = secret ? '*'.repeat(initialValue.length) : initialValue;
+    const answer = secret
+      ? await askSecret(`${label}${shownInitialValue ? ` [${shownInitialValue}]` : ''}: `, { signal: options.signal })
+      : await askQuestion(`${label}${shownInitialValue ? ` [${shownInitialValue}]` : ''}: `, { signal: options.signal });
+    return answer || initialValue;
   }
 
   const stdin = process.stdin;
-  let value = '';
+  let value = initialValue;
   return new Promise((resolve) => {
     const finish = (answer: string | undefined): void => {
       stdin.removeListener('keypress', onKeypress);
@@ -113,6 +117,7 @@ async function askPopupText(label: string, options: PopupConnectionOptions, secr
     const onKeypress = (str: string, key: any): void => {
       if (key?.name === 'escape' || (key?.ctrl && key.name === 'c')) return finish(undefined);
       if (key?.name === 'return' || key?.name === 'enter') return finish(value.trim());
+      if (key?.ctrl && key.name === 'a') { value = ''; redraw(); return; }
       if (key?.name === 'backspace') { value = value.slice(0, -1); redraw(); return; }
       if (str && str.length === 1 && str.charCodeAt(0) >= 32 && !key?.ctrl && !key?.meta) { value += str; redraw(); }
     };
@@ -130,11 +135,12 @@ function connectionId(name: string): string {
 export function buildConnection(input: ConnectionInput): ProviderConnection {
   if (input.kind === 'nvidia-nim') {
     if (!input.apiKey?.trim()) throw new Error('An NVIDIA API key is required.');
+    const baseUrl = validateProviderBaseUrl(input.baseUrl ?? 'https://integrate.api.nvidia.com/v1');
     return {
       id: 'nvidia-nim',
       displayName: 'NVIDIA NIM',
       kind: 'nvidia-nim',
-      baseUrl: 'https://integrate.api.nvidia.com/v1',
+      baseUrl,
       apiKey: input.apiKey.trim(),
     };
   }
@@ -145,20 +151,25 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
   if (!input.apiKey?.trim() && !['ollama', 'lm-studio', 'moderado-cloud'].includes(connectionId(displayName))) throw new Error('An API key is required.');
   if (!input.baseUrl?.trim()) throw new Error('A base URL is required.');
 
-  let url: URL;
-  try { url = new URL(input.baseUrl.trim()); } catch { throw new Error('Enter a valid provider base URL.'); }
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname))) {
-    throw new Error('Provider base URLs must use HTTPS (HTTP is allowed only for localhost).');
-  }
-
   return {
     id: connectionId(displayName),
     displayName,
     kind: 'openai-compatible',
-    baseUrl: url.toString().replace(/\/+$/, ''),
+    baseUrl: validateProviderBaseUrl(input.baseUrl),
     apiKey: input.apiKey?.trim() || undefined,
     defaultModel,
   };
+}
+
+function validateProviderBaseUrl(value: string): string {
+  let url: URL;
+  try { url = new URL(value.trim()); } catch { throw new Error('Enter a valid provider base URL ending in /v1.'); }
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1', '::1'].includes(url.hostname))) {
+    throw new Error('Provider base URLs must use HTTPS (HTTP is allowed only for localhost).');
+  }
+  url.pathname = url.pathname.replace(/\/+$/, '');
+  if (!url.pathname.endsWith('/v1')) throw new Error('Provider base URLs must end in /v1.');
+  return url.toString().replace(/\/+$/, '');
 }
 
 /** Build a public paid-route profile or a keyed Gateway profile. */
@@ -168,9 +179,9 @@ export function buildModeradoCloudConnection(apiKey?: string, credentialExpiresA
   const connection = buildConnection({
     kind: 'openai-compatible',
     displayName: 'Moderado Cloud',
-    baseUrl: resolveModeradoCloudBaseUrl(
+    baseUrl: gatewayUrl ?? resolveModeradoCloudBaseUrl(
       process.env.MODERADO_CLOUD_ENV,
-      process.env.MODERADO_CLOUD_BASE_URL ?? gatewayUrl,
+      process.env.MODERADO_CLOUD_BASE_URL,
     ),
     apiKey: key,
     defaultModel: 'auto',
@@ -303,54 +314,54 @@ async function chooseModeradoCloudModel(connection: ProviderConnection, options:
 }
 
 export async function loginModeradoCloudInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
-  const baseUrl = resolveModeradoCloudBaseUrl(
-    process.env.MODERADO_CLOUD_ENV,
-    process.env.MODERADO_CLOUD_BASE_URL ?? options.gatewayUrl,
-  );
+  const modes = [
+    { label: 'Prod Mode', value: 'production', description: 'https://mod.alfazen.org/v1' },
+    { label: 'Dev Mode', value: 'development', description: 'http://127.0.0.1:4788/v1' },
+  ];
+  if (process.env.MODERADO_CLOUD_ENV === 'development') modes.reverse();
+  const defaultMode = 0;
+  const selectedMode = options.drawFrame
+    ? await selectListPopup('Moderado Gateway Mode', modes, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
+    : (await askSelect('Moderado Gateway Mode', modes, defaultMode, { signal: options.signal })).value;
+  if (!selectedMode || options.signal?.aborted) return undefined;
+  const baseUrl = resolveModeradoCloudBaseUrl(selectedMode, process.env.MODERADO_CLOUD_BASE_URL);
+  const enteredBaseUrl = await askProviderBaseUrl('Moderado Gateway Base URL', baseUrl, options);
+  if (!enteredBaseUrl) return undefined;
   let savedConnection: ProviderConnection | undefined;
   const saved = options.savedConnections?.['moderado-cloud'];
-  if (saved && options.resolveSavedConnection) {
+  if (saved) {
     try {
-      const resolved = await options.resolveSavedConnection(saved);
+      const resolved = options.resolveSavedConnection ? await options.resolveSavedConnection(saved) : saved;
       if (resolved.apiKey?.trim()) savedConnection = resolved;
     } catch {
-      // Keep fresh login methods available when credential storage cannot be read.
+      // Keep direct key entry available when credential storage cannot be read.
     }
   }
-  const loginChoices = [
-    ...(savedConnection ? [{ label: 'Use saved API key', value: 'saved', description: 'Continue with the saved Moderado Cloud key.' }] : []),
-    { label: 'Sign in with browser', value: 'browser', description: `Get a website key for free Gateway routes. Base URL: ${baseUrl}` },
-    { label: 'Enter an API key', value: 'manual', description: `Paste a Moderado Cloud key starting with mrd_ for free routes. Base URL: ${baseUrl}` },
-    { label: 'Use public Gateway', value: 'public', description: `Browse all routes and use paid routes without a key. Free routes require a website key. Base URL: ${baseUrl}` },
-  ];
-  const activeName = options.activeConnection?.displayName ?? 'None';
-  const title = `Login · Active: ${activeName.slice(0, 28)}`;
-  const method = options.drawFrame
-    ? await selectListPopup(title, loginChoices, { drawFrame: options.drawFrame, signal: options.signal })
-    : (await askSelect(title, loginChoices, 0, { signal: options.signal })).value;
-  if (!method || options.signal?.aborted) return undefined;
-  if (method === 'saved') return savedConnection ? chooseModeradoCloudModel(savedConnection, options) : undefined;
-  if (method === 'public') return chooseModeradoCloudModel(buildModeradoCloudConnection(undefined, undefined, options.gatewayUrl), options);
-  if (method === 'browser') {
-    try {
-      const credential = await authorizeModeradoCloudInBrowser(options.signal, { drawFrame: options.drawFrame });
-      return credential ? chooseModeradoCloudModel(buildModeradoCloudConnection(credential.accessToken, credential.expiresAt, options.gatewayUrl), options) : undefined;
-    } catch (error) {
-      // Surface the failure instead of letting it reject into the async keypress
-      // handler, where it would become an unhandled rejection and kill the TUI.
-      const message = error instanceof Error ? error.message : String(error);
-      options.drawFrame?.(renderBoxLines('Moderado Cloud', [message, '', '\x1b[38;5;244mPress Esc to go back.\x1b[0m'], 64));
-      return undefined;
-    }
-  }
-  let prompt = 'Moderado Cloud API key (mrd_…)';
+  let prompt = 'Moderado Gateway API key (mrd_…, optional for paid routes)';
+  let initialKey = savedConnection?.apiKey ?? '';
   while (!options.signal?.aborted) {
-    const apiKey = await askPopupText(prompt, options, true);
-    if (!apiKey) return undefined;
+    const apiKey = await askPopupText(prompt, options, true, initialKey);
+    if (apiKey === undefined) return undefined;
     try {
-      return chooseModeradoCloudModel(buildModeradoCloudConnection(apiKey, undefined, options.gatewayUrl), options);
+      const credentialExpiresAt = apiKey === savedConnection?.apiKey ? savedConnection.credentialExpiresAt : undefined;
+      const connection = buildModeradoCloudConnection(apiKey || undefined, credentialExpiresAt, enteredBaseUrl);
+      return chooseModeradoCloudModel(connection, options);
     } catch (error) {
       prompt = `Invalid key: ${error instanceof Error ? error.message : String(error)} Try again`;
+      initialKey = '';
+    }
+  }
+  return undefined;
+}
+
+async function askProviderBaseUrl(label: string, initialValue: string, options: PopupConnectionOptions): Promise<string | undefined> {
+  while (!options.signal?.aborted) {
+    const value = await askPopupText(label, options, false, initialValue);
+    if (!value) return undefined;
+    try { return validateProviderBaseUrl(value); }
+    catch (error) {
+      options.drawFrame?.(renderBoxLines('Invalid Base URL', [error instanceof Error ? error.message : String(error), '', '\x1b[38;5;244mPress Esc to cancel or Enter to edit the URL.\x1b[0m'], 64));
+      initialValue = value;
     }
   }
   return undefined;
@@ -372,21 +383,27 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   if (saved && options.resolveSavedConnection) {
     try {
       const resolved = await options.resolveSavedConnection(saved);
-      if (resolved.apiKey?.trim() || (saved.id === 'ollama' || saved.id === 'lm-studio')) return resolved;
+      if (resolved.apiKey?.trim() || (saved.id === 'ollama' || saved.id === 'lm-studio')) {
+        const baseUrl = await askProviderBaseUrl(`${resolved.displayName} Base URL`, resolved.baseUrl, options);
+        return baseUrl ? { ...resolved, baseUrl } : undefined;
+      }
     } catch {
       // Continue to key entry when the credential service is unavailable.
     }
   }
   if (selectedPreset.value === 'nvidia-nim') {
+    const baseUrl = await askProviderBaseUrl('NVIDIA NIM Base URL', saved?.baseUrl ?? selectedPreset.baseUrl!, options);
+    if (!baseUrl) return undefined;
     const apiKey = await askPopupText('NVIDIA API key', options, true);
     if (!apiKey) return undefined;
-    return buildConnection({ kind: 'nvidia-nim', apiKey });
+    return buildConnection({ kind: 'nvidia-nim', baseUrl, apiKey });
   }
 
   const customId = selectedPreset.value.startsWith('custom:') ? selectedPreset.value.slice('custom:'.length) : undefined;
   const displayName = selectedPreset.displayName ?? await askPopupText('Provider name (for example, OpenRouter)', options);
   if (!displayName) return undefined;
-  const baseUrl = selectedPreset.baseUrl ?? await askPopupText('OpenAI-compatible base URL', options);
+  const baseUrl = await askProviderBaseUrl(`${displayName} Base URL`, saved?.baseUrl ?? selectedPreset.baseUrl ?? 'https://example.com/v1', options);
+  if (!baseUrl) return undefined;
   const apiKey = selectedValue === 'ollama' || selectedValue === 'lm-studio'
     ? undefined
     : await askPopupText('API key', options, true);

@@ -79,6 +79,13 @@ describe('provider connection setup', () => {
     });
   });
 
+  it('keeps the selected NVIDIA Base URL and requires URLs to end in /v1', () => {
+    expect(buildConnection({ kind: 'nvidia-nim', baseUrl: 'https://nim.example/v1', apiKey: 'nvapi-test' }).baseUrl)
+      .toBe('https://nim.example/v1');
+    expect(() => buildConnection({ kind: 'openai-compatible', displayName: 'Provider', baseUrl: 'https://provider.example', apiKey: 'key', defaultModel: 'model' }))
+      .toThrow('/v1');
+  });
+
   it('builds a Moderado Cloud profile from a key and manages the Gateway URL', () => {
     const previous = process.env.MODERADO_CLOUD_ENV;
     delete process.env.MODERADO_CLOUD_ENV;
@@ -117,6 +124,18 @@ describe('provider connection setup', () => {
     process.env.MODERADO_CLOUD_ENV = 'development';
     try {
       expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://127.0.0.1:4788/v1');
+    } finally {
+      if (previous === undefined) delete process.env.MODERADO_CLOUD_ENV;
+      else process.env.MODERADO_CLOUD_ENV = previous;
+    }
+  });
+
+  it('uses the selected Gateway Base URL even when an environment mode is set', () => {
+    const previous = process.env.MODERADO_CLOUD_ENV;
+    process.env.MODERADO_CLOUD_ENV = 'production';
+    try {
+      expect(buildModeradoCloudConnection('mrd_test-key', undefined, 'http://127.0.0.1:4788/v1').baseUrl)
+        .toBe('http://127.0.0.1:4788/v1');
     } finally {
       if (previous === undefined) delete process.env.MODERADO_CLOUD_ENV;
       else process.env.MODERADO_CLOUD_ENV = previous;
@@ -263,7 +282,9 @@ describe('repeat Cloud login', () => {
     if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
     const saved = { ...buildModeradoCloudConnection('mrd_saved-secret'), baseUrl: `http://127.0.0.1:${address.port}/v1` };
     const frames: string[][] = [];
-    let selected = false;
+    let modeSelected = false;
+    let urlSelected = false;
+    let keyConfirmed = false;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1_000);
     try {
@@ -275,14 +296,27 @@ describe('repeat Cloud login', () => {
         drawFrame: (lines) => {
           frames.push(lines);
           const frame = lines.map(stripAnsi).join('\n');
-          if (!selected) { selected = true; setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' })); }
+          if (frame.includes('Moderado Gateway Mode') && !modeSelected) {
+            modeSelected = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Moderado Gateway Base URL') && !urlSelected) {
+            urlSelected = true;
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { ctrl: true, name: 'a' });
+              for (const character of saved.baseUrl) process.stdin.emit('keypress', character, { name: character });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          } else if (frame.includes('Moderado Gateway API key') && !keyConfirmed) {
+            keyConfirmed = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          }
           else if (frame.includes('Moderado Cloud Models')) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
         },
       });
       expect(result).toEqual(saved);
       const visible = frames.flat().map(stripAnsi).join('\n');
-      expect(visible).toContain('Active: Moderado Cloud');
-      expect(visible).toContain('Use saved API key');
+      expect(visible).toContain('Moderado Gateway API key');
+      expect(visible).toContain('*'.repeat(saved.apiKey!.length));
       expect(visible).not.toContain('mrd_saved-secret');
       expect(authorization).toBe('Bearer mrd_saved-secret');
     } finally {
@@ -291,25 +325,142 @@ describe('repeat Cloud login', () => {
     }
   });
 
-  it('wraps the selected login note inside the popup border', async () => {
+  it('shows the Gateway Base URL as an editable value inside the popup border', async () => {
     const frames: string[][] = [];
-    let selected = false;
+    let modeSelected = false;
+    let urlSelected = false;
+    let keyFrame = '';
     await loginModeradoCloudInteractive({
       activeConnection: buildModeradoCloudConnection(),
       drawFrame: (lines) => {
         frames.push(lines);
-        if (!selected) { selected = true; setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'down' })); }
-        else if (frames.length === 2) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+        const frame = lines.map(stripAnsi).join('\n');
+        if (frame.includes('Moderado Gateway Mode') && !modeSelected) {
+          modeSelected = true;
+          setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+        } else if (frame.includes('Moderado Gateway Base URL') && !urlSelected) {
+          urlSelected = true;
+          setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+        } else if (frame.includes('Moderado Gateway API key')) {
+          keyFrame = frame;
+          setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+        }
       },
     });
-    const lines = frames.at(-1)!.map(stripAnsi);
-    expect(lines.join('\n')).toContain('mrd_');
-    expect(lines.join('\n')).toContain('Base URL:');
+    const lines = frames.find((frame) => frame.some((line) => stripAnsi(line).includes('Moderado Gateway Base URL')))!.map(stripAnsi);
+    expect(lines.join('\n')).toContain('https://mod.alfazen.org/v1');
+    expect(lines.join('\n')).toContain('Ctrl+A clear to edit');
     expect(lines.every((line) => line.length <= lines[0].length)).toBe(true);
+    expect(keyFrame).toContain('Moderado Gateway API key');
   });
 });
 
 describe('unified provider connection', () => {
+  it('shows a saved Gateway key masked and reuses it when confirmed', async () => {
+    const saved = {
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible' as const,
+      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_hidden-secret', defaultModel: 'auto',
+    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1_500);
+    let selectedMode = false;
+    let confirmedUrl = false;
+    let confirmedKey = false;
+    let keyFrame = '';
+    let showedMethodMenu = false;
+    try {
+      const result = await loginModeradoCloudInteractive({
+        signal: controller.signal,
+        savedConnections: { 'moderado-cloud': saved },
+        resolveSavedConnection: async (connection) => connection,
+        drawFrame: (lines) => {
+          const frame = lines.map(stripAnsi).join('\n');
+          if (frame.includes('Moderado Gateway Mode') && !selectedMode) {
+            selectedMode = true;
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          } else if (frame.includes('Moderado Gateway Base URL') && !confirmedUrl) {
+            confirmedUrl = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Moderado Gateway API key') && !confirmedKey) {
+            confirmedKey = true;
+            keyFrame = frame;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Login · Active:')) {
+            showedMethodMenu = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Moderado Cloud Models')) {
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+          }
+        },
+      });
+      expect(keyFrame).toContain('*'.repeat(saved.apiKey.length));
+      expect(keyFrame).not.toContain(saved.apiKey);
+      expect(showedMethodMenu).toBe(false);
+      expect(result).toMatchObject({ apiKey: saved.apiKey, baseUrl: 'http://127.0.0.1:4788/v1' });
+    } finally {
+      clearTimeout(timeout);
+    }
+  });
+
+  it('lets the user select Dev Mode for the Gateway and shows both /v1 URLs', async () => {
+    const saved = {
+      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible' as const,
+      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_saved-key', defaultModel: 'auto',
+    };
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 1_000);
+    let selectedMode = false;
+    let selectedUrl = false;
+    let confirmedKey = false;
+    let productionModeFrame = '';
+    let developmentModeFrame = '';
+    let urlFrame = '';
+    const previousMode = process.env.MODERADO_CLOUD_ENV;
+    delete process.env.MODERADO_CLOUD_ENV;
+    try {
+      const result = await loginModeradoCloudInteractive({
+        signal: controller.signal,
+        gatewayUrl: saved.baseUrl,
+        savedConnections: { 'moderado-cloud': saved },
+        resolveSavedConnection: async (connection) => connection,
+        drawFrame: (lines) => {
+          const frame = lines.map(stripAnsi).join('\n');
+          if (frame.includes('Moderado Gateway Mode')) {
+            if (!frame.includes('http://127.0.0.1:4788/v1')) productionModeFrame = frame;
+            else developmentModeFrame = frame;
+            if (!selectedMode) {
+              selectedMode = true;
+              setImmediate(() => {
+                process.stdin.emit('keypress', undefined, { name: 'down' });
+                process.stdin.emit('keypress', '\r', { name: 'return' });
+              });
+            }
+          } else if (frame.includes('Moderado Gateway Base URL') && !selectedUrl) {
+            selectedUrl = true;
+            urlFrame = frame;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Moderado Gateway API key') && !confirmedKey) {
+            confirmedKey = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Moderado Cloud Models')) {
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+          }
+        },
+      });
+      expect(productionModeFrame).toContain('https://mod.alfazen.org/v1');
+      expect(developmentModeFrame).toContain('http://127.0.0.1:4788/v1');
+      expect(urlFrame).toContain('http://127.0.0.1:4788/v1');
+      expect(result?.baseUrl).toBe('http://127.0.0.1:4788/v1');
+    } finally {
+      clearTimeout(timeout);
+      if (previousMode === undefined) delete process.env.MODERADO_CLOUD_ENV;
+      else process.env.MODERADO_CLOUD_ENV = previousMode;
+    }
+  });
+
   it('connects to the Gateway and selects one of its routes through /connect', async () => {
     const server = createServer((_request, response) => {
       response.writeHead(200, { 'content-type': 'application/json' });
@@ -318,6 +469,7 @@ describe('unified provider connection', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
+    const gatewayUrl = `http://127.0.0.1:${address.port}/v1`;
     const previousEnvironment = process.env.MODERADO_CLOUD_ENV;
     const previousUrl = process.env.MODERADO_CLOUD_BASE_URL;
     delete process.env.MODERADO_CLOUD_ENV;
@@ -328,12 +480,21 @@ describe('unified provider connection', () => {
     try {
       const result = await connectProviderInteractive({
         signal: controller.signal,
-        gatewayUrl: `http://127.0.0.1:${address.port}/v1`,
         drawFrame: (lines) => {
           const frame = lines.map(stripAnsi).join('\n');
           if (frame.includes('Connect Provider') && !seen.has('provider')) {
             seen.add('provider');
             setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Moderado Gateway Mode') && !seen.has('mode')) {
+            seen.add('mode');
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (frame.includes('Moderado Gateway Base URL') && !seen.has('url')) {
+            seen.add('url');
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { ctrl: true, name: 'a' });
+              for (const character of gatewayUrl) process.stdin.emit('keypress', character, { name: character });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
           } else if (frame.includes('Login · Active:') && !seen.has('login')) {
             seen.add('login');
             setImmediate(() => {
@@ -351,7 +512,7 @@ describe('unified provider connection', () => {
         },
       });
       expect(result).toMatchObject({ id: 'moderado-cloud', defaultModel: 'vendor/route-one' });
-      expect([...seen]).toEqual(['provider', 'login', 'model']);
+      expect([...seen]).toEqual(['provider', 'mode', 'url', 'login', 'model']);
     } finally {
       clearTimeout(timeout);
       if (previousEnvironment === undefined) delete process.env.MODERADO_CLOUD_ENV;
