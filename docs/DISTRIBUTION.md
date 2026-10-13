@@ -1,17 +1,17 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-The latest published CLI is `moderado@0.4.8`, the Gateway-integrated release:
+The latest published CLI is `moderado@0.4.10`, the Gateway-integrated release:
 `/login` uses the Gateway for model routes and inference, while `/connect`
 supports direct provider connections. The previous `0.3.10` release is
 self-contained and does not require the Gateway. Both versions use the
 `moderado` command name. Install the current version with `npm install -g
 moderado`; pin `moderado@0.3.10` to keep the previous self-contained CLI.
 
-The GitHub Release `v0.4.8` includes binaries, checksum sidecars, a
+The GitHub Release `v0.4.10` includes binaries, checksum sidecars, a
 `manifest.json`, and reviewable distribution manifests. The Homebrew tap
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
-are both updated to **v0.4.8** after verifying every binary checksum against
+are both updated to **v0.4.10** after verifying every binary checksum against
 its `.sha256` sidecar. Windows installation is supported through npm and Scoop.
 Chocolatey is out of scope.
 
@@ -21,7 +21,7 @@ Homebrew and Scoop manifests from the verified release assets.
 ## End-user updates
 
 The `moderado update` and `moderado upgrade` commands are available starting
-with v0.4.18. The published v0.4.8 release described above does not include
+with v0.4.18. The published v0.4.10 release described above does not include
 them, so install v0.4.18 or later with the original installer before using
 these commands.
 
@@ -66,7 +66,7 @@ can install through npm or Scoop.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash
-curl -fsSL .../install.sh | bash -s -- --version v0.4.8 --dir ~/.local/bin
+curl -fsSL .../install.sh | bash -s -- --version v0.4.10 --dir ~/.local/bin
 ```
 
 Security properties (deliberate, do not regress): downloads the binary, the
@@ -76,7 +76,7 @@ pins a release instead of tracking `latest`. Covered by
 `apps/cli/tests/install_script.test.ts` (happy path + manifest-mismatch
 refusal against a local fixture server).
 
-## 2. Homebrew tap — at v0.4.8, keep in sync
+## 2. Homebrew tap — at v0.4.10, keep in sync
 
 - Tap repo: `marcuz-apl/homebrew-moderado`, formula `Formula/moderado.rb`.
 - Users: `brew tap marcuz-apl/moderado && brew install moderado`.
@@ -86,23 +86,23 @@ refusal against a local fixture server).
   `npm run generate:manifests -- artifacts/release/manifest.json /tmp/d
   https://github.com/marcuz-apl/moderado/releases/download/vX.Y.Z`
   and `diff` — for v0.3.7 the tap file was byte-identical.
-- **Outstanding: none — bumped to v0.4.8** from the verified release manifest.
+- **Outstanding: none — bumped to v0.4.10** from the verified release manifest.
 - No homebrew-core submission planned; a personal tap is the standard path.
 
-## 3. Scoop bucket — at v0.4.8, keep in sync
+## 3. Scoop bucket — at v0.4.10, keep in sync
 
 - Bucket repo: `marcuz-apl/scoop-moderado`, manifest `bucket/moderado.json`.
 - Users: `scoop bucket add moderado
   https://github.com/marcuz-apl/scoop-moderado && scoop install moderado`.
 - Per release: same flow — copy `distribution/scoop/moderado.json` over
   `bucket/moderado.json` and commit (v0.3.7 verified byte-identical).
-- **Outstanding: none — bumped to v0.4.8** from the verified release manifest.
+- **Outstanding: none — bumped to v0.4.10** from the verified release manifest.
 
 ## 4. Windows installation
 
 The supported Windows install options are npm and Scoop. The existing Winget
 submission for 0.3.10 is left as-is; no Winget submission or package-index
-release is planned for 0.4.8.
+release is planned for 0.4.10.
 
 ## 5. Automation gaps (owner decision)
 
