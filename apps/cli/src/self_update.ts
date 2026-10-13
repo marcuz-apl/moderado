@@ -22,14 +22,17 @@ export class SelfUpdateError extends Error {
   }
 }
 
-async function readLimitedText(response: Response, maxBytes: number, label: string): Promise<string> {
+async function readLimitedText(response: Response, maxBytes: number, label: string, signal?: AbortSignal): Promise<string> {
   if (!response.body) throw new SelfUpdateError(`${label} response has no body`);
   const reader = response.body.getReader();
+  const abortReader = () => { void reader.cancel().catch(() => undefined); };
+  signal?.addEventListener('abort', abortReader, { once: true });
   const chunks: Uint8Array[] = [];
   let size = 0;
   try {
     while (true) {
       const { done, value } = await reader.read();
+      if (signal?.aborted) throw new SelfUpdateError(`${label} read cancelled`);
       if (done) break;
       size += value.byteLength;
       if (size > maxBytes) {
@@ -41,6 +44,8 @@ async function readLimitedText(response: Response, maxBytes: number, label: stri
   } catch (error) {
     if (error instanceof SelfUpdateError) throw error;
     throw new SelfUpdateError(`Could not read ${label} response: ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    signal?.removeEventListener('abort', abortReader);
   }
   return Buffer.concat(chunks, size).toString('utf8');
 }
@@ -238,8 +243,9 @@ export function buildNpmUpdateInvocation(
 
 export async function runNpmUpdate(
   version: string, platform: string = process.platform, npmExecPath: string | undefined = process.env.npm_execpath,
-  prefix?: string,
+  prefix?: string, signal?: AbortSignal,
 ): Promise<{ stdout: string; stderr: string }> {
+  if (signal?.aborted) throw new SelfUpdateError('npm update cancelled');
   const { command, args } = buildNpmUpdateInvocation(version, platform, npmExecPath, prefix);
   const env = { ...process.env };
   for (const key of Object.keys(env)) {
@@ -249,6 +255,12 @@ export async function runNpmUpdate(
   }
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { shell: false, env, windowsHide: true, timeout: 120_000 });
+    const abort = () => child.kill();
+    let wasAborted = false;
+    const onAbort = () => { wasAborted = true; abort(); };
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const optionsSignalCleanup = () => signal?.removeEventListener('abort', onAbort);
+    if (signal?.aborted) onAbort();
     let stdout = '';
     let stderr = '';
     let outputExceeded = false;
@@ -266,10 +278,15 @@ export async function runNpmUpdate(
         child.kill();
       } else stderr += chunk;
     });
-    child.on('error', (error) => reject(new SelfUpdateError(`Could not start npm: ${error.message}`)));
-    child.on('close', (code, signal) => {
-      if (outputExceeded) reject(new SelfUpdateError('npm update exceeded the output limit'));
-      else if (signal) reject(new SelfUpdateError(`npm update stopped (${signal})`));
+    child.on('error', (error) => {
+      optionsSignalCleanup();
+      reject(new SelfUpdateError(`Could not start npm: ${error.message}`));
+    });
+    child.on('close', (code, exitSignal) => {
+      optionsSignalCleanup();
+      if (wasAborted) reject(new SelfUpdateError('npm update cancelled'));
+      else if (outputExceeded) reject(new SelfUpdateError('npm update exceeded the output limit'));
+      else if (exitSignal) reject(new SelfUpdateError(`npm update stopped (${exitSignal})`));
       else if (code === 0) resolve({ stdout, stderr });
       else reject(new SelfUpdateError(`npm update failed (exit ${code ?? 'unknown'}): ${stderr.trim() || stdout.trim()}`));
     });
@@ -283,6 +300,7 @@ export type StandaloneUpdateOptions = {
   architecture: string;
   fetchImpl?: typeof fetch;
   renameImpl?: typeof rename;
+  signal?: AbortSignal;
 };
 
 type ReleaseArtifact = {
@@ -293,6 +311,8 @@ type ReleaseArtifact = {
 export async function updateStandalone(options: StandaloneUpdateOptions): Promise<void> {
   const { release, executablePath, platform, architecture } = options;
   const fetchImpl = options.fetchImpl ?? fetch;
+  const signal = options.signal;
+  if (signal?.aborted) throw new SelfUpdateError('Standalone update cancelled');
   if (!executablePath || !release || !/^v(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/.test(release.tag_name)) {
     throw new SelfUpdateError('Cannot update standalone binary: invalid release or executable path');
   }
@@ -310,14 +330,14 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
   const base = `https://github.com/marcuz-apl/moderado/releases/download/${release.tag_name}`;
   const get = async (url: string): Promise<Response> => {
     let response: Response;
-    try { response = await fetchImpl(url); } catch (error) {
+    try { response = await fetchImpl(url, { signal }); } catch (error) {
       throw new SelfUpdateError(`Standalone update download failed: ${error instanceof Error ? error.message : String(error)}`);
     }
     if (!response.ok) throw new SelfUpdateError(`Standalone update download failed: HTTP ${response.status}`);
     return response;
   };
   let manifest: unknown;
-  try { manifest = JSON.parse(await readLimitedText(await get(`${base}/manifest.json`), MAX_MANIFEST_BYTES, 'Standalone manifest')); } catch (error) {
+  try { manifest = JSON.parse(await readLimitedText(await get(`${base}/manifest.json`), MAX_MANIFEST_BYTES, 'Standalone manifest', signal)); } catch (error) {
     if (error instanceof SelfUpdateError) throw error;
     throw new SelfUpdateError('Standalone release manifest is malformed');
   }
@@ -349,17 +369,22 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
   const [artifactResponse, sidecarResponse] = await Promise.all([
     get(`${base}/${artifact.filename}`), get(`${base}/${artifact.filename}.sha256`),
   ]);
+  if (signal?.aborted) throw new SelfUpdateError('Standalone update cancelled');
   const stagedPath = join(dirname(executablePath), `.${basename(executablePath)}.${randomUUID()}.tmp`);
   let file: Awaited<ReturnType<typeof open>> | undefined;
   let operationError: unknown;
+  let abortReader: (() => void) | undefined;
   try {
     if (!artifactResponse.body) throw new SelfUpdateError('Standalone artifact response had no body');
     file = await open(stagedPath, 'wx', 0o600);
     const reader = artifactResponse.body.getReader();
+    abortReader = () => { void reader.cancel().catch(() => undefined); };
+    signal?.addEventListener('abort', abortReader, { once: true });
     const hash = createHash('sha256');
     let size = 0;
     while (true) {
       const { done, value } = await reader.read();
+      if (signal?.aborted) throw new SelfUpdateError('Standalone update cancelled');
       if (done) break;
       size += value.byteLength;
       if (size > artifact.size) throw new SelfUpdateError(`Standalone artifact exceeds manifest size for ${artifact.filename}`);
@@ -374,7 +399,7 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
     if (size !== artifact.size) throw new SelfUpdateError(`Standalone artifact size verification failed for ${artifact.filename}`);
     const [checksum, sidecar] = await Promise.all([
       Promise.resolve(hash.digest('hex')),
-      readLimitedText(sidecarResponse, MAX_SIDECAR_BYTES, 'Standalone sidecar'),
+      readLimitedText(sidecarResponse, MAX_SIDECAR_BYTES, 'Standalone sidecar', signal),
     ]);
     if (sidecar !== `${artifact.checksum}  ${artifact.filename}\n` || checksum !== artifact.checksum) {
       throw new SelfUpdateError(`Standalone artifact checksum verification failed for ${artifact.filename}`);
@@ -395,6 +420,7 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
     operationError = failure;
     throw failure;
   } finally {
+    if (abortReader) signal?.removeEventListener('abort', abortReader);
     let cleanupError: unknown;
     try { await file?.close(); } catch (error) { cleanupError = error; }
     try {
@@ -431,17 +457,17 @@ export async function handleSelfUpdateCommand(
     const channel = detectInstallChannel(process.argv[1]);
     if (channel.channel === 'package-manager') {
       write(`Update with your package manager: ${channel.guidance}`);
-      return 0;
+      return 1;
     }
     if (channel.channel === 'unknown') {
       throw new SelfUpdateError(`Cannot safely identify this installation. ${channel.guidance}`);
     }
     if (signal.aborted) throw new SelfUpdateError('Update cancelled. Run the command again when ready.');
     if (channel.channel === 'npm') {
-      await runNpmUpdate(release.tag_name, process.platform, process.env.npm_execpath, channel.prefix);
+      await runNpmUpdate(release.tag_name, process.platform, process.env.npm_execpath, channel.prefix, signal);
     } else {
       await updateStandalone({
-        release, executablePath: process.argv[1] ?? '', platform: process.platform, architecture: process.arch,
+        release, executablePath: process.argv[1] ?? '', platform: process.platform, architecture: process.arch, signal,
       });
     }
     write(`Updated successfully to ${release.tag_name}. Restart Moderado to use the new version.`);

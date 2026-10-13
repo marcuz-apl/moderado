@@ -237,6 +237,18 @@ describe('npm update', () => {
     }
   });
 
+  it('kills an active npm update when its abort signal fires', async () => {
+    const fixture = await npmCliFixture("setTimeout(() => process.exit(0), 5000);");
+    const controller = new AbortController();
+    try {
+      const update = withFixtureNode(fixture.node, () => runNpmUpdate('v0.4.16', process.platform, fixture.script, undefined, controller.signal));
+      setTimeout(() => controller.abort(), 40);
+      await expect(update).rejects.toThrow(/cancelled/i);
+    } finally {
+      await fixture.cleanup();
+    }
+  });
+
   it('stops an npm child that exceeds the output cap', async () => {
     const fixture = await npmCliFixture("process.stdout.write('x'.repeat(70000));");
     try {
@@ -332,6 +344,22 @@ describe('self update command handler', () => {
       output.mockRestore();
     }
   });
+
+  it('returns nonzero with actionable guidance when install ownership is unknown', async () => {
+    const originalFetch = globalThis.fetch;
+    const output = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const originalArgv = process.argv[1];
+    globalThis.fetch = (async () => new Response(JSON.stringify([release('v0.4.18')]))) as typeof fetch;
+    process.argv[1] = '/tmp/unrecognized-moderado';
+    try {
+      expect(await handleSelfUpdateCommand('update', 'v0.4.17+261013f', new AbortController().signal)).toBe(1);
+      expect(output.mock.calls.map(([chunk]) => String(chunk)).join(' ')).toMatch(/original installer or package manager/i);
+    } finally {
+      process.argv[1] = originalArgv;
+      globalThis.fetch = originalFetch;
+      output.mockRestore();
+    }
+  });
 });
 
 describe('fetchPublishedReleases', () => {
@@ -398,6 +426,38 @@ describe('fetchPublishedReleases', () => {
 });
 
 describe('standalone update', () => {
+  it('cancels an active artifact stream, removes staging, and preserves the executable', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-abort-'));
+    const executable = join(root, 'moderado');
+    const artifact = Buffer.from('partial executable');
+    const checksum = createHash('sha256').update(artifact).digest('hex');
+    const filename = 'moderado-linux-x64';
+    const manifest = { version: 'v1.2.3', artifacts: [{ target: 'node22-linux-x64', filename, platform: 'linux', architecture: 'x64', size: artifact.length, checksum, signed: false }] };
+    const controller = new AbortController();
+    let started!: () => void;
+    const streamStarted = new Promise<void>((resolve) => { started = resolve; });
+    const fetchImpl: typeof fetch = async (input) => {
+      const url = String(input);
+      if (url.endsWith('/manifest.json')) return new Response(JSON.stringify(manifest));
+      if (url.endsWith('.sha256')) return new Response(`${checksum}  ${filename}\n`);
+      return new Response(new ReadableStream<Uint8Array>({
+        start(stream) { stream.enqueue(artifact); started(); },
+      }));
+    };
+    await writeFile(executable, 'original executable');
+    try {
+      const update = updateStandalone({ release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'linux', architecture: 'x64', fetchImpl, signal: controller.signal });
+      await streamStarted;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      controller.abort();
+      await expect(update).rejects.toThrow(/cancelled/i);
+      expect(await readFile(executable, 'utf8')).toBe('original executable');
+      expect((await readdir(root)).sort()).toEqual(['moderado']);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   it('replaces the executable only after the local release artifact is verified', async () => {
     const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-'));
     const executable = join(root, 'moderado');
