@@ -448,7 +448,10 @@ export async function handleSelfUpdateCommand(
       release = selectUpdateRelease(releases, installedVersion, mode);
     } catch (error) {
       if (error instanceof SelfUpdateError && error.message === 'Already current') {
+        const installed = parseInstalledVersion(installedVersion);
+        const targetVersion = `v${installed.major}.${installed.minor}.${installed.patch}`;
         write(`Installed version: ${installedVersion}`);
+        write(`Target version: ${targetVersion}`);
         write('Already current.');
         return 0;
       }
