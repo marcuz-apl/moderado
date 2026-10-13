@@ -57,10 +57,17 @@ async function withFixtureNode<T>(node: string, run: () => T | Promise<T>): Prom
   }
 }
 
-async function localArtifactServer(files: Map<string, Buffer>) {
+async function localArtifactServer(files: Map<string, Buffer>, destroyAfterPartialPath?: string) {
   const server = createServer((request, response) => {
     const body = files.get(request.url ?? '');
     if (!body) { response.writeHead(404).end(); return; }
+    if (request.url === destroyAfterPartialPath) {
+      response.writeHead(200);
+      response.flushHeaders();
+      response.write(body.subarray(0, 4));
+      setTimeout(() => response.destroy(new Error('fixture stream interrupted')), 1);
+      return;
+    }
     response.end(body);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -396,7 +403,7 @@ describe('standalone update', () => {
     }
   });
 
-  it.each(['missing host artifact', 'malformed manifest', 'bad sidecar', 'manifest checksum mismatch', 'truncated artifact', 'oversized stream', 'network failure'])(
+  it.each(['missing host artifact', 'malformed manifest', 'bad sidecar', 'manifest checksum mismatch', 'truncated artifact', 'oversized stream', 'oversized manifest', 'oversized sidecar', 'midstream reader error', 'network failure'])(
     'preserves the executable and removes staged files after %s', async (failure) => {
       const root = await mkdtemp(join(tmpdir(), 'moderado-standalone-failure-'));
       const executable = join(root, 'moderado');
@@ -406,20 +413,26 @@ describe('standalone update', () => {
       const manifest = { version: 'v1.2.3', revision: 'abc', artifacts: [{ target: 'node22-linux-x64', filename, platform: 'linux', architecture: 'x64', size: artifact.length, checksum, signed: false }] };
       let downloaded = artifact;
       let sidecar = Buffer.from(`${checksum}  ${filename}\n`);
+      let manifestBody: Buffer;
       if (failure === 'missing host artifact') manifest.artifacts = [];
       if (failure === 'bad sidecar') sidecar = Buffer.from('not a checksum');
       if (failure === 'manifest checksum mismatch') manifest.artifacts[0].checksum = '0'.repeat(64);
       if (failure === 'truncated artifact') downloaded = artifact.subarray(0, 4);
       if (failure === 'oversized stream') downloaded = Buffer.concat([artifact, Buffer.from('unexpected extra bytes')]);
-      const manifestBody = Buffer.from(failure === 'malformed manifest' ? '{' : JSON.stringify(manifest));
+      if (failure === 'oversized sidecar') sidecar = Buffer.alloc(2048, 0x61);
+      manifestBody = Buffer.from(failure === 'malformed manifest' ? '{' : JSON.stringify(manifest));
+      if (failure === 'oversized manifest') manifestBody = Buffer.alloc(70 * 1024, 0x20);
       const files = new Map<string, Buffer>([
         ['/manifest.json', manifestBody], [`/${filename}`, downloaded], [`/${filename}.sha256`, sidecar],
       ]);
       if (failure === 'network failure') files.delete('/manifest.json');
-      const server = await localArtifactServer(files);
+      const server = await localArtifactServer(files, failure === 'midstream reader error' ? `/${filename}` : undefined);
       await writeFile(executable, 'old executable');
       try {
-        await expect(updateStandalone({ release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'linux', architecture: 'x64', fetchImpl: server.fetchImpl })).rejects.toThrow();
+        const update = updateStandalone({ release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'linux', architecture: 'x64', fetchImpl: server.fetchImpl });
+        if (failure === 'oversized manifest') await expect(update).rejects.toThrow(/manifest response exceeds size limit/i);
+        else if (failure === 'oversized sidecar') await expect(update).rejects.toThrow(/sidecar response exceeds size limit/i);
+        else await expect(update).rejects.toThrow();
         expect(await readFile(executable, 'utf8')).toBe('old executable');
         expect((await readdir(root)).sort()).toEqual(['moderado']);
       } finally {
@@ -443,7 +456,7 @@ describe('standalone update', () => {
     ]));
     try {
       await expect(updateStandalone({ release: parseReleaseMetadata(release('v1.2.3'))!, executablePath: executable, platform: 'win32', architecture: 'x64', fetchImpl: server.fetchImpl, renameImpl: async () => { throw new Error('image is in use'); } }))
-        .rejects.toThrow(/scoop update moderado.*PowerShell/i);
+        .rejects.toThrow(/Exit Moderado.*download https:.*use File Explorer to replace this executable/i);
       expect(await readFile(executable, 'utf8')).toBe('original remains');
       expect((await readdir(root)).sort()).toEqual(['moderado-win-x64.exe']);
     } finally {

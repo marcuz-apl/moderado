@@ -8,6 +8,8 @@ import { basename, dirname, join } from 'node:path';
 const RELEASES_URL = 'https://api.github.com/repos/marcuz-apl/moderado/releases?per_page=100';
 const RELEASE_TAG_PATH = '/marcuz-apl/moderado/releases/tag/';
 const MAX_PAGES = 10;
+const MAX_MANIFEST_BYTES = 64 * 1024;
+const MAX_SIDECAR_BYTES = 1024;
 const VERSION = /^v(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export type SemanticVersion = { major: number; minor: number; patch: number };
@@ -18,6 +20,29 @@ export class SelfUpdateError extends Error {
     super(message);
     this.name = 'SelfUpdateError';
   }
+}
+
+async function readLimitedText(response: Response, maxBytes: number, label: string): Promise<string> {
+  if (!response.body) throw new SelfUpdateError(`${label} response has no body`);
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new SelfUpdateError(`${label} response exceeds size limit (${maxBytes} bytes)`);
+      }
+      chunks.push(value);
+    }
+  } catch (error) {
+    if (error instanceof SelfUpdateError) throw error;
+    throw new SelfUpdateError(`Could not read ${label} response: ${error instanceof Error ? error.message : String(error)}`);
+  }
+  return Buffer.concat(chunks, size).toString('utf8');
 }
 
 function parseVersion(value: string): SemanticVersion {
@@ -292,7 +317,7 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
     return response;
   };
   let manifest: unknown;
-  try { manifest = await (await get(`${base}/manifest.json`)).json(); } catch (error) {
+  try { manifest = JSON.parse(await readLimitedText(await get(`${base}/manifest.json`), MAX_MANIFEST_BYTES, 'Standalone manifest')); } catch (error) {
     if (error instanceof SelfUpdateError) throw error;
     throw new SelfUpdateError('Standalone release manifest is malformed');
   }
@@ -326,6 +351,7 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
   ]);
   const stagedPath = join(dirname(executablePath), `.${basename(executablePath)}.${randomUUID()}.tmp`);
   let file: Awaited<ReturnType<typeof open>> | undefined;
+  let operationError: unknown;
   try {
     if (!artifactResponse.body) throw new SelfUpdateError('Standalone artifact response had no body');
     file = await open(stagedPath, 'wx', 0o600);
@@ -346,7 +372,10 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
       }
     }
     if (size !== artifact.size) throw new SelfUpdateError(`Standalone artifact size verification failed for ${artifact.filename}`);
-    const [checksum, sidecar] = await Promise.all([Promise.resolve(hash.digest('hex')), sidecarResponse.text()]);
+    const [checksum, sidecar] = await Promise.all([
+      Promise.resolve(hash.digest('hex')),
+      readLimitedText(sidecarResponse, MAX_SIDECAR_BYTES, 'Standalone sidecar'),
+    ]);
     if (sidecar !== `${artifact.checksum}  ${artifact.filename}\n` || checksum !== artifact.checksum) {
       throw new SelfUpdateError(`Standalone artifact checksum verification failed for ${artifact.filename}`);
     }
@@ -357,15 +386,24 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
       await (options.renameImpl ?? rename)(stagedPath, executablePath);
     } catch (error) {
       const detail = platform === 'win32'
-        ? `Restart the terminal and retry. If it still fails, run 'scoop update moderado' or download https://github.com/marcuz-apl/moderado/releases/download/${release.tag_name}/${artifact.filename} and replace the executable manually in PowerShell.`
+        ? `Exit Moderado, then download https://github.com/marcuz-apl/moderado/releases/download/${release.tag_name}/${artifact.filename} and use File Explorer to replace this executable. Open a new terminal when done.`
         : 'Check that the executable directory is writable and retry.';
       throw new SelfUpdateError(`Could not replace standalone executable. ${detail} (${error instanceof Error ? error.message : String(error)})`);
     }
   } catch (error) {
-    if (error instanceof SelfUpdateError) throw error;
-    throw new SelfUpdateError(`Standalone artifact download or staging failed: ${error instanceof Error ? error.message : String(error)}`);
+    const failure = error instanceof SelfUpdateError ? error : new SelfUpdateError(`Standalone artifact download or staging failed: ${error instanceof Error ? error.message : String(error)}`);
+    operationError = failure;
+    throw failure;
   } finally {
-    await file?.close();
-    await unlink(stagedPath).catch((error: NodeJS.ErrnoException) => { if (error.code !== 'ENOENT') throw error; });
+    let cleanupError: unknown;
+    try { await file?.close(); } catch (error) { cleanupError = error; }
+    try {
+      await unlink(stagedPath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupError ??= error;
+    }
+    if (operationError === undefined && cleanupError !== undefined) {
+      throw new SelfUpdateError(`Could not clean up staged standalone artifact: ${cleanupError instanceof Error ? cleanupError.message : String(cleanupError)}`);
+    }
   }
 }
