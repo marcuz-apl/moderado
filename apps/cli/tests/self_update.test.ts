@@ -43,14 +43,11 @@ async function npmCliFixture(source: string) {
   await mkdir(join(packageDir, 'bin'), { recursive: true });
   await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'npm', bin: { npm: 'bin/npm-cli.js' } }));
   await writeFile(script, source);
-  // Windows spawn() requires an executable extension, so a bare `node` symlink fails with ENOENT.
-  // Emit a `.cmd` shim that forwards to the real Node binary on Windows; use a plain symlink elsewhere.
-  const node = process.platform === 'win32' ? join(root, 'node.cmd') : join(root, 'node');
-  if (process.platform === 'win32') {
-    await writeFile(node, `@echo off\r\n"${process.execPath}" %*\r\nexit /b %ERRORLEVEL%\r\n`);
-  } else {
-    await symlink(process.execPath, node);
-  }
+  // Windows spawn() with shell:false cannot execute extensionless files (ENOENT) or batch files
+  // (EINVAL). Symlink the real Node binary under an `.exe` name so the fake node is spawnable and
+  // its directory still hosts the adjacent npm CLI fixture; POSIX keeps a plain `node` symlink.
+  const node = process.platform === 'win32' ? join(root, 'node.exe') : join(root, 'node');
+  await symlink(process.execPath, node, process.platform === 'win32' ? 'file' : undefined);
   return { root, script, node, cleanup: () => rm(root, { recursive: true, force: true }) };
 }
 
