@@ -48,12 +48,12 @@
 - Export `selectUpdateRelease(releases, installedVersion, mode)` where mode is `'update' | 'upgrade'`; return the selected release or a typed error when none is compatible.
 - Export a release-list fetch function accepting an injectable `fetch` implementation and signal for deterministic tests and cancellation.
 
-- [ ] **Step 1: Write failing tests** for valid release parsing, malformed JSON shapes, malformed tags, connected `+yymmddc` installed version parsing, same-major filtering, cross-major selection, already-current behavior, and no-compatible-release behavior.
-- [ ] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm tests fail because the module does not exist.
-- [ ] **Step 3: Implement a strict runtime guard** for GitHub release objects and a narrow SemVer parser for `vM.N.P` tags; reject prereleases, drafts, duplicate/invalid tags, and unexpected structures.
-- [ ] **Step 4: Implement selection**: `update` filters to installed major and selects the numerically highest release; `upgrade` selects the numerically highest release regardless of major. Compare only `M.N.P`, ignoring connected build metadata in the installed version.
-- [ ] **Step 5: Fetch the published releases list** through native `fetch`, checking HTTP status and validating the top-level array before selection. Bound pagination to the documented release lookup needed to find the latest compatible version.
-- [ ] **Step 6: Re-run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm all metadata and selection cases pass.
+- [x] **Step 1: Write failing tests** for valid release parsing, malformed JSON shapes, malformed tags, connected `+yymmddc` installed version parsing, same-major filtering, cross-major selection, already-current behavior, and no-compatible-release behavior.
+- [x] **Step 2: Run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm tests fail because the module does not exist.
+- [x] **Step 3: Implement a strict runtime guard** for GitHub release objects and a narrow SemVer parser for `vM.N.P` tags; reject prereleases, drafts, duplicate/invalid tags, and unexpected structures.
+- [x] **Step 4: Implement selection**: `update` filters to installed major and selects the numerically highest release; `upgrade` selects the numerically highest release regardless of major. Compare only `M.N.P`, ignoring connected build metadata in the installed version.
+- [x] **Step 5: Fetch the published releases list** through native `fetch`, checking HTTP status and validating the top-level array before selection. Bound pagination to the documented release lookup needed to find the latest compatible version.
+- [x] **Step 6: Re-run** `npm test -- apps/cli/tests/self_update.test.ts`; confirm all metadata and selection cases pass.
 
 ### Task 3: Identify install channels and safely update npm installs
 
