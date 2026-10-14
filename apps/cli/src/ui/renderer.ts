@@ -13,6 +13,10 @@ export class TerminalRenderer {
   private readonly isChatMode: boolean;
   private isStreamingAssistant = false;
   private hasTransientProgress = false;
+  /** Step counter from progress events; -1 marks a delegation with no step budget. */
+  private taskStep = 0;
+  private taskMaxSteps = 0;
+  private sawTaskProgress = false;
   private latestUsage?: UsageEvent;
   private hasUsageTitle = false;
   private lastUsageTimestamp = -Infinity;
@@ -70,8 +74,10 @@ export class TerminalRenderer {
           this.clearTransientProgress();
           this.stdout.write(`\x1b[38;5;244m◇ ${event.status}\x1b[0m\n`);
         } else {
-          this.stdout.write(`\r\x1b[K\x1b[38;5;245m⠋ Thinking...\x1b[0m`);
-          this.hasTransientProgress = true;
+          this.taskStep = event.step;
+          this.taskMaxSteps = event.maxSteps ?? 0;
+          this.sawTaskProgress = true;
+          this.paintTaskStatus();
         }
         break;
       }
@@ -79,8 +85,7 @@ export class TerminalRenderer {
       case 'reasoning_delta': {
         // Do not display internal thinking process. Keep subtle transient spinner.
         if (!this.hasTransientProgress) {
-          this.stdout.write('\r\x1b[K\x1b[38;5;245m⠋ Thinking...\x1b[0m');
-          this.hasTransientProgress = true;
+          this.paintTaskStatus();
         }
         break;
       }
@@ -138,6 +143,13 @@ export class TerminalRenderer {
         this.printUsageSummary();
         this.finishAssistantStream();
         this.clearTransientProgress();
+
+        if (event.status === 'completed' && this.sawTaskProgress) {
+          this.stdout.write(`\x1b[38;5;114m✔ Done (${event.totalSteps} ${event.totalSteps === 1 ? 'step' : 'steps'})\x1b[0m\n`);
+        }
+        this.sawTaskProgress = false;
+        this.taskStep = 0;
+        this.taskMaxSteps = 0;
 
         const bannerColor =
           event.status === 'completed'
@@ -200,6 +212,15 @@ export class TerminalRenderer {
       this.stdout.write('\r\x1b[K');
       this.hasTransientProgress = false;
     }
+  }
+
+  /** Transient single-line progress: "Processing task… Step N/M" when a step budget is known. */
+  private paintTaskStatus(): void {
+    const label = this.taskMaxSteps > 0 && this.taskStep >= 0
+      ? `Processing task… Step ${this.taskStep}/${this.taskMaxSteps}`
+      : 'Processing task…';
+    this.stdout.write(`\r\x1b[K\x1b[38;5;245m⠋ ${label}\x1b[0m`);
+    this.hasTransientProgress = true;
   }
 
   private formatToolSummary(toolName: string, params: Record<string, any>): string {
