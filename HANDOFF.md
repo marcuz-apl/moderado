@@ -34,9 +34,10 @@ from `startColumn` clamped to `cardWidth`, matching the streamed-answer columns.
 
 Commit `1c074e5` (`v0.4.25+2610149`) was created mid-session and captured the
 source edits; `apps/cli/package.json` was left at 0.4.24, failing
-`package_metadata.test.ts`. Synced to 0.4.25 and committed the remaining test
-fixes; the `fix(cli):` commit only advances the daily counter (build bump), so
-VERSION and the manifest stay aligned.
+`package_metadata.test.ts`. Synced to 0.4.25. The follow-up `fix(cli):` commit
+still received a patch bump to `v0.4.26+261014a` because `pre-commit` reads the
+stale `COMMIT_EDITMSG` (previous `feat(cli)` message) when classifying; the
+manifest was re-synced to 0.4.26 in a subsequent build-bump commit.
 
 ### Checks
 
