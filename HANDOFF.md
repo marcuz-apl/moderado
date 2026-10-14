@@ -1,67 +1,74 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-14 22:10 UTC
+Updated: 2026-10-14 (task progress session)
 Branch: master (tracking origin/master)
-Status: Chat frame (title bar, question row, answer area) now shares the input card width; local dist rebuilt.
+Status: Every agent run now shows a "Processing task… Step N/M" status line that becomes a "✔ Done" marker on completion.
 
 ## Summary
 
-The composer card width is capped at `min(terminalWidth - 2, 120)`, but the chat
-frame sized the logo header, the question bar, and the answer text against the
-full terminal width. On a maximized window every element except the input box
-stretched to the screen edge.
+Runs previously gave no visible progress signal beyond a bare "Thinking..."
+spinner (non-interactive) and an elapsed-time row (chat), and finished without
+any explicit "Done" state.
 
-A single `getChatAnswerArea()` helper now derives the shared geometry (card width
-plus centering indent), and the header, question row, thought-time row, answer
-text, and the streamed answer all use it. `centerBlock` centers the logo inside
-the card's columns, wrapText hard-breaks over-long words so no line can
-overflow, and `renderChatAnswerDelta` wraps continuation lines back to the answer
-indent.
+`TerminalRenderer` (used by `moderado run`) now tracks `step`/`maxSteps` from
+`progress` events and paints the transient line as `⠋ Processing task… Step N/M`
+(falling back to `⠋ Processing task…` when a delegation event carries no step
+budget). When a run completes it prints `✔ Done (N steps)` above the Session
+Finished banner; cancelled/failed/timeout runs never get the Done marker.
 
-Earlier in the session: typing "/" pops the command list with a cursor. Up/Down
-moves the cursor through the matching commands (wrapping), Tab inserts the
-highlighted command, and Enter either completes a partial token or submits an
-exact match. The selected row is drawn with the same highlight bar the list
-popups use (dark background plus a bright cursor).
+In interactive chat, `progress` events update the fixed status row to
+`Processing task… Step N/M · Xs` while the model is thinking, the ticking
+thought-time timer carries the same step info, and a settled successful turn
+renders `✔ Done · Thought for Xs` via the new `chatTaskDone` layout flag
+(all pre-existing behavior unchanged when the flag is unset).
 
 ## Completed
 
-- Rendered a highlighted selection row (dark background bar plus a bright ❯ cursor) in the slash-command suggestions box via `renderSuggestionsBox(commands, width, selectedIndex)`, matching the app's list-popup convention.
-- Threaded `commandSelection` through `getOptions()` so the live composer shows
-  which command the arrow keys select.
-- Up/Down while the input starts with "/" moves `commandSelection` with
-  wrap-around; typing or backspacing resets it to 0.
-- Enter completes a partial slash token to the highlighted command; Tab inserts
-  it.
-- Retitled the box to "Commands (↑↓ browse, Tab to insert)" and documented
-  Up/Down in the help popup keyboard shortcuts.
-- Fixed a stale expectation that still asserted "Commands (Press Tab to
-  autocomplete)".
+- `TerminalRenderer`: task status line with step counter plus `✔ Done (N steps)`
+  on completion; step-less delegation events degrade to a plain "Processing
+  task…" line.
+- Chat frame: step-aware thought-time row; `chatTaskDone` threaded through
+  `WelcomeLayoutOptions`, `PromptInteractiveTurnOptions`, the per-turn redraw,
+  and the next prompt; successful turns show `✔ Done · Thought for Xs`.
+- Split the session work into two commits so both patch versions appear in
+  history: `v0.4.23` covers the run-command spinner/step line/Done marker,
+  `v0.4.24` the chat status row and this handoff. The pre-existing amend cycle
+  (which had overwritten the original `v0.4.23` commit) was rewritten away with
+  a backup branch (`backup/task-progress`).
+- Synced `apps/cli/package.json` with the hook-bumped VERSION in each commit
+  (0.4.23 / 0.4.24), fixing the pre-existing `package_metadata` mismatch left by
+  the v0.4.22 bump.
 
 ## In progress
 
-- Rebuilt the local dist so `npm start` shows the highlight; a published install still needs a future release.
+- None.
 
 ## Working tree
 
-- Modified HANDOFF.md, apps/cli/src/ui/welcome.ts, and
-  apps/cli/tests/welcome.test.ts.
+- Modified: apps/cli/src/ui/renderer.ts, apps/cli/src/ui/welcome.ts,
+  apps/cli/src/commands/chat.ts, apps/cli/tests/renderer.test.ts,
+  apps/cli/tests/welcome.test.ts, apps/cli/package.json, HANDOFF.md.
 
 ## Checks
 
-- apps/cli welcome suite: PASS (57 tests, including the highlight and maximized-width regressions).
-- apps/cli full suite: 363 passed, 1 skipped, 7 failed — all 7 failures are in
-  tests/binaries.test.ts, tests/install_script.test.ts, and
-  tests/release_workflow.test.ts, which also fail on a clean HEAD in this
-  environment (pre-existing, unrelated).
-- npx tsc --noEmit -p apps/cli/tsconfig.json: PASS.
+- apps/cli full suite: PASS (373 tests, 34 files — incl. Done-marker and
+  step-line regressions plus the package metadata check).
+- Rest of workspace (contracts/core/providers/tools): PASS (240 tests, 29 files).
+- npm run typecheck: PASS.
 - git diff --check: PASS.
+- Note: earlier sessions saw pre-existing failures in tests/binaries.test.ts,
+  tests/install_script.test.ts, and tests/release_workflow.test.ts; the current
+  run of those suites is green in this environment.
 
 ## Decisions and context
 
-- Up/Down keeps its existing behavior when the input is not a slash command:
-  it recalls question history.
-- The "❯" marker reuses the mention picker's visual convention.
+- The Done marker only appears for `completed` runs — a cancelled or failed task
+  must never claim completion.
+- Subagent delegation progress events emit `step: -1` with no `maxSteps`; the UI
+  treats missing/negative steps as "no step budget" instead of rendering
+  "Step -1/undefined".
+- In chat, the step row only paints before the first answer delta, so streamed
+  answer text is never overwritten.
 
 ## Blockers
 
@@ -69,12 +76,11 @@ popups use (dark background plus a bright cursor).
 
 ## Next action
 
-1. Include the arrow-key navigation and the chat-frame width alignment in the next Moderado build.
+1. Include the task progress/Done marker in the next Moderado build/release.
 
 ## Resume notes
 
-- The installed binary will continue to exhibit the old behavior until rebuilt
-  or updated.
+- Published installs keep the old behavior until the next release is built.
 
 ## Release record (v0.3.10)
 
