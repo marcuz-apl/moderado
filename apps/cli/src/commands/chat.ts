@@ -887,6 +887,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let conversationHistory: ChatMessage[] = [...activeSession.messages];
   let lastQuestion = '';
   let lastAnswer = '';
+  let lastTurnDone = false;
   let lastThoughtTime = 0;
   let lastOutputTokenRate: number | undefined;
   let lastTokenUsage: UsageEvent | undefined;
@@ -905,7 +906,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     } else {
       const turn = await promptInteractiveTurn({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
         onExit: exitMessage,
         questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
@@ -1468,6 +1469,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
       let streamedAnswer = '';
       lastAnswer = '';
+      lastTurnDone = false;
+      let taskStep: { step: number; maxSteps: number } | undefined;
       let firstAssistantDeltaAt: number | undefined;
       let outputTokenRate: number | undefined;
       let budgetWarningIssued = false;
@@ -1491,6 +1494,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           chatQuestion: trimmed,
           chatAnswer: displayAnswer,
           chatThoughtTime: thoughtTime,
+          chatTaskDone: lastTurnDone,
           outputTokenRate,
           tokenUsage: turnUsage,
           budgetStatus: budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined,
@@ -1598,7 +1602,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       redrawChatFrame();
       thinkingTimer = setInterval(() => {
         if (!firstAssistantDeltaAt && !turnUsage) {
-          process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000));
+          process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep));
         }
       }, 400);
       const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
@@ -1609,6 +1613,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           if (event.type === 'model_change') usedModels.add(event.newModelId);
+          if (event.type === 'progress') {
+            taskStep = { step: event.step, maxSteps: event.maxSteps ?? 0 };
+            if (!firstAssistantDeltaAt) process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep));
+          }
           if (event.type === 'gateway_status') process.stdout.write(renderGatewayFallbackUpdate(event, process.stdout.columns || 80));
           if (event.type === 'usage') {
             turnUsage = event;
@@ -1746,6 +1754,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         sessionStore.save(activeSession);
       }
       if (activeMode === 'Plan') activePlan = lastAnswer;
+      lastTurnDone = result.status === 'completed' && !budgetStopped && !resolution.isError;
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       lastOutputTokenRate = outputTokenRate;

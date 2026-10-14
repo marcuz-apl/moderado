@@ -409,7 +409,29 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(renderChatThoughtTimeUpdate(2.2)).toContain('Thought for 2s');
     expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/^\x1b7\x1b\[13;1H/);
     expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/\x1b8$/);
+    expect(renderChatThoughtTimeUpdate(2.2, { step: 2, maxSteps: 8 })).toContain('Processing task… Step 2/8 · 2s');
+    expect(renderChatThoughtTimeUpdate(2.2, { step: -1, maxSteps: 0 })).toContain('Thought for 2s');
     expect(renderChatAnswerDelta('Hi', { row: 15, column: 1 }, 100)).toMatchObject({ row: 15, column: 3 });
+  });
+
+  it('marks a settled chat turn Done and leaves unsettled turns unchanged', () => {
+    const base = {
+      model: 'z-ai/glm-5.3-flash',
+      tokens: 0,
+      cost: '$0.00',
+      workspace: 'd:\\projects\\moderado',
+      mode: 'Execute' as const,
+      autoApprove: false,
+      chatQuestion: 'Who are you?',
+      chatAnswer: 'I am Moderado.',
+      chatThoughtTime: 2.2,
+      width: 100,
+    };
+
+    expect(stripAnsi(renderChatScreen(base, 30))).toContain('Thought for 2s');
+    expect(stripAnsi(renderChatScreen({ ...base, chatTaskDone: true }, 30))).toContain('✔ Done · Thought for 2s');
+    expect(stripAnsi(renderChatScreen({ ...base, chatTaskDone: true, tokenUsage: usageSnapshot }, 30))).toContain('✔ Done · Thought for 2s');
+    expect(stripAnsi(renderChatScreen({ ...base, tokenUsage: usageSnapshot }, 30))).not.toContain('Thought for');
   });
 
   it('centers the welcome screen vertically in the available terminal rows', () => {

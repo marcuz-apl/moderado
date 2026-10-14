@@ -96,9 +96,61 @@ describe('TerminalRenderer', () => {
       timestamp: Date.now(),
     });
 
-    expect(captured).toContain('Thinking...');
+    expect(captured).toContain('Processing task… Step 1/10');
     expect(captured).not.toContain('Analyzing user inquiry...');
     expect(captured).toContain('Here is the answer.');
+  });
+
+  it('marks the task Done when a completed run finishes', () => {
+    let captured = '';
+    const stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        captured += chunk.toString('utf8');
+        callback();
+      },
+    });
+
+    const renderer = new TerminalRenderer({ stdout, verbose: false });
+    renderer.handleEvent({ type: 'progress', step: 2, maxSteps: 3, status: 'Step 2/3: Inferring next action...', timestamp: 0 });
+    renderer.handleEvent({ type: 'completion', status: 'completed', totalSteps: 3, timestamp: 0 });
+
+    expect(captured).toContain('✔ Done (3 steps)');
+    expect(captured.indexOf('✔ Done')).toBeLessThan(captured.indexOf('=== Session Finished: COMPLETED'));
+  });
+
+  it('does not mark Done when the run is cancelled or fails', () => {
+    let captured = '';
+    const stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        captured += chunk.toString('utf8');
+        callback();
+      },
+    });
+
+    const renderer = new TerminalRenderer({ stdout, verbose: false });
+    renderer.handleEvent({ type: 'progress', step: 1, maxSteps: 10, status: 'Inferring...', timestamp: 0 });
+    renderer.handleEvent({ type: 'completion', status: 'cancelled', totalSteps: 1, timestamp: 0 });
+    renderer.handleEvent({ type: 'progress', step: 1, maxSteps: 10, status: 'Inferring...', timestamp: 0 });
+    renderer.handleEvent({ type: 'completion', status: 'failed', totalSteps: 1, timestamp: 0 });
+
+    expect(captured).not.toContain('✔ Done');
+  });
+
+  it('shows a plain Processing task line when a delegation has no step budget', () => {
+    let captured = '';
+    const stdout = new Writable({
+      write(chunk, _encoding, callback) {
+        captured += chunk.toString('utf8');
+        callback();
+      },
+    });
+
+    const renderer = new TerminalRenderer({ stdout, verbose: false });
+    renderer.handleEvent({ type: 'progress', step: 1, maxSteps: 10, status: 'Inferring...', timestamp: 0 });
+    renderer.handleEvent({ type: 'progress', step: -1, status: 'Delegating sub-task: inspect tests...', timestamp: 0 } as any);
+
+    expect(captured).toContain('Processing task…');
+    expect(captured).not.toContain('Step -1');
   });
 
   it('does not write agent events outside the chat frame in chat mode', () => {

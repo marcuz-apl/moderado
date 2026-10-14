@@ -19,6 +19,8 @@ export interface WelcomeLayoutOptions {
   chatQuestion?: string;
   chatAnswer?: string;
   chatThoughtTime?: number;
+  /** Settled turn completed successfully — render the "✔ Done" status marker. */
+  chatTaskDone?: boolean;
   /** Generated completion tokens per second for the preceding response. */
   outputTokenRate?: number;
   tokenUsage?: UsageEvent;
@@ -370,7 +372,13 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   }
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  const chatStatus = !options.tokenUsage && options.chatAnswer?.trim() ? `Thought for ${thoughtTimeLabel}` : '';
+  const chatStatus = !options.chatAnswer?.trim()
+    ? ''
+    : options.chatTaskDone
+    ? `✔ Done · Thought for ${thoughtTimeLabel}`
+    : options.tokenUsage
+    ? ''
+    : `Thought for ${thoughtTimeLabel}`;
   lines.push(chatStatus ? indent + `\x1b[38;5;244m${chatStatus.slice(0, Math.max(0, area.cardWidth - 1))}\x1b[0m` : '');
   // Answer section: multi-line model answer
   if (options.chatAnswer && options.chatAnswer.trim().length > 0) {
@@ -401,9 +409,12 @@ export function navigateQuestionHistory(history: string[], direction: -1 | 1, in
 }
 
 /** Update the fixed chat elapsed-time row without repainting the terminal. */
-export function renderChatThoughtTimeUpdate(thoughtTime: number): string {
+export function renderChatThoughtTimeUpdate(thoughtTime: number, taskStep?: { step: number; maxSteps: number }): string {
   const label = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  return `\x1b7\x1b[13;1H\r\x1b[K\x1b[38;5;244mThought for ${label}\x1b[0m\x1b8`;
+  const status = taskStep && taskStep.maxSteps > 0 && taskStep.step >= 0
+    ? `Processing task… Step ${taskStep.step}/${taskStep.maxSteps} · ${label}`
+    : `Thought for ${label}`;
+  return `\x1b7\x1b[13;1H\r\x1b[K\x1b[38;5;244m${status}\x1b[0m\x1b8`;
 }
 
 export interface ChatAnswerPosition { row: number; column: number; }
@@ -603,6 +614,7 @@ export interface PromptInteractiveTurnOptions {
   chatQuestion?: string;
   chatAnswer?: string;
   chatThoughtTime?: number;
+  chatTaskDone?: boolean;
   outputTokenRate?: number;
   tokenUsage?: UsageEvent;
   questionHistory?: string[];
@@ -711,6 +723,7 @@ export async function promptInteractiveTurn(
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
     chatThoughtTime: options.chatThoughtTime,
+    chatTaskDone: options.chatTaskDone,
     outputTokenRate: options.outputTokenRate,
     tokenUsage: options.tokenUsage,
     queuedCommands: options.queuedCommands,
