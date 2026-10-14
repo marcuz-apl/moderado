@@ -52,8 +52,9 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.10** | Latest published release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_CLOUD_ENV` overrides. |
-| **0.4.8** | Previous release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
+| **0.4.26** | Latest published release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_CLOUD_ENV` overrides. Chat TUI is polished with dynamic task progress, a Done state in the chat status row, network approval prompts, wildcard skill toggles, and chat status rows clamped inside the composer card columns. |
+| **0.4.18** | Previous release | Gateway-integrated CLI. `moderado update` and `moderado upgrade` self-update commands were introduced in this release. |
+| **0.4.10** | Previous release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
 Both versions use the command name `moderado`. Install the latest release with `npm install -g moderado`. To keep using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
@@ -66,7 +67,7 @@ Chocolatey is deliberately out of scope; the full channel runbook lives in
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.10
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.26
 
 # npm (requires Node.js >= 20)
 npm install -g moderado
@@ -79,7 +80,7 @@ npm install -g moderado
 brew tap marcuz-apl/moderado && brew install moderado
 
 # curl installer (arm64), same checksum verification as Linux
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.8
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.26
 
 # npm (requires Node.js >= 20)
 npm install -g moderado

@@ -88,7 +88,7 @@ npm install -g moderado
 moderado --help
 ```
 
-The latest published release is 0.4.10. Its `/connect` flow handles the
+The latest published release is 0.4.26. Its `/connect` flow handles the
 Gateway and direct providers; `/login` is no longer offered. The previous
 0.4.8 release uses `/login` for the Gateway. The earlier 0.3.10 release is
 self-contained and works without the Gateway. All three use the `moderado`
@@ -101,9 +101,7 @@ npm and Scoop. See `docs/DISTRIBUTION.md` for package-manager details.
 
 ### Update an existing installation
 
-These commands are available starting with Moderado v0.4.18. The currently
-published v0.4.10 release does not include them; install v0.4.18 or later with
-the original installer before using these commands.
+These commands are available starting with Moderado v0.4.18.
 
 ```bash
 moderado update   # latest release within the installed major version

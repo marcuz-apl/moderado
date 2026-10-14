@@ -2,9 +2,10 @@
 
 Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
-Release context: `0.4.10` is the current release: `/connect` handles the
-Gateway and direct providers. The previous `0.4.8` release uses `/login` for
-the Gateway. `0.3.10` remains available as the earlier
+Release context: `0.4.26` is the current release: `/connect` handles the
+Gateway and direct providers. The previous `0.4.18` release adds the
+`moderado update` and `moderado upgrade` self-update commands. `0.3.10`
+remains available as the earlier
 self-contained CLI. Windows installation uses npm and Scoop; no Winget
 submission or package-index release is planned.
 
@@ -18,7 +19,7 @@ version, then run the local verification suite:
 ```bash
 # 0. Sync apps/cli/package.json (and package-lock.json) with the SemVer portion
 #    of VERSION, so the release tag and the published artifact agree.
-#    For this release: VERSION "v0.4.10+<UTC-build>" -> "version": "0.4.10"
+#    For this release: VERSION "v0.4.26+<UTC-build>" -> "version": "0.4.26"
 cat VERSION
 
 # 1. Ensure clean build across all workspace packages
@@ -34,7 +35,7 @@ npm run typecheck
 npm run verify:package
 ```
 
-The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.10`), and
+The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.26`), and
 `npm run verify:package` produces `apps/cli/moderado-<package.json version>.tgz`.
 Both must carry the same `major.minor.patch`, otherwise the GitHub Release would
 attach an artifact whose version disagrees with its tag.
@@ -51,7 +52,7 @@ attach an artifact whose version disagrees with its tag.
 ## 2. Push Release Tag (Artifact Verification Gate)
 
 When ready for release, tag the verified commit with the SemVer portion of `VERSION`
-(`cut -d+ -f1 VERSION`; for this release `v0.4.10`):
+(`cut -d+ -f1 VERSION`; for this release `v0.4.26`):
 
 ```bash
 git tag "$(cut -d+ -f1 VERSION)"
@@ -73,7 +74,7 @@ Pushing a `v*` tag automatically triggers the read-only verification workflow:
 
 Maintainers should download and smoke-test the generated tarball locally:
 ```bash
-npm install -g ./moderado-0.4.0.tgz
+npm install -g ./moderado-0.4.26.tgz
 moderado --help
 ```
 
@@ -87,7 +88,7 @@ Public publication requires explicit maintainer confirmation through the manual 
 - **Trigger**: Manual `workflow_dispatch` only (never runs on push).
 - **Required Inputs**:
   - `confirm`: Must enter string `PUBLISH` (exact match required).
-  - `tag`: The verified release tag to publish (e.g. `v0.4.0`).
+  - `tag`: The verified release tag to publish (e.g. `v0.4.26`).
 - **Permissions**:
   - `id-token: write` for npm OIDC Provenance.
   - `contents: write` for GitHub Release creation.
