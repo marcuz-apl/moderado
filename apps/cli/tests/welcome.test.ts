@@ -456,6 +456,39 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(painted(fallback).length).toBeLessThanOrEqual(cardWidth);
   });
 
+  it('keeps every card element inside the composer card columns at any terminal width', () => {
+    for (const terminalWidth of [74, 80, 120, 200]) {
+      const cardWidth = getWelcomeCardWidth(terminalWidth);
+      const indent = getWelcomeIndent(cardWidth, terminalWidth);
+      const base = {
+        model: 'moonshotai/kimi-k3',
+        tokens: 0,
+        cost: '$0.00',
+        workspace: 'd:\\projects\\moderado',
+        mode: 'Execute' as const,
+        autoApprove: false,
+        width: terminalWidth,
+      };
+      const frames = [
+        renderWelcomeCard(base),
+        // Slash-command suggestions box (previously forced a 78–82 fixed width).
+        renderWelcomeCard({ ...base, input: '/s' }),
+        // Mention box with a path too long for the card (previously fixed width, untruncated).
+        renderWelcomeCard({ ...base, mentionFiles: ['apps/cli/src/ui/deeply/nested/structure/for/boundary/testing/file.ts'], mentionSelection: 0 }),
+        // Queued-commands box.
+        renderWelcomeCard({ ...base, queuedCommands: ['/map', '/review'] }),
+      ];
+      for (const frame of frames) {
+        for (const line of stripAnsi(frame).split('\n')) {
+          if (line.length === 0) continue; // blank separator rows carry no content
+          // Every line begins at the card's left edge and ends exactly at its right edge.
+          expect(line.startsWith(' '.repeat(indent))).toBe(true);
+          expect(line.length).toBe(indent + cardWidth);
+        }
+      }
+    }
+  });
+
   it('marks a settled chat turn Done and leaves unsettled turns unchanged', () => {
     const base = {
       model: 'z-ai/glm-5.3-flash',

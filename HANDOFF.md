@@ -2,7 +2,7 @@
 
 Updated: 2026-10-14 (chat status-row width fix)
 Branch: master (tracking origin/master)
-Status: Temporary chat status rows (thought/step timer, usage snapshot, Gateway fallback note) are clamped to the composer card columns instead of stretching across the full terminal.
+Status: Every chat-card element — header, question, streamed answer, temporary status rows, and the slash/mention/queued boxes — is clamped to the centered composer card columns.
 
 ## Session 2026-10-14 — chat temporary status rows width fix
 
@@ -29,6 +29,14 @@ from `startColumn` clamped to `cardWidth`, matching the streamed-answer columns.
 - Tests: new regression "keeps temporary status rows inside the chat card
   columns" (width 200, asserts start column and painted width for all three
   painters); stale pins updated to the card geometry.
+- Full boundary sweep (follow-up): the first streamed answer line no longer
+  paints from column 1 (`answerPosition` now initializes from
+  `getChatAnswerArea(...).startColumn` in chat.ts); `renderSuggestionsBox` uses
+  exactly the passed card width (was forced to a 78–82 fixed width that
+  escaped narrow cards); `renderMentionSuggestionsBox` takes the card width,
+  is flush-left like the queued box, and truncates long file labels.
+  Regression test asserts every non-empty card line starts at the card's left
+  edge and ends exactly at its right edge at 74/80/120/200 columns.
 
 ### Versioning note
 
@@ -41,7 +49,7 @@ manifest was re-synced to 0.4.26 in a subsequent build-bump commit.
 
 ### Checks
 
-- Full workspace suite: PASS (614 tests, 63 files).
+- Full workspace suite: PASS (615 tests, 63 files).
 - npx tsc -b --force: PASS. git diff --check: PASS.
 - Live geometry check at width 200: all three painters start at column 41 and
   end within column 160 (card edge).

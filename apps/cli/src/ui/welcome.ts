@@ -203,7 +203,7 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   );
 
   if (options.mentionFiles && options.mentionFiles.length > 0) {
-    cardLines.push(...renderMentionSuggestionsBox(options.mentionFiles, options.mentionSelection ?? 0).map((line) => indent + line));
+    cardLines.push(...renderMentionSuggestionsBox(options.mentionFiles, options.mentionSelection ?? 0, width).map((line) => indent + line));
 
   }
 
@@ -248,9 +248,9 @@ export function selectCommandCandidate(input: string, currentIndex: number, dire
 
 export function renderSuggestionsBox(commands: SlashCommand[], width?: number, selectedIndex = 0): string[] {
   if (commands.length === 0) return [];
-  const terminalWidth = width ?? (process.stdout?.columns || 80);
-  const targetWidth = 82;
-  const boxWidth = Math.max(78, Math.min(terminalWidth, targetWidth));
+  // Exactly the card width so the box shares the composer's columns instead of
+  // forcing its own (previously a 78–82 fixed width that escaped narrow cards).
+  const boxWidth = width ?? getWelcomeCardWidth(process.stdout?.columns || 80);
   const innerW = boxWidth - 4;
   const title = 'Commands (↑↓ browse, Tab to insert)';
   const remainingDashes = Math.max(0, boxWidth - title.length - 5);
@@ -289,21 +289,28 @@ export function renderSuggestionsBox(commands: SlashCommand[], width?: number, s
   return lines;
 }
 
-export function renderMentionSuggestionsBox(files: string[], selectedIndex = 0): string[] {
+export function renderMentionSuggestionsBox(files: string[], selectedIndex = 0, width?: number): string[] {
   if (files.length === 0) return [];
+  // Sized to the composer card (like the queued/commands boxes) so it never
+  // breaks the card's left/right boundary.
+  const boxWidth = width ?? getWelcomeCardWidth(process.stdout?.columns || 80);
+  const title = 'Files (@ to mention, Tab to insert)';
   const lines: string[] = [];
-  lines.push('\x1b[38;5;240m  ╭─ Files (@ to mention, Tab to insert) ──────────────╮\x1b[0m');
+  const remainingDashes = Math.max(0, boxWidth - title.length - 5);
+  lines.push('\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + title + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
   for (let i = 0; i < files.length; i++) {
     const file = files[i];
     const isSelected = i === selectedIndex;
     const marker = isSelected ? '\x1b[1;38;5;75m❯ \x1b[0m' : '  ';
-    const nameStr = isSelected ? `\x1b[1;38;5;75m@${file}\x1b[0m` : `\x1b[38;5;250m@${file}\x1b[0m`;
-    const lineContent = `${marker}${nameStr}`;
-    const plainLen = visibleLen(lineContent);
-    const pad = Math.max(0, 52 - plainLen);
-    lines.push(`\x1b[38;5;240m  │\x1b[0m ${lineContent}${' '.repeat(pad)}\x1b[38;5;240m│\x1b[0m`);
+    // Visible budget: │ + space + marker(2) + label + pad + │ = boxWidth.
+    const labelCapacity = Math.max(4, boxWidth - 5);
+    let label = `@${file}`;
+    if (label.length > labelCapacity) label = `@${file.slice(0, Math.max(1, labelCapacity - 4))}...`;
+    const nameStr = isSelected ? `\x1b[1;38;5;75m${label}\x1b[0m` : `\x1b[38;5;250m${label}\x1b[0m`;
+    const pad = Math.max(0, boxWidth - 5 - label.length);
+    lines.push(`\x1b[38;5;240m│\x1b[0m ${marker}${nameStr}${' '.repeat(pad)}\x1b[38;5;240m│\x1b[0m`);
   }
-  lines.push('\x1b[38;5;240m  ╰─────────────────────────────────────────────────────╯\x1b[0m');
+  lines.push('\x1b[38;5;240m╰' + '─'.repeat(Math.max(0, boxWidth - 2)) + '╯\x1b[0m');
   return lines;
 }
 

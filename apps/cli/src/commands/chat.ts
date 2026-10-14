@@ -1477,7 +1477,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       let budgetStopped = false;
       let lastUsagePaint = 0;
       const usedModels = new Set<string>();
-      let answerPosition = { row: 15, column: 1 };
+      let answerPosition = { row: 15, column: getChatAnswerArea(process.stdout.columns).startColumn };
       let lastErrorEvent: { code?: string; message: string } | undefined;
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
