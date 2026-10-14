@@ -29,6 +29,8 @@ import {
   SLASH_COMMANDS,
   getWelcomeCardWidth,
   getWelcomeIndent,
+  getChatAnswerArea,
+  renderChatUsageUpdate,
 } from '../src/ui/welcome.js';
 import { handleMcpCommand } from '../src/commands/chat.js';
 
@@ -407,11 +409,51 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(stripAnsi(rendered)).not.toContain('Thought for <1s');
     expect(renderChatComposerCursor({ width: 100 }, 0)).toBe('\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[3C');
     expect(renderChatThoughtTimeUpdate(2.2)).toContain('Thought for 2s');
-    expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/^\x1b7\x1b\[13;1H/);
+    const thoughtArea = getChatAnswerArea(100);
+    expect(renderChatThoughtTimeUpdate(2.2, undefined, 100)).toMatch(new RegExp(`^\\x1b7\\x1b\\[13;${thoughtArea.startColumn}H`));
     expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/\x1b8$/);
     expect(renderChatThoughtTimeUpdate(2.2, { step: 2, maxSteps: 8 })).toContain('Processing task… Step 2/8 · 2s');
     expect(renderChatThoughtTimeUpdate(2.2, { step: -1, maxSteps: 0 })).toContain('Thought for 2s');
     expect(renderChatAnswerDelta('Hi', { row: 15, column: 1 }, 100)).toMatchObject({ row: 15, column: 3 });
+  });
+
+  it('keeps temporary status rows inside the chat card columns while the turn runs', () => {
+    const width = 200;
+    const cardWidth = getWelcomeCardWidth(width);
+    const indent = getWelcomeIndent(cardWidth, width);
+    const startColumn = indent + 1;
+    // Visible payload left after removing CSI codes and the DEC save/restore pair.
+    const painted = (sequence: string): string => stripAnsi(sequence).replace(/\x1b[0-9]/g, '');
+    const startsAtCard = (sequence: string): boolean => sequence.includes(`;${startColumn}H`);
+
+    // Thinking / task-step timer shares the left edge of header, question and composer.
+    const thought = renderChatThoughtTimeUpdate(2.2, { step: 2, maxSteps: 8 }, width);
+    expect(startsAtCard(thought)).toBe(true);
+    expect(painted(thought).length).toBeLessThanOrEqual(cardWidth);
+
+    // Usage snapshot row: clamped to the card instead of stretching terminal-wide.
+    const usage = renderChatUsageUpdate(
+      {
+        type: 'usage', estimated: true,
+        usage: { promptTokens: 1234, completionTokens: 567, totalTokens: 1801 },
+        outputTokensPerSecond: 42.4, generationMs: 1000, final: false, timestamp: 0,
+      },
+      width, 'Budget ≥80%', '1801 tokens / ~$0.00', 40, 'Execute',
+    );
+    expect(startsAtCard(usage)).toBe(true);
+    expect(painted(usage).length).toBeLessThanOrEqual(cardWidth);
+
+    // Gateway fallback note: bounded by the card, not the raw terminal width.
+    const fallback = renderGatewayFallbackUpdate(
+      {
+        type: 'gateway_status', fromModel: 'a/fast',
+        toProvider: 'nvidia', toModel: 'some/extremely-long-fallback-model-name',
+        reason: 'rate_limited_or_unavailable', timestamp: 0,
+      },
+      width,
+    );
+    expect(startsAtCard(fallback)).toBe(true);
+    expect(painted(fallback).length).toBeLessThanOrEqual(cardWidth);
   });
 
   it('marks a settled chat turn Done and leaves unsettled turns unchanged', () => {

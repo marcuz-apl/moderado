@@ -409,12 +409,13 @@ export function navigateQuestionHistory(history: string[], direction: -1 | 1, in
 }
 
 /** Update the fixed chat elapsed-time row without repainting the terminal. */
-export function renderChatThoughtTimeUpdate(thoughtTime: number, taskStep?: { step: number; maxSteps: number }): string {
+export function renderChatThoughtTimeUpdate(thoughtTime: number, taskStep?: { step: number; maxSteps: number }, width?: number): string {
+  const area = getChatAnswerArea(width);
   const label = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  const status = taskStep && taskStep.maxSteps > 0 && taskStep.step >= 0
+  const status = (taskStep && taskStep.maxSteps > 0 && taskStep.step >= 0
     ? `Processing task… Step ${taskStep.step}/${taskStep.maxSteps} · ${label}`
-    : `Thought for ${label}`;
-  return `\x1b7\x1b[13;1H\r\x1b[K\x1b[38;5;244m${status}\x1b[0m\x1b8`;
+    : `Thought for ${label}`).slice(0, area.cardWidth);
+  return `\x1b7\x1b[13;${area.startColumn}H\x1b[K\x1b[38;5;244m${status}\x1b[0m\x1b8`;
 }
 
 export interface ChatAnswerPosition { row: number; column: number; }
@@ -1286,11 +1287,12 @@ export function formatTokenUsage(event: UsageEvent): string {
 
 /** Update only the chat status row, preserving the answer/composer cursor. */
 export function renderChatUsageUpdate(event: UsageEvent, width = process.stdout.columns || 80, budgetStatus?: string, usageDetails?: string, terminalHeight = process.stdout.rows || 24, mode?: 'Plan' | 'Execute'): string {
+  const area = getChatAnswerArea(width);
   const usageText = formatTokenUsage(event);
   const suffix = `${usageDetails ? ` | ${usageDetails}` : ''}${budgetStatus ? ` | ${budgetStatus}` : ''}`;
   const modeLabel = mode === 'Plan' ? '\x1b[1;38;5;75m[Plan]\x1b[0m / Execute (Tab)' : 'Plan / \x1b[1;38;5;75m[Execute]\x1b[0m (Tab)';
   const modeText = mode === 'Plan' ? '[Plan] / Execute (Tab)' : 'Plan / [Execute] (Tab)';
-  const rowWidth = Math.max(0, width - 1);
+  const rowWidth = area.cardWidth;
   const textLimit = Math.max(0, rowWidth - (mode ? modeText.length + 1 : 0));
   const usageLimit = Math.max(0, textLimit - suffix.length);
   const clippedUsage = mode && usageText.length > usageLimit
@@ -1298,14 +1300,15 @@ export function renderChatUsageUpdate(event: UsageEvent, width = process.stdout.
     : usageText;
   const text = `${clippedUsage}${suffix}`.slice(0, textLimit);
   const row = Math.max(1, terminalHeight - 2);
-  return `\x1b7\x1b[${row};1H\r\x1b[K\x1b[38;5;244m${text}\x1b[0m${mode ? `${' '.repeat(Math.max(1, rowWidth - text.length - modeText.length))}${modeLabel}` : ''}\x1b8`;
+  return `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${text}\x1b[0m${mode ? `${' '.repeat(Math.max(1, rowWidth - text.length - modeText.length))}${modeLabel}` : ''}\x1b8`;
 }
 
 /** Show trusted, schema-validated Gateway route changes without provider supplied prose. */
 export function renderGatewayFallbackUpdate(event: GatewayStatusEvent, width = process.stdout.columns || 80): string {
+  const area = getChatAnswerArea(width);
   const destination = event.toProvider ? `${event.toProvider}/${event.toModel}` : event.toModel;
   const reason = event.reason === 'rate_limited_or_unavailable' ? 'after an upstream route was rate limited or unavailable' : 'after a fallback';
-  const text = `Gateway route changed to ${destination} ${reason}`.slice(0, Math.max(0, width - 1));
+  const text = `Gateway route changed to ${destination} ${reason}`.slice(0, area.cardWidth);
   const row = renderModeradoHeader().split('\n').length + 3;
-  return `\x1b7\x1b[${row};1H\r\x1b[K\x1b[38;5;244m${text}\x1b[0m\x1b8`;
+  return `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${text}\x1b[0m\x1b8`;
 }

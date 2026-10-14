@@ -1602,7 +1602,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       redrawChatFrame();
       thinkingTimer = setInterval(() => {
         if (!firstAssistantDeltaAt && !turnUsage) {
-          process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep));
+          process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns));
         }
       }, 400);
       const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
@@ -1615,7 +1615,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           if (event.type === 'model_change') usedModels.add(event.newModelId);
           if (event.type === 'progress') {
             taskStep = { step: event.step, maxSteps: event.maxSteps ?? 0 };
-            if (!firstAssistantDeltaAt) process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep));
+            if (!firstAssistantDeltaAt) process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns));
           }
           if (event.type === 'gateway_status') process.stdout.write(renderGatewayFallbackUpdate(event, process.stdout.columns || 80));
           if (event.type === 'usage') {
