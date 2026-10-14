@@ -755,6 +755,48 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(result).toBe('b');
   });
 
+  it('keeps a long input and its caret inside the composer width', async () => {
+    const input = 'x'.repeat(90);
+    const card = stripAnsi(renderWelcomeCard({
+      model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\test',
+      mode: 'Execute', autoApprove: true, input, width: 80,
+    })).split('\n');
+    expect(card[1].length).toBeLessThanOrEqual(80);
+
+    const result = await runComposerTurn(async (stdin, context) => {
+      for (const character of input) stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      expect(lastComposerWrite(context.writes).column).toBeLessThanOrEqual(80);
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe(input);
+  });
+
+  it('keeps the caret beside the visible text when editing a long input', async () => {
+    const input = 'x'.repeat(90);
+    const result = await runComposerTurn(async (stdin, context) => {
+      for (const character of input) stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      for (let index = 0; index < 20; index++) stdin.emit('keypress', '', { name: 'left' });
+      stdin.emit('keypress', 'Z', { name: 'z', ctrl: false, meta: false });
+      const cursor = lastComposerWrite(context.writes);
+      const cardWrite = [...context.writes].reverse().find((write) => write.includes('Z'));
+      expect(cardWrite).toBeDefined();
+      const inputRow = stripAnsi(cardWrite!).split('\n').find((line) => line.includes('Z'));
+      expect(inputRow).toBeDefined();
+      expect(cursor.column).toBe(inputRow!.indexOf('Z') + 2);
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe(`${'x'.repeat(70)}Z${'x'.repeat(20)}`);
+  });
+
+  it('keeps the composer status row inside the terminal width', () => {
+    const card = stripAnsi(renderWelcomeCard({
+      model: 'provider/very-long-model-name-for-testing', tokens: 0, cost: '$0.00',
+      workspace: 'E:\\a-very-long-workspace-path\\with-more-segments',
+      mode: 'Execute', autoApprove: true, width: 80,
+    })).split('\n');
+    expect(Math.max(...card.map((line) => line.length))).toBeLessThanOrEqual(80);
+  });
+
   it('places the caret where the composer line is clicked', async () => {
     const result = await runComposerTurn(async (stdin, context) => {
       for (const character of 'abcd') {

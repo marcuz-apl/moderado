@@ -1,42 +1,37 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-14 18:52 UTC
-Branch: `master` at `bcaa558` (tracking `origin/master`)
-Status: Batch skill toggles are implemented and verified; the installed binary still needs an updated release.
+Updated: 2026-10-14 19:06 UTC
+Branch: master (tracking origin/master)
+Status: Composer cursor drift fix implemented and verified in source.
 
 ## Summary
 
-`/skills on *` and `/skills off *` now toggle all user skills. Name patterns such as `/skills off versioning-*` select matching installed user skills. The shell `moderado skills on|off` command uses the same matching logic; quote `*` patterns in a shell.
+Long input and long status labels could wrap the welcome card while the cursor code still assumed one composer row. The input now scrolls within one row around the caret, and the status labels fit the card width.
 
 ## Completed
 
-- Added bounded `*` matching in `apps/cli/src/skills.ts`, preserving exact-name behavior and rejecting unmatched patterns without saving config.
-- `off *` clears enabled names even if skill directories have been removed. Built-in skills remain always available.
-- Updated TUI, shell, and help text plus `docs/GUIDE.md`.
-- Set CLI package metadata to `0.4.20` for the feature commit; the previous commit had left it behind root `VERSION`.
-- Added a wildcard regression in `apps/cli/tests/skills.test.ts`.
+- Clipped composer input to the available card width and positioned the caret against the visible slice.
+- Kept model and workspace status labels within the card width.
+- Added regressions for long input, middle edits, and long status labels.
 
 ## In progress
 
-- The existing installed Moderado binary does not include the new wildcard commands.
+- An installed binary needs a future build to include the source fix.
 
 ## Working tree
 
-- Modified `HANDOFF.md`, `apps/cli/package.json`, `apps/cli/src/args.ts`, `apps/cli/src/commands/chat.ts`, `apps/cli/src/commands/skills.ts`, `apps/cli/src/skills.ts`, `apps/cli/src/ui/help_modal.ts`, `apps/cli/tests/skills.test.ts`, `docs/GUIDE.md`, and `package-lock.json`.
+- Modified HANDOFF.md, apps/cli/src/ui/welcome.ts, and apps/cli/tests/welcome.test.ts.
 
 ## Checks
 
-- `npm test` — PASS (63 files; 604 passed, 1 skipped).
-- `npm run typecheck` — PASS.
-- `npm run build` — PASS.
-- `node apps/cli/dist/index.js --help` — PASS; wildcard syntax displayed.
-- `git diff --check` — PASS.
+- npm test: PASS (63 files; 607 passed, 1 skipped).
+- npm run typecheck: PASS.
+- git diff --check: PASS.
 
 ## Decisions and context
 
-- `*` matches zero or more characters in installed user skill names. Exact names still work.
-- Unmatched patterns fail without a config update, except `off *`, which clears stale enabled names even when no user skills are installed.
-- No user skill was enabled or disabled in the user's live config during this change.
+- The input scrolls horizontally around the caret; the submitted message retains the full text.
+- The active Git hook advances the VERSION build identifier for this fix commit.
 
 ## Blockers
 
@@ -44,11 +39,12 @@ Status: Batch skill toggles are implemented and verified; the installed binary s
 
 ## Next action
 
-1. Publish an updated Moderado build before expecting the installed binary to support wildcard skill toggles.
+1. Include the cursor fix in the next Moderado build.
 
 ## Resume notes
 
-- CLI package metadata is set to `0.4.20`; the feature commit hook advances root `VERSION` to match.
+- The installed binary will continue to exhibit the old behavior until rebuilt or updated.
+
 ## Release record (v0.3.10)
 
 1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.

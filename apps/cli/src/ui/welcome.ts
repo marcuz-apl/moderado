@@ -13,6 +13,7 @@ export interface WelcomeLayoutOptions {
   mode: 'Plan' | 'Execute';
   autoApprove: boolean;
   input?: string;
+  inputCaret?: number;
   width?: number;
   /** When set, render the full chat window (question row 1 + answer) instead of the logo header. */
   chatQuestion?: string;
@@ -47,6 +48,12 @@ export function stripAnsi(str: string): string {
 /** Visible (ANSI-stripped) length of a line. */
 function visibleLen(str: string): number {
   return stripAnsi(str).length;
+}
+
+function composerInputWindow(input: string, caret: number, width: number): { text: string; caretColumn: number } {
+  const capacity = Math.max(1, width - 3);
+  const start = Math.max(0, Math.min(caret, input.length - capacity));
+  return { text: input.slice(start, start + capacity), caretColumn: caret - start };
 }
 
 /** Card width: nearly full terminal width, like OpenCode/Cline. */
@@ -102,7 +109,7 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
 
   const displayInput =
     options.input && options.input.length > 0
-      ? options.input
+      ? composerInputWindow(options.input, options.inputCaret ?? options.input.length, width).text
       : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m';
 
   const promptMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
@@ -138,20 +145,23 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const line4 = left4 + ' '.repeat(spaces4Count) + right4;
 
   // Line 5: Working directory (left) ... model and Auto-approve (right)
+  const approvalLabelRaw = options.autoApprove
+    ? 'Auto-approve enabled (Shift+Tab)'
+    : 'Auto-approve off (Shift+Tab)';
+  const modelSpace = Math.max(8, width - approvalLabelRaw.length - 10);
+  const shortModel = options.model.length > modelSpace ? '...' + options.model.slice(-(modelSpace - 3)) : options.model;
+  const workspaceSpace = Math.max(3, width - approvalLabelRaw.length - shortModel.length - 2);
   const shortWs =
-    options.workspace.length > 36
-      ? '...' + options.workspace.slice(-33)
+    options.workspace.length > workspaceSpace
+      ? '...' + options.workspace.slice(-(workspaceSpace - 3))
       : options.workspace;
   const left5 = `\x1b[38;5;245m${shortWs}\x1b[0m`;
 
   const approvalLabel = options.autoApprove
     ? '\x1b[38;5;114mAuto-approve enabled (Shift+Tab)\x1b[0m'
     : '\x1b[38;5;242mAuto-approve off (Shift+Tab)\x1b[0m';
-  const approvalLabelRaw = options.autoApprove
-    ? 'Auto-approve enabled (Shift+Tab)'
-    : 'Auto-approve off (Shift+Tab)';
-  const modelLabel = `\x1b[38;5;180m${options.model}\x1b[0m`;
-  const spaces5Count = Math.max(1, width - shortWs.length - options.model.length - approvalLabelRaw.length - 2);
+  const modelLabel = `\x1b[38;5;180m${shortModel}\x1b[0m`;
+  const spaces5Count = Math.max(1, width - shortWs.length - shortModel.length - approvalLabelRaw.length - 1);
   const line5 = left5 + ' '.repeat(spaces5Count) + modelLabel + ' ' + approvalLabel;
 
   const cardLines: string[] = [];
@@ -340,7 +350,8 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
 
 /** Place the terminal cursor on the first row of the bottom composer. */
 export function renderChatComposerCursor(options: Pick<WelcomeLayoutOptions, 'width'>, inputLength: number): string {
-  const column = getWelcomeIndent(getWelcomeCardWidth(options.width), options.width) + 2 + inputLength;
+  const width = getWelcomeCardWidth(options.width);
+  const column = getWelcomeIndent(width, options.width) + 2 + Math.min(inputLength, width - 3);
   return `\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${column}C`;
 }
 
@@ -635,6 +646,7 @@ export async function promptInteractiveTurn(
     mode: currentMode,
     autoApprove: currentAutoApprove,
     input,
+    inputCaret: caret,
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
     chatThoughtTime: options.chatThoughtTime,
@@ -684,7 +696,8 @@ export async function promptInteractiveTurn(
    */
   const positionCursorOnInput = () => {
     const { row, column } = getComposerAnchor();
-    stdout.write(`\x1b[1 q\x1b[?25h\x1b[${row};${column + caret}H`);
+    const { caretColumn } = composerInputWindow(input, caret, getWelcomeCardWidth());
+    stdout.write(`\x1b[1 q\x1b[?25h\x1b[${row};${column + caretColumn}H`);
   };
 
   /** Full-screen redraw: clear everything, repaint welcome TUI, reposition cursor. */
