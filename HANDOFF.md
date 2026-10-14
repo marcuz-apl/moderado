@@ -1,37 +1,67 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-14 19:06 UTC
+Updated: 2026-10-14 22:10 UTC
 Branch: master (tracking origin/master)
-Status: Composer cursor drift fix implemented and verified in source.
+Status: Chat frame (title bar, question row, answer area) now shares the input card width; local dist rebuilt.
 
 ## Summary
 
-Long input and long status labels could wrap the welcome card while the cursor code still assumed one composer row. The input now scrolls within one row around the caret, and the status labels fit the card width.
+The composer card width is capped at `min(terminalWidth - 2, 120)`, but the chat
+frame sized the logo header, the question bar, and the answer text against the
+full terminal width. On a maximized window every element except the input box
+stretched to the screen edge.
+
+A single `getChatAnswerArea()` helper now derives the shared geometry (card width
+plus centering indent), and the header, question row, thought-time row, answer
+text, and the streamed answer all use it. `centerBlock` centers the logo inside
+the card's columns, wrapText hard-breaks over-long words so no line can
+overflow, and `renderChatAnswerDelta` wraps continuation lines back to the answer
+indent.
+
+Earlier in the session: typing "/" pops the command list with a cursor. Up/Down
+moves the cursor through the matching commands (wrapping), Tab inserts the
+highlighted command, and Enter either completes a partial token or submits an
+exact match. The selected row is drawn with the same highlight bar the list
+popups use (dark background plus a bright cursor).
 
 ## Completed
 
-- Clipped composer input to the available card width and positioned the caret against the visible slice.
-- Kept model and workspace status labels within the card width.
-- Added regressions for long input, middle edits, and long status labels.
+- Rendered a highlighted selection row (dark background bar plus a bright ‚ùØ cursor) in the slash-command suggestions box via `renderSuggestionsBox(commands, width, selectedIndex)`, matching the app's list-popup convention.
+- Threaded `commandSelection` through `getOptions()` so the live composer shows
+  which command the arrow keys select.
+- Up/Down while the input starts with "/" moves `commandSelection` with
+  wrap-around; typing or backspacing resets it to 0.
+- Enter completes a partial slash token to the highlighted command; Tab inserts
+  it.
+- Retitled the box to "Commands (‚Üë‚Üì browse, Tab to insert)" and documented
+  Up/Down in the help popup keyboard shortcuts.
+- Fixed a stale expectation that still asserted "Commands (Press Tab to
+  autocomplete)".
 
 ## In progress
 
-- An installed binary needs a future build to include the source fix.
+- Rebuilt the local dist so `npm start` shows the highlight; a published install still needs a future release.
 
 ## Working tree
 
-- Modified HANDOFF.md, apps/cli/src/ui/welcome.ts, and apps/cli/tests/welcome.test.ts.
+- Modified HANDOFF.md, apps/cli/src/ui/welcome.ts, and
+  apps/cli/tests/welcome.test.ts.
 
 ## Checks
 
-- npm test: PASS (63 files; 607 passed, 1 skipped).
-- npm run typecheck: PASS.
+- apps/cli welcome suite: PASS (57 tests, including the highlight and maximized-width regressions).
+- apps/cli full suite: 363 passed, 1 skipped, 7 failed ‚Äî all 7 failures are in
+  tests/binaries.test.ts, tests/install_script.test.ts, and
+  tests/release_workflow.test.ts, which also fail on a clean HEAD in this
+  environment (pre-existing, unrelated).
+- npx tsc --noEmit -p apps/cli/tsconfig.json: PASS.
 - git diff --check: PASS.
 
 ## Decisions and context
 
-- The input scrolls horizontally around the caret; the submitted message retains the full text.
-- The active Git hook advances the VERSION build identifier for this fix commit.
+- Up/Down keeps its existing behavior when the input is not a slash command:
+  it recalls question history.
+- The "‚ùØ" marker reuses the mention picker's visual convention.
 
 ## Blockers
 
@@ -39,16 +69,17 @@ Long input and long status labels could wrap the welcome card while the cursor c
 
 ## Next action
 
-1. Include the cursor fix in the next Moderado build.
+1. Include the arrow-key navigation and the chat-frame width alignment in the next Moderado build.
 
 ## Resume notes
 
-- The installed binary will continue to exhibit the old behavior until rebuilt or updated.
+- The installed binary will continue to exhibit the old behavior until rebuilt
+  or updated.
 
 ## Release record (v0.3.10)
 
 1. Release commit `bb9a20d` (`v0.3.10+260930d`); hook fix `4006a9d`.
-2. Verification run `36774093914` ó all six jobs green.
+2. Verification run `36774093914` ÔøΩ all six jobs green.
 3. Downloaded the CI artifact and ran the actual Windows binary: reports
    `v0.3.10+260930d`. `manifest.json` revision `4006a9d`.
 4. Publish run `36774560319` (`confirm: PUBLISH`) succeeded. npm `latest` ?
@@ -86,7 +117,7 @@ bump was treated as a plain `build`.
 
 Fixed in `.githooks/pre-commit` by stripping all leading stamps:
 `s/^(v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z] )+//`. Verified against a
-synthetic stale message ó it now yields `v0.3.10+260930d`.
+synthetic stale message ÔøΩ it now yields `v0.3.10+260930d`.
 
 ### Release follow-up (historical)
 
@@ -112,12 +143,12 @@ synthetic stale message ó it now yields `v0.3.10+260930d`.
 | npm `latest` | **0.3.9** | none |
 | GitHub Release | **v0.3.9** (11 assets) | none |
 | curl installer | 0.3.9 (tracks latest) | none |
-| Homebrew tap | **0.3.9** | done ó `a82ccc1` |
-| Scoop bucket | **0.3.9** | done ó `f0e47d9` |
+| Homebrew tap | **0.3.9** | done ÔøΩ `a82ccc1` |
+| Scoop bucket | **0.3.9** | done ÔøΩ `f0e47d9` |
 | winget | 0.3.9 PR open | blocked on a community moderator; see below |
 
 
-The Homebrew and Scoop repos were verified live and were both still pinned at 0.3.0 ó older than the 0.3.7 the runbook previously claimed. Both were bumped to 0.3.9 by copying the canonical manifests from the v0.3.9 GitHub Release, after confirming all three binary checksums matched the published `.sha256` sidecars byte for byte:
+The Homebrew and Scoop repos were verified live and were both still pinned at 0.3.0 ÔøΩ older than the 0.3.7 the runbook previously claimed. Both were bumped to 0.3.9 by copying the canonical manifests from the v0.3.9 GitHub Release, after confirming all three binary checksums matched the published `.sha256` sidecars byte for byte:
 
 | Binary | SHA-256 |
 |---|---|
@@ -130,8 +161,8 @@ The Homebrew and Scoop repos were verified live and were both still pinned at 0.
 Closed the stale 0.3.0 PR #439175 and opened
 [microsoft/winget-pkgs#444475](https://github.com/microsoft/winget-pkgs/pull/444475)
 for 0.3.9 (`MERGEABLE`). It adds the three required manifests under
-`manifests/m/MarcuzApl/Moderado/0.3.9/` ó version, installer (portable, x64),
-and defaultLocale (en-US) ó with `InstallerSha256` taken from the v0.3.9
+`manifests/m/MarcuzApl/Moderado/0.3.9/` ÔøΩ version, installer (portable, x64),
+and defaultLocale (en-US) ÔøΩ with `InstallerSha256` taken from the v0.3.9
 release sidecar.
 
 Microsoft's 10-stage validation pipeline is the authoritative check, and a
@@ -173,9 +204,9 @@ still carry the bug** and are only correct once re-released.
 
 - Removed the `codex/vscode-extension` branch locally and on `origin`; pruned the remote-tracking ref. The tip commit `193ba46` is retained only as the tag `backup/codex-vscode-extension`. No VS Code extension code was ever merged into `master`, so no product code was reverted.
 - Cleaned the workspace of untracked leftovers from that branch: `apps/vscode/` (stale `dist/` + `node_modules/`), `.vscode/` (an `extensions.json` recommending the abandoned extension), and `artifacts/vsix/`. All three were gitignored build output, so the removal changed no tracked file.
-- Repaired a UTF-8 mojibake corruption (`U+FFFD`) in `docs/GUIDE.md` and `apps/cli/README.md` ó the apostrophe in "workspace's `package.json`" had been replaced with a replacement character.
+- Repaired a UTF-8 mojibake corruption (`U+FFFD`) in `docs/GUIDE.md` and `apps/cli/README.md` ÔøΩ the apostrophe in "workspace's `package.json`" had been replaced with a replacement character.
 - Corrected stale documentation: `docs/GUIDE.md` claimed v0.3.7 while the project is at v0.3.9; both READMEs described "the 7 tools" when 12 are registered plus 2 core-owned plus dynamic MCP tools.
-- Added a ß2 Tool Inventory table to `docs/TOOLS.md` listing all tools with their approval gate and source file, then renumbered the old ß2 Tool Specifications to ß3 and the error taxonomy to ß4.
+- Added a ÔøΩ2 Tool Inventory table to `docs/TOOLS.md` listing all tools with their approval gate and source file, then renumbered the old ÔøΩ2 Tool Specifications to ÔøΩ3 and the error taxonomy to ÔøΩ4.
 - Added `docs/COMPETITIVE_ANALYSIS.md`: a verified survey of Cline CLI and OpenCode CLI from vendor documentation, Moderado's confirmed baseline read from source, a three-tier ranked gap list, and explicit non-goals. Linked from `README.md`, `docs/GUIDE.md`, `docs/TOOLS.md`, `apps/cli/README.md`, and `docs/CLI_CAPABILITY_ROADMAP.md`.
 - Added four compact built-in coding skills: code review, implementation planning, systematic debugging, and test-driven development.
 - User `SKILL.md` files are discovered but disabled by default. `/skills on NAME` and `moderado skills on NAME` persist selected user skills in `~/.moderado/config.json`; `off` reverses this without deleting files. An enabled user skill can override a built-in by name.
@@ -196,7 +227,7 @@ still carry the bug** and are only correct once re-released.
 - Keep a small built-in set on master. Enable user skills selectively before considering more of `alfazen-coding`.
 - Keep package version 0.3.9 through the provider refactor; its squash commit advances only the connected build suffix.
 - IDE extensions are out of product scope. `codex/vscode-extension` is deleted; keep only the `backup/codex-vscode-extension` tag until the owner confirms the work is unrecoverable-needed, then drop the tag.
-- Do not chase OpenCode/Cline parity. Themes, keybinds, formatters, web UI, server mode, kanban, hub daemon, scheduling, and a plugin/hook runtime stay out ó they are presentation and orchestration surface, not agent capability.
+- Do not chase OpenCode/Cline parity. Themes, keybinds, formatters, web UI, server mode, kanban, hub daemon, scheduling, and a plugin/hook runtime stay out ÔøΩ they are presentation and orchestration surface, not agent capability.
 - Do not adopt Cline's auto-approve-by-default. The approval-first default is Moderado's identity.
 
 ## Next action

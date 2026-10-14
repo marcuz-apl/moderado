@@ -16,7 +16,7 @@ import { connectProviderInteractive, isAuthenticationFailure, isModeradoCloudOAu
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText } from '../ui/welcome.js';
+import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatAnswerArea } from '../ui/welcome.js';
 import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
@@ -1499,9 +1499,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }, process.stdout.rows));
         process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));
         if (displayAnswer) {
-          const width = process.stdout.columns || 80;
-          const maxWidth = Math.max(40, width - 4);
-          answerPosition = renderChatAnswerDelta(displayAnswer, { row: 15, column: 1 }, maxWidth);
+          const area = getChatAnswerArea(process.stdout.columns);
+          answerPosition = renderChatAnswerDelta(displayAnswer, { row: 15, column: area.startColumn }, area.wrapWidth, area.startColumn);
         }
       };
 
@@ -1633,7 +1632,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
               if (thinkingTimer) clearInterval(thinkingTimer);
             }
             streamedAnswer += event.delta;
-            const renderedDelta = renderChatAnswerDelta(event.delta, answerPosition, process.stdout.columns || 80);
+            const area = getChatAnswerArea(process.stdout.columns);
+            const renderedDelta = renderChatAnswerDelta(event.delta, answerPosition, area.wrapWidth, area.startColumn);
             answerPosition = renderedDelta;
             process.stdout.write(renderedDelta.sequence);
             process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));

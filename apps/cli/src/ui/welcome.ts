@@ -68,12 +68,28 @@ export function getWelcomeIndent(blockWidth: number, width?: number): number {
   return Math.max(0, Math.floor((terminalWidth - blockWidth) / 2));
 }
 
-/** Center each line of a block independently (used for the ASCII logo / hints). */
+/** Center each line of a block inside the input card's columns (used for the ASCII logo / hints). */
 function centerBlock(lines: string[], width?: number): string[] {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  const cardWidth = getWelcomeCardWidth(terminalWidth);
+  const cardIndent = getWelcomeIndent(cardWidth, terminalWidth);
   return lines.map((line) => {
-    const pad = getWelcomeIndent(visibleLen(line), width);
-    return ' '.repeat(pad) + line;
+    const pad = Math.max(0, Math.floor((cardWidth - visibleLen(line)) / 2));
+    return ' '.repeat(cardIndent + pad) + line;
   });
+}
+
+/**
+ * Geometry of the answer area: it occupies the same columns as the composer
+ * card, so the question row, the streamed answer, and the input box all share
+ * one width instead of stretching across a wide terminal.
+ */
+export function getChatAnswerArea(width?: number): { indent: number; cardWidth: number; textWidth: number; startColumn: number; wrapWidth: number } {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  const cardWidth = getWelcomeCardWidth(terminalWidth);
+  const indent = getWelcomeIndent(cardWidth, terminalWidth);
+  const textWidth = Math.max(20, cardWidth - 2);
+  return { indent, cardWidth, textWidth, startColumn: indent + 1, wrapWidth: indent + textWidth };
 }
 
 export function renderQueuedCommandsBox(commands: readonly string[], width: number): string[] {
@@ -173,7 +189,7 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
 
   if (!options.mentionFiles?.length && options.input?.startsWith('/')) {
     const matching = getMatchingCommands(options.input);
-    if (matching.length) cardLines.push(...renderSuggestionsBox(matching, width).map(line => indent + line));
+    if (matching.length) cardLines.push(...renderSuggestionsBox(matching, width, options.commandSelection ?? 0).map(line => indent + line));
   }
 
   cardLines.push(
@@ -228,27 +244,44 @@ export function selectCommandCandidate(input: string, currentIndex: number, dire
   return commands[index];
 }
 
-export function renderSuggestionsBox(commands: SlashCommand[], width?: number): string[] {
+export function renderSuggestionsBox(commands: SlashCommand[], width?: number, selectedIndex = 0): string[] {
   if (commands.length === 0) return [];
   const terminalWidth = width ?? (process.stdout?.columns || 80);
   const targetWidth = 82;
   const boxWidth = Math.max(78, Math.min(terminalWidth, targetWidth));
   const innerW = boxWidth - 4;
-  const title = 'Commands (Press Tab to autocomplete)';
+  const title = 'Commands (↑↓ browse, Tab to insert)';
   const remainingDashes = Math.max(0, boxWidth - title.length - 5);
   const nameColWidth = 10;
   const availDescWidth = Math.max(20, innerW - nameColWidth - 2);
 
   const lines: string[] = [];
   lines.push('\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + title + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
-  for (const cmd of commands) {
-    const nameStr = `\x1b[1;38;5;75m${cmd.name.padEnd(nameColWidth)}\x1b[0m`;
+  for (const [index, cmd] of commands.entries()) {
+    const isSelected = index === selectedIndex;
     let desc = cmd.desc;
     if (desc.length > availDescWidth) {
       desc = desc.slice(0, availDescWidth - 1) + '…';
     }
-    const descStr = `\x1b[38;5;244m${desc.padEnd(availDescWidth)}\x1b[0m`;
-    lines.push(`\x1b[38;5;240m│\x1b[0m  ${nameStr}  ${descStr}\x1b[38;5;240m│\x1b[0m`);
+    const nameCell = cmd.name.padEnd(nameColWidth);
+    const descCell = desc.padEnd(availDescWidth);
+    if (isSelected) {
+      // Highlight bar matches the app's list popups: a ❯ cursor plus a dark
+      // background across the whole row, so the arrow-key selection is visible.
+      lines.push(
+        '\x1b[38;5;240m│\x1b[0m' +
+        '\x1b[48;5;236m\x1b[1;38;5;75m❯ ' + nameCell +
+        '\x1b[0;48;5;236;38;5;253m  ' + descCell + '\x1b[0m' +
+        '\x1b[38;5;240m│\x1b[0m'
+      );
+    } else {
+      lines.push(
+        '\x1b[38;5;240m│\x1b[0m' +
+        '  ' + `\x1b[1;38;5;75m${nameCell}\x1b[0m` + '  ' +
+        `\x1b[38;5;244m${descCell}\x1b[0m` +
+        '\x1b[38;5;240m│\x1b[0m'
+      );
+    }
   }
   lines.push('\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
   return lines;
@@ -272,18 +305,24 @@ export function renderMentionSuggestionsBox(files: string[], selectedIndex = 0):
   return lines;
 }
 
-export function renderModeradoHeader(): string {
+export function renderModeradoHeader(width?: number): string {
   return [
     '',
-    ...centerBlock(MODERADO_ASCII_LOGO),
+    ...centerBlock(MODERADO_ASCII_LOGO, width),
     '',
-    ...centerBlock([COMMAND_HINT]),
+    ...centerBlock([COMMAND_HINT], width),
   ].join('\n');
 }
 
-/** Word-wrap plain text to `maxWidth` visible columns. */
+/** Word-wrap plain text to `maxWidth` visible columns, hard-breaking long words. */
 export function wrapText(text: string, maxWidth: number): string[] {
   const out: string[] = [];
+  const pushWrapped = (word: string): void => {
+    // A single word longer than the column budget is split so no line overflows.
+    for (let start = 0; start < word.length; start += maxWidth) {
+      out.push(word.slice(start, start + maxWidth));
+    }
+  };
   for (const rawLine of text.split('\n')) {
     if (rawLine.length <= maxWidth) {
       out.push(rawLine);
@@ -291,6 +330,11 @@ export function wrapText(text: string, maxWidth: number): string[] {
     }
     let current = '';
     for (const word of rawLine.split(' ')) {
+      if (word.length > maxWidth) {
+        if (current.length > 0) { out.push(current); current = ''; }
+        pushWrapped(word);
+        continue;
+      }
       if (current.length === 0) {
         current = word;
       } else if (current.length + 1 + word.length <= maxWidth) {
@@ -313,38 +357,34 @@ export function wrapText(text: string, maxWidth: number): string[] {
 export function renderChatScreen(options: WelcomeLayoutOptions, height?: number): string {
   const terminalWidth = options.width ?? (process.stdout.columns || 80);
   const terminalHeight = height ?? process.stdout.rows ?? 24;
-  const maxWidth = Math.max(40, terminalWidth - 4);
-  const width = Math.max(40, terminalWidth - 2);
-
+  const area = getChatAnswerArea(terminalWidth);
+  const indent = ' '.repeat(area.indent);
   const lines: string[] = [];
-
-  lines.push(...renderModeradoHeader().split('\n'));
+  lines.push(...renderModeradoHeader(terminalWidth).split('\n'));
   lines.push('');
-
-  // Row 1: the user's question
+  // Row 1: the user's question, wrapped onto the same columns as the composer card.
   const questionMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
-  const questionText = `${questionMarker} ${options.chatQuestion ?? ''}`;
-  lines.push(String.fromCharCode(27) + '[48;5;236m' + questionText + ' '.repeat(Math.max(0, width - visibleLen(questionText))) + String.fromCharCode(27) + '[0m');
+  for (const [index, questionLine] of wrapText(options.chatQuestion ?? '', area.textWidth - 2).entries()) {
+    const questionText = `${index === 0 ? questionMarker : '  '} ${questionLine}`;
+    lines.push(indent + String.fromCharCode(27) + '[48;5;236m' + questionText + ' '.repeat(Math.max(0, area.cardWidth - visibleLen(questionText))) + String.fromCharCode(27) + '[0m');
+  }
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
   const chatStatus = !options.tokenUsage && options.chatAnswer?.trim() ? `Thought for ${thoughtTimeLabel}` : '';
-  lines.push(chatStatus ? `\x1b[38;5;244m${chatStatus.slice(0, Math.max(0, terminalWidth - 1))}\x1b[0m` : '');
-
+  lines.push(chatStatus ? indent + `\x1b[38;5;244m${chatStatus.slice(0, Math.max(0, area.cardWidth - 1))}\x1b[0m` : '');
   // Answer section: multi-line model answer
   if (options.chatAnswer && options.chatAnswer.trim().length > 0) {
     lines.push('');
-    for (const answerLine of wrapText(options.chatAnswer.trim(), maxWidth)) {
+    for (const answerLine of wrapText(options.chatAnswer.trim(), area.textWidth)) {
       const heading = answerLine.match(/^\s*(?:#{1,6}\s+([^#]+?)|\*\*(.+?)\*\*)\s*$/);
-      lines.push(heading
+      lines.push(indent + (heading
         ? `\x1b[1;38;5;25m${(heading[1] ?? heading[2]).trim()}\x1b[0m`
-        : `\x1b[38;5;253m${answerLine}\x1b[0m`);
+        : `\x1b[38;5;253m${answerLine}\x1b[0m`));
     }
   }
-
   const composer = renderWelcomeCard(options).split('\n');
   lines.push(...Array(Math.max(1, terminalHeight - lines.length - composer.length - 1)).fill(''));
   lines.push(...composer);
-
   return lines.join('\n') + '\n';
 }
 
@@ -368,16 +408,35 @@ export function renderChatThoughtTimeUpdate(thoughtTime: number): string {
 
 export interface ChatAnswerPosition { row: number; column: number; }
 
-/** Write one streamed fragment into the answer area without repainting the chat frame. */
-export function renderChatAnswerDelta(delta: string, start: ChatAnswerPosition, width: number): ChatAnswerPosition & { sequence: string } {
+/**
+ * Write one streamed fragment into the answer area without repainting the chat
+ * frame. Wrapped lines return to `startColumn` so the answer keeps the same
+ * columns as the composer card instead of stretching across the terminal.
+ */
+export function renderChatAnswerDelta(
+  delta: string,
+  start: ChatAnswerPosition,
+  width: number,
+  startColumn = 1
+): ChatAnswerPosition & { sequence: string } {
   let row = start.row;
   let column = start.column;
+  let writeColumn = start.column;
+  let sequence = '';
+  let line = '';
+  const flush = (): void => {
+    if (line.length === 0) return;
+    sequence += `\x1b[${row};${writeColumn}H\x1b[38;5;253m${line}\x1b[0m`;
+    line = '';
+  };
   for (const character of delta) {
-    if (character === '\n') { row++; column = 1; continue; }
+    if (character === '\n') { flush(); row++; column = startColumn; writeColumn = startColumn; continue; }
+    line += character;
     column++;
-    if (column > width) { row++; column = 1; }
+    if (column > width) { flush(); row++; column = startColumn; writeColumn = startColumn; }
   }
-  return { sequence: `\x1b[${start.row};${start.column}H\x1b[38;5;253m${delta}\x1b[0m`, row, column };
+  flush();
+  return { sequence, row, column };
 }
 
 export function renderFullWelcomeScreen(options: WelcomeLayoutOptions, height?: number): string {
@@ -385,7 +444,7 @@ export function renderFullWelcomeScreen(options: WelcomeLayoutOptions, height?: 
     return renderChatScreen(options, height);
   }
   return [
-    renderModeradoHeader(),
+    renderModeradoHeader(options.width),
     '',
     renderWelcomeCard(options),
   ].join('\n') + '\n';
@@ -463,6 +522,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1mCtrl+C\x1b[0m       Cancel active inference or exit session',
     '\x1b[1mEsc\x1b[0m          Stop the active task',
     '\x1b[1mLeft/Right\x1b[0m   Move the caret inside the bottom input line',
+    '  \x1b[1mUp/Down\x1b[0m       Browse slash commands after "/", else recall history',
     '\x1b[1mMouse click\x1b[0m  Place the caret on the input line',
     '',
     `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,
@@ -647,6 +707,7 @@ export async function promptInteractiveTurn(
     autoApprove: currentAutoApprove,
     input,
     inputCaret: caret,
+    commandSelection,
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
     chatThoughtTime: options.chatThoughtTime,

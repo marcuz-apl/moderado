@@ -27,6 +27,8 @@ import {
   renderMentionSuggestionsBox,
   renderSuggestionsBox,
   SLASH_COMMANDS,
+  getWelcomeCardWidth,
+  getWelcomeIndent,
 } from '../src/ui/welcome.js';
 import { handleMcpCommand } from '../src/commands/chat.js';
 
@@ -332,6 +334,43 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('Auto-approve off (Shift+Tab)');
   });
 
+  it('keeps the chat title bar, question row, and answer inside the input card width when maximized', () => {
+    const width = 220;
+    const cardWidth = getWelcomeCardWidth(width);
+    const indent = getWelcomeIndent(cardWidth, width);
+    const rendered = renderChatScreen({
+      model: 'z-ai/glm-5.3-flash', tokens: 1500, cost: '.00', workspace: 'd:\\projects\\moderado',
+      mode: 'Execute', autoApprove: false,
+      chatQuestion: 'Q'.repeat(200),
+      chatAnswer: 'word '.repeat(80).trim(),
+      chatThoughtTime: 3, width,
+    }, 50);
+
+    const lines = stripAnsi(rendered).split(String.fromCharCode(10));
+    // Nothing stretches to the screen edge: every painted row stays inside the card columns.
+    for (const line of lines) {
+      if (line.trim().length === 0) continue;
+      expect(line.length).toBeLessThanOrEqual(indent + cardWidth);
+    }
+
+    // The question row starts on the card indent and wraps instead of running off the card.
+    const questionRows = lines.filter((line) => line.includes('Q'.repeat(20)));
+    expect(questionRows.length).toBeGreaterThan(1);
+    expect(questionRows[0].search(/\S/)).toBe(indent);
+    for (const row of questionRows) expect(row.length).toBe(indent + cardWidth);
+
+    // The answer wraps to the card width, on the same indent.
+    const answerRows = lines.filter((line) => line.includes('word'));
+    expect(answerRows.length).toBeGreaterThan(1);
+    for (const row of answerRows) expect(row.length).toBeLessThanOrEqual(indent + cardWidth);
+
+    // The composer card sits at the bottom on the same columns as everything above it.
+    const composerRows = lines.filter((line) => line.includes('Ask anything'));
+    expect(composerRows.length).toBe(1);
+    expect(composerRows[0].search(/\S/)).toBe(indent);
+    expect(composerRows[0].length).toBe(indent + cardWidth);
+  });
+
   it('shows a sub-second response time without reporting a misleading zero seconds', () => {
     const rendered = renderChatScreen({
       model: 'z-ai/glm-5.3-flash',
@@ -421,7 +460,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('/clear');
     expect(plain).toContain('/help');
     expect(plain).toContain('/exit');
-    expect(plain).toContain('Commands (Press Tab to autocomplete)');
+    expect(plain).toContain('Commands (↑↓ browse, Tab to insert)');
   });
 
   it('filters slash commands suggestions by prefix', () => {
@@ -704,7 +743,7 @@ describe('OpenCode-style Welcome TUI', () => {
       input: '/',
       width: 80,
     });
-    expect(card).toContain('Commands (Press Tab to autocomplete)');
+    expect(card).toContain('Commands (↑↓ browse, Tab to insert)');
     expect(card).toContain('/session');
     expect(card).toContain('Create, resume, undo, redo, share, export, or compact sessions');
   });
