@@ -127,7 +127,7 @@ USAGE:
 COMMANDS:
   models                 Discover live models, capability & access tiers
   run "<task>"           Execute a bounded coding task in the workspace\n  skills                 List built-in and user skills
-  skills on|off NAME     Enable or disable a user skill
+  skills on|off NAME|PATTERN Enable or disable user skills (* matches all)
   doctor                 Check local Moderado setup
   update                 Update within the current major version
   upgrade                Upgrade across major versions

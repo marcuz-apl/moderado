@@ -105,11 +105,16 @@ export function selectEnabledSkills(discovered: UserSkill[], enabledNames: strin
 }
 
 export function setSkillEnabled(name: string, enabled: boolean, customHome?: string): string[] {
-  const skill = discoverSkills(customHome).find((item) => item.name === name && !item.path.startsWith('builtin:'));
-  if (!skill) throw new Error(`User skill '${name}' was not found in ~/.moderado/skills.`);
+  if (!/^[a-z0-9_*-]{1,64}$/.test(name)) throw new Error(`Invalid skill name or pattern: '${name}'.`);
+  const pattern = new RegExp(`^${name.replaceAll('*', '.*')}$`);
+  const matches = discoverSkills(customHome).filter((item) => !item.path.startsWith('builtin:') && pattern.test(item.name));
+  if (!matches.length && (name !== '*' || enabled)) throw new Error(name.includes('*') ? `No user skills match '${name}'.` : `User skill '${name}' was not found in ~/.moderado/skills.`);
   const names = new Set(getEnabledSkillNames(customHome));
-  if (enabled) names.add(name);
-  else names.delete(name);
+  if (name === '*' && !enabled) names.clear();
+  else for (const skill of matches) {
+    if (enabled) names.add(skill.name);
+    else names.delete(skill.name);
+  }
   const result = [...names].sort();
   saveConfig({ enabledSkills: result }, customHome);
   return result;
@@ -140,7 +145,7 @@ export function formatSkillsList(skills: UserSkill[], markdown = false, customHo
     rows(users.map((skill) => `${enabled.has(skill.name) ? '● ' : ''}${skill.name}`)),
     `Directory: ${path.join(customHome, '.moderado', 'skills')}`,
     '',
-    '● = enabled. Use /skills on NAME, /skills off NAME, or /skills NAME.',
+    '● = enabled. Use /skills on NAME|PATTERN, /skills off NAME|PATTERN, or /skills NAME. * matches all user skills.',
   ].join('\n');
 }
 

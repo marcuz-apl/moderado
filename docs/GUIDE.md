@@ -118,7 +118,7 @@ Review TypeScript changes carefully.
 
 The model sees short descriptions of enabled skills and can call the read-only `load_skill` tool for full instructions when relevant. You can explicitly request one in a task with `skill:code-review`. This avoids sending every skill body on every turn. Skills remain advisory: they cannot change approval policy, bypass the workspace jail, run commands automatically, or access secrets.
 
-Use `/skills` in the TUI or `moderado skills` in the shell to list built-in and installed user skills, their on/off status, and the user skill directory. Use `/skills on NAME` or `moderado skills on NAME` to enable a user skill; use `off` to disable it without deleting its files. `/skills NAME` and `moderado skills NAME` show its description and source path. Malformed files, oversized files, and symlinked `SKILL.md` files are ignored.
+Use `/skills` in the TUI or `moderado skills` in the shell to list built-in and installed user skills, their on/off status, and the user skill directory. Use `/skills on NAME` or `moderado skills on NAME` to enable a user skill; use `off` to disable it without deleting its files. Use `*` to select all installed user skills (`/skills on *`) or a name pattern (`/skills off versioning-*`). Quote patterns in a shell, for example `moderado skills on '*'`. A pattern with no matches changes nothing. `/skills NAME` and `moderado skills NAME` show its description and source path. Malformed files, oversized files, and symlinked `SKILL.md` files are ignored.
 
 ### Local MCP tools
 

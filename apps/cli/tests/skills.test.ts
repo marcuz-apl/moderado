@@ -103,6 +103,26 @@ Review carefully.`);
     }
   });
 
+  it('enables and disables matching user skills with a wildcard in one config update', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-skills-'));
+    try {
+      for (const name of ['versioning-alfazen', 'versioning-classic', 'figma']) {
+        const directory = path.join(home, '.moderado', 'skills', name);
+        fs.mkdirSync(directory, { recursive: true });
+        fs.writeFileSync(path.join(directory, 'SKILL.md'), `---\nname: ${name}\ndescription: Test skill\n---\nUse carefully.`);
+      }
+      expect(setSkillEnabled('*', true, home)).toEqual(['figma', 'versioning-alfazen', 'versioning-classic']);
+      expect(setSkillEnabled('versioning-*', false, home)).toEqual(['figma']);
+      expect(() => setSkillEnabled('missing-*', true, home)).toThrow('No user skills match');
+      expect(setSkillEnabled('figma', false, home)).toEqual([]);
+      setSkillEnabled('figma', true, home);
+      fs.rmSync(path.join(home, '.moderado', 'skills'), { recursive: true });
+      expect(setSkillEnabled('*', false, home)).toEqual([]);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('loads a compact built-in coding skill set without user files', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-skills-'));
     try {

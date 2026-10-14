@@ -2,13 +2,13 @@ import { discoverSkills, formatSkillsList, getEnabledSkillNames, setSkillEnabled
 
 export function handleSkillsCommand(action?: 'on' | 'off', name?: string): number {
   if (action && !name) {
-    process.stderr.write(`Usage: moderado skills ${action} NAME\n`);
+    process.stderr.write(`Usage: moderado skills ${action} NAME|PATTERN (* matches all user skills)\n`);
     return 1;
   }
   if (action && name) {
     try { setSkillEnabled(name, action === 'on'); }
     catch (error) { process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`); return 1; }
-    process.stdout.write(`User skill ${name} ${action === 'on' ? 'enabled' : 'disabled'}.\n`);
+    process.stdout.write(`User skill${name.includes('*') ? 's matching' : ''} ${name} ${action === 'on' ? 'enabled' : 'disabled'}.\n`);
     return 0;
   }
   const skills = discoverSkills();

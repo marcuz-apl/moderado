@@ -1267,10 +1267,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       if ((parts[1] === 'on' || parts[1] === 'off') && parts[2]) {
         try {
           enabledSkillNames = setSkillEnabled(parts[2], parts[1] === 'on');
-          lastAnswer = `User skill ${parts[2]} ${parts[1] === 'on' ? 'enabled' : 'disabled'}.\n\n${formatSkillsList(discoveredSkills, true, undefined, enabledSkillNames)}`;
+          lastAnswer = `User skill${parts[2].includes('*') ? 's matching' : ''} ${parts[2]} ${parts[1] === 'on' ? 'enabled' : 'disabled'}.\n\n${formatSkillsList(discoveredSkills, true, undefined, enabledSkillNames)}`;
         } catch (error) { lastAnswer = error instanceof Error ? error.message : String(error); }
       } else if (parts[1] === 'on' || parts[1] === 'off') {
-        lastAnswer = `Usage: /skills ${parts[1]} NAME`;
+        lastAnswer = `Usage: /skills ${parts[1]} NAME|PATTERN (* matches all user skills)`;
       } else if (parts[1]) {
         const skill = discoveredSkills.find((item) => item.name === parts[1]);
         lastAnswer = skill
@@ -1304,7 +1304,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         '  /review    - Review current workspace changes for bugs\n' +
         '  /map       - Show a compact workspace file map\n' +
         '  /budget    - Set a per-task token limit (/budget 5000, /budget off)\n' +
-        '  /skills    - List skills; use /skills on NAME or /skills off NAME\n' +
+        '  /skills    - List skills; use /skills on|off NAME|PATTERN (* for all)\n' +
         '  /clear     - Reset conversation memory\n' +
         '  /help      - Display commands, shortcuts & version\n' +
         '  /exit      - Exit Moderado';
