@@ -1098,17 +1098,17 @@ describe('token usage display', () => {
     expect(formatTokenUsage(usageSnapshot)).toBe('Input ~100 | Output ~20 | Total ~120 | ~10 tok/s');
     expect(formatTokenUsage({ ...usageSnapshot, estimated: false, generationMs: 0 })).toBe('Input 100 | Output 20 | Total 120');
     const update = renderChatUsageUpdate(usageSnapshot, 20, undefined, undefined, 24);
-    expect(update.startsWith('\x1b7\x1b[22;1H\r\x1b[K')).toBe(true);
+    expect(update.startsWith('\x1b7\x1b[22;1H\x1b[K')).toBe(true);
     expect(update.endsWith('\x1b8')).toBe(true);
     expect(update).toContain('Input ~100 | Output');
     expect(update).not.toContain('\n');
     expect(renderChatUsageUpdate(usageSnapshot, 120, undefined, '1500 tokens / $0.42'))
       .toContain('Input ~100 | Output ~20 | Total ~120 | ~10 tok/s | 1500 tokens / $0.42');
-    const liveRow = stripAnsi(renderChatUsageUpdate(usageSnapshot, 80, undefined, '1500 tokens / $0.42', 24, 'Execute'));
+    const liveRow = stripAnsi(renderChatUsageUpdate(usageSnapshot, 80, undefined, '1500 tokens / $0.42', 24, 'Execute')).replace(/\x1b[0-9]/g, '');
     expect(liveRow).toContain('Plan / [Execute] (Tab)');
-    const paintedRow = liveRow.split('\r')[1]?.replace('\x1b8', '') ?? '';
+    const paintedRow = liveRow.replace('\x1b8', '');
     expect(paintedRow).toContain('1500 tokens / $0.42');
-    expect(paintedRow.length).toBeLessThanOrEqual(79);
+    expect(paintedRow.length).toBeLessThanOrEqual(getWelcomeCardWidth(80));
   });
   it('replaces the thought row in the full screen', () => {
     const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 1500, cost: '$0.42', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
@@ -1132,5 +1132,5 @@ it('targets the exact usage row in the chat frame', async () => {
   const { renderChatUsageUpdate } = await import('../src/ui/welcome.js');
   const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 0, cost: '$0', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
   const row = screen.split('\n').findIndex(line => line.includes('[Plan] / Execute (Tab)')) + 1;
-  expect(renderChatUsageUpdate(usageSnapshot, 80, undefined, undefined, 30)).toContain(`\x1b[${row};1H`);
+  expect(renderChatUsageUpdate(usageSnapshot, 80, undefined, undefined, 30)).toContain(`\x1b[${row};${getChatAnswerArea(80).startColumn}H`);
 });

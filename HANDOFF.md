@@ -1,8 +1,55 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-14 (task progress session)
+Updated: 2026-10-14 (chat status-row width fix)
 Branch: master (tracking origin/master)
-Status: Every agent run now shows a "Processing task… Step N/M" status line that becomes a "✔ Done" marker on completion.
+Status: Temporary chat status rows (thought/step timer, usage snapshot, Gateway fallback note) are clamped to the composer card columns instead of stretching across the full terminal.
+
+## Session 2026-10-14 — chat temporary status rows width fix
+
+### Summary
+
+While the CLI is answering in chat mode, the settled frame (header, question,
+composer card) is capped to a centered card (`getWelcomeCardWidth`), but the
+three *temporary* painters painted at terminal column 1 with up to full-terminal
+width: the thought/step timer (`\x1b[13;1H`), the usage snapshot row
+(`width - 1`), and the Gateway fallback note (`width - 1`). On a 200-column
+terminal they spanned columns 1–199 while the card occupied 41–160.
+
+All three now derive their geometry from `getChatAnswerArea(width)` and paint
+from `startColumn` clamped to `cardWidth`, matching the streamed-answer columns.
+
+### Completed
+
+- `renderChatThoughtTimeUpdate`: optional `width` param; paints at
+  `13;startColumn`, text clamped to `cardWidth`; `chat.ts` passes
+  `process.stdout.columns` at both call sites.
+- `renderChatUsageUpdate` / `renderGatewayFallbackUpdate`: row width is
+  `area.cardWidth` and paint starts at `area.startColumn` (the trailing `\r`
+  was dropped since the cursor now positions absolutely).
+- Tests: new regression "keeps temporary status rows inside the chat card
+  columns" (width 200, asserts start column and painted width for all three
+  painters); stale pins updated to the card geometry.
+
+### Versioning note
+
+Commit `1c074e5` (`v0.4.25+2610149`) was created mid-session and captured the
+source edits; `apps/cli/package.json` was left at 0.4.24, failing
+`package_metadata.test.ts`. Synced to 0.4.25 and committed the remaining test
+fixes; the `fix(cli):` commit only advances the daily counter (build bump), so
+VERSION and the manifest stay aligned.
+
+### Checks
+
+- Full workspace suite: PASS (614 tests, 63 files).
+- npx tsc -b --force: PASS. git diff --check: PASS.
+- Live geometry check at width 200: all three painters start at column 41 and
+  end within column 160 (card edge).
+
+### Next action
+
+1. Include the width fix in the next Moderado build/release.
+
+---
 
 ## Summary
 
