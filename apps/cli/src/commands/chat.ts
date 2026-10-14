@@ -373,10 +373,6 @@ export function isNetworkCommand(request: Pick<ApprovalRequest, 'toolName' | 'ex
   return request.toolName === 'run_command' && /\b(curl|wget|invoke-webrequest|iwr|irm)\b|https?:\/\//.test(text);
 }
 
-export function isNetworkConsentReply(input: string, previousAnswer: string): boolean {
-  return /^(y|yes)$/i.test(input.trim()) && /\b(weather|internet|online|look up|web|curl)\b/i.test(previousAnswer);
-}
-
 export function isLocalModelQuery(input: string): boolean {
   const text = input.trim().toLowerCase().replace(/[?!.]+$/, '').trim();
   if (!text) return false;
@@ -539,7 +535,6 @@ export function replaceEvidenceTurn(messages: ChatMessage[], evidenceTask: strin
 
 export interface ApprovalPolicyOptions {
   autoApprove: boolean;
-  networkAccessApproved: boolean;
   requestInteractiveApproval: (request: ApprovalRequest, signal?: AbortSignal) => Promise<ApprovalDecision>;
 }
 
@@ -548,9 +543,7 @@ export async function decideApproval(
   options: ApprovalPolicyOptions,
   signal?: AbortSignal
 ): Promise<ApprovalDecision> {
-  if (isNetworkCommand(request) && !options.networkAccessApproved) {
-    return { requestId: request.requestId, status: 'denied', reason: 'Network access requires an explicit Yes reply to the model first.' };
-  }
+  if (isNetworkCommand(request)) return options.requestInteractiveApproval(request, signal);
   if (options.autoApprove && !request.toolName.startsWith('mcp.')) {
     return { requestId: request.requestId, status: 'approved' };
   }
@@ -880,11 +873,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   await reloadMcpTools();
   const terminalApproval = new TerminalApprovalHandler();
   const checkpoints = new WorkspaceCheckpointStore();
-  let networkAccessApproved = false;
   let suspendGenerationInput: (() => (() => void) | undefined) | undefined;
   const approvalHandler: IApprovalHandler = { requestApproval: async (req: ApprovalRequest, sig?: AbortSignal): Promise<ApprovalDecision> => decideApproval(req, {
     autoApprove: activeAutoApprove,
-    networkAccessApproved,
     requestInteractiveApproval: async (request, approvalSignal) => {
       const resumeGenerationInput = suspendGenerationInput?.();
       try { return await terminalApproval.requestApproval(request, approvalSignal); }
@@ -1332,7 +1323,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
     const expandedTurn = await expandMentions(trimmed, createWorkspaceFileSource(canonicalWorkspace));
     const effectivePrompt = expandedTurn.text;
-    networkAccessApproved = isNetworkConsentReply(trimmed, lastAnswer);
 
     // 1. Instant local meta queries (model/provider status)
     const localMetaAnswer = resolveLocalMetaQuery(trimmed, {

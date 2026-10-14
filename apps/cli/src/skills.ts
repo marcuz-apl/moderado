@@ -57,7 +57,7 @@ export function parseSkillFile(name: string, content: string, filePath = name): 
       fields.set(activeField, `${current} ${line.trim()}`.trim());
     }
   }
-  const parsed = SkillSchema.safeParse({ name: fields.get('name') ?? name, description: fields.get('description'), body: match[2].trim(), path: filePath });
+  const parsed = SkillSchema.safeParse({ name: fields.get('name') ?? name, description: fields.get('description')?.slice(0, 500), body: match[2].trim(), path: filePath });
   return parsed.success ? parsed.data : undefined;
 }
 

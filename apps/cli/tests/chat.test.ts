@@ -18,7 +18,6 @@ import {
   isLocalModelQuery,
   isLocalProviderQuery,
   isNetworkCommand,
-  isNetworkConsentReply,
   replaceEvidenceTurn,
   resolveLocalMetaQuery,
   resolveSessionSharePath,
@@ -308,11 +307,9 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(resolution).toEqual({ answer: 'Partial answer\n\nTask stopped.', isError: true });
   });
 
-  it('requires an explicit reply to the model before enabling network commands', () => {
+  it('detects network commands', () => {
     expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as any)).toBe(true);
     expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['git', 'status'] } } as any)).toBe(false);
-    expect(isNetworkConsentReply('yes', 'Would you like me to look up the weather online?')).toBe(true);
-    expect(isNetworkConsentReply('yes', 'Here is your answer.')).toBe(false);
   });
 
   it('fast-routes current-information questions but leaves ordinary questions to the model', () => {
@@ -391,7 +388,6 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       { requestId: 'mcp-approval', toolName: 'mcp.docs.search', exactPayload: { query: 'safe' } } as ApprovalRequest,
       {
         autoApprove: true,
-        networkAccessApproved: false,
         requestInteractiveApproval: async () => ({ requestId: 'mcp-approval', status: 'denied' }),
       }
     );
@@ -399,21 +395,18 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(decision).toEqual({ requestId: 'mcp-approval', status: 'denied' });
   });
 
-  it('denies unconsented network commands before considering auto-approval', async () => {
+  it('prompts for a network command even when auto-approve is enabled', async () => {
+    let prompted = false;
     const decision = await decideApproval(
       { requestId: 'network-approval', toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as ApprovalRequest,
       {
         autoApprove: true,
-        networkAccessApproved: false,
-        requestInteractiveApproval: async () => ({ requestId: 'network-approval', status: 'approved' }),
+        requestInteractiveApproval: async () => { prompted = true; return { requestId: 'network-approval', status: 'approved' }; },
       }
     );
 
-    expect(decision).toEqual({
-      requestId: 'network-approval',
-      status: 'denied',
-      reason: 'Network access requires an explicit Yes reply to the model first.',
-    });
+    expect(prompted).toBe(true);
+    expect(decision).toEqual({ requestId: 'network-approval', status: 'approved' });
   });
   it('prompts for workspace file writes and terminal commands after auto-approve is disabled', async () => {
     const tools = ['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'];
@@ -423,7 +416,6 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
         { requestId: 'req-' + toolName, toolName, exactPayload: { command: ['npm', 'test'] } } as ApprovalRequest,
         {
           autoApprove: false,
-          networkAccessApproved: false,
           requestInteractiveApproval: async () => { prompted = true; return { requestId: 'req-' + toolName, status: 'denied' }; },
         }
       );
@@ -438,7 +430,6 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       { requestId: 'mcp-req', toolName: 'mcp.database.query', exactPayload: {} } as ApprovalRequest,
       {
         autoApprove: false,
-        networkAccessApproved: false,
         requestInteractiveApproval: async () => { prompted = true; return { requestId: 'mcp-req', status: 'denied' }; },
       }
     );

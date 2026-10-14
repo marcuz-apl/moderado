@@ -1,51 +1,56 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-13 02:44 UTC
-Branch: `master` at `88e1f92` (tracking `origin/master`)
-Status: **Ready for review.** Gateway mode precedence and direct masked-key entry are implemented.
+Updated: 2026-10-14 18:28 UTC
+Branch: `master` at `2f7e2b1` (tracking `origin/master`)
+Status: Ready for review. Alfazen skills are installed locally; approval and skill-discovery fixes are uncommitted.
 
 ## Summary
 
-Moderado Gateway mode selection now controls the prefilled Base URL even when a saved URL from the other mode exists. After confirming the URL, `/connect` shows a masked API-key field directly. Enter reuses a saved key; an empty value continues keyless public access.
+The `alfazen-coding` bundle from `marcuz-apl/alfazen-skills` is copied into `~/.moderado/skills`. Moderado discovers all 20 user skills. Network commands in interactive chat now request terminal approval for the exact command, including when auto-approve is on.
 
 ## Completed
 
-- Fixed Dev/Prod mode precedence in `apps/cli/src/ui/provider_connect.ts`.
-- Replaced the Gateway auth method menu with direct API-key entry; saved credentials are masked, and browser sign-in is no longer an option in this `/connect` step.
-- Added regressions for Dev Mode with a saved Production URL, the masked saved key, editable URL display, and Enter-to-reuse.
+- Installed all 20 skill directories under `~/.moderado/skills`; none were enabled automatically.
+- Shortened only the installed copies of apple-design and impeccable metadata descriptions so the existing v0.4.18 CLI discovers them; instruction bodies remain intact.
+- Removed the brittle model-answer `yes` matcher and the silent network-command denial in `apps/cli/src/commands/chat.ts`.
+- Bounded long skill descriptions to 500 characters at parsing so two previously hidden bundle skills load.
+- Added focused regressions in `apps/cli/tests/chat.test.ts` and `apps/cli/tests/skills.test.ts`.
 
 ## In progress
 
-- None.
+- Source changes need review and an updated Moderado build or release before an existing installed binary uses the new approval behavior.
 
 ## Working tree
 
-- Modified `HANDOFF.md`, `apps/cli/src/ui/provider_connect.ts`, and `apps/cli/tests/provider_connect.test.ts`.
+- Modified `HANDOFF.md`, `apps/cli/src/commands/chat.ts`, `apps/cli/src/skills.ts`, `apps/cli/tests/chat.test.ts`, and `apps/cli/tests/skills.test.ts`. No temporary clone remains.
 
 ## Checks
 
-- `npm test -- apps/cli/tests/provider_connect.test.ts -t "saved Gateway key masked|Dev Mode|editable value"` - PASS (3 tests).
-- `npm run typecheck` - PASS.
-- `npm test -- apps/cli/tests/provider_connect.test.ts` - FAIL (9 tests; loopback server tests are blocked by `listen EPERM` in this environment).
-- `git diff --check` and Node TypeScript syntax checks - PASS.
+- `npm test -- apps/cli/tests/skills.test.ts apps/cli/tests/chat.test.ts` — PASS (61 tests).
+- `npm run typecheck` — PASS.
+- `npm run build` — PASS.
+- `node apps/cli/dist/index.js skills` — PASS (20 user skills discovered; 0 enabled).
+- `git diff --check` — PASS.
+- `npm test` — PASS (63 files; 603 passed, 1 skipped).
 
 ## Decisions and context
 
-- Selected Gateway mode determines the initial URL; a saved URL from the other mode does not override it.
-- Provider Base URLs must use HTTPS, except loopback HTTP, and end in `/v1`.
-- The API-key prompt reuses a saved key on Enter and allows keyless public access when empty.
+- A terminal approval prompt for each detected network command is the consent boundary; a chat message saying `yes` does not approve an unseen command.
+- The user requested installation, not automatic enabling. Use `/skills on NAME` to enable a chosen skill.
+- The bundle's `playwright` directory declares its skill name as `webapp-testing`, so Moderado lists that name.
 
 ## Blockers
 
-- Tests that bind loopback servers cannot run in this environment; the targeted Gateway mode and masked-key regressions pass.
+- None for the local skill installation. The approval fix is not in the currently installed Moderado binary until it is updated.
 
 ## Next action
 
-1. Review `/connect` in a socket-enabled local terminal and confirm the new Gateway key prompt and existing provider URLs behave as expected.
+1. Review and release an updated Moderado build so installed CLIs receive the approval fix.
 
 ## Resume notes
 
-- Focused regressions: `npm test -- apps/cli/tests/provider_connect.test.ts -t "saved Gateway key masked|Dev Mode|editable value"`.
+- The requested source repository was reachable at HEAD `445026b8b12386810a5c1dfe2bd26ad6f697d18e` when cloned.
+- The 20 copied skill directories are at `C:\Users\MZou\.moderado\skills`.
 
 ## Release record (v0.3.10)
 

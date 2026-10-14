@@ -18,6 +18,10 @@ Review carefully.`);
     const skill = parseSkillFile('review', `---\nname: review\ndescription: >\n  Review changes carefully\n  across the project.\n---\nBe precise.`);
     expect(skill?.description).toBe('Review changes carefully across the project.');
   });
+  it('loads a skill with a long description using a bounded summary', () => {
+    const skill = parseSkillFile('review', `---\nname: review\ndescription: ${'A'.repeat(600)}\n---\nBe precise.`);
+    expect(skill?.description).toBe('A'.repeat(500));
+  });
   it('discovers valid skill directories and ignores malformed entries', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-skills-'));
     fs.mkdirSync(path.join(home, '.moderado', 'skills', 'review'), { recursive: true });
