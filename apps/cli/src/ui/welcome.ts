@@ -633,6 +633,8 @@ export interface PromptInteractiveTurnOptions {
    * UI and returns the new model id, or undefined if cancelled.
    */
   onModelSelect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
+  /** Returns a queued prompt that should start immediately after a popup closes. */
+  takeAutoContinuePrompt?: () => string | undefined;
   /** Called when user issues /connect. Returns the model label to display. */
   onConnect?: (drawFrame: (popupLines: string[]) => void) => Promise<string | undefined>;
   /** Called when user issues /clear so caller can reset conversation history. */
@@ -933,6 +935,13 @@ export async function promptInteractiveTurn(
             if (newId && newId !== currentModel) {
               currentModel = newId;
             }
+            const autoContinuePrompt = options.takeAutoContinuePrompt?.();
+            if (autoContinuePrompt) {
+              options.signal?.removeEventListener('abort', onAbort);
+              cleanup();
+              resolve({ text: autoContinuePrompt, mode: currentMode, autoApprove: currentAutoApprove });
+              return;
+            }
           }
 
           // Selection flow left stdin in non-raw mode — restore it for our TUI
@@ -980,6 +989,13 @@ export async function promptInteractiveTurn(
               stdout.write('\x1b[H\x1b[J');
               stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows));
             });
+          }
+          const autoContinuePrompt = options.takeAutoContinuePrompt?.();
+          if (autoContinuePrompt) {
+            options.signal?.removeEventListener('abort', onAbort);
+            cleanup();
+            resolve({ text: autoContinuePrompt, mode: currentMode, autoApprove: currentAutoApprove });
+            return;
           }
           readline.emitKeypressEvents(stdin);
           stdin.resume();

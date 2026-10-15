@@ -41,10 +41,10 @@ export interface ProviderPreset {
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
-  { label: 'Moderado Gateway', value: 'moderado-cloud', tag: 'Gateway', description: 'Use browser sign-in, a saved key, a new key, or public access.' },
+  { label: 'Moderado Gateway', value: 'moderado-cloud', tag: 'Free Models', description: 'Use browser sign-in, a saved key, a new key, or public access.' },
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', displayName: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', description: 'Use NVIDIA NIM with automatic free-model routing.' },
-  { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
+  { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
   { label: 'OrcaRouter', value: 'orcarouter', tag: 'Free Models', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', defaultModel: 'orcarouter/free', description: 'Connect OrcaRouter for adaptive model routing.' },
   { label: 'Ollama', value: 'ollama', tag: 'Local', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', description: 'Use models served locally by Ollama.' },
   { label: 'LM Studio', value: 'lm-studio', tag: 'Local', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', description: 'Use models served by LM Studio local server.' },

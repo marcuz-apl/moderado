@@ -230,9 +230,48 @@ export function resolveTurnAssistantAnswer(
 export function saveFailedTurnPrompt(
   history: ChatMessage[],
   prompt: string,
+  partialResponse = '',
 ): ChatMessage[] {
   if (!prompt.trim()) return history;
-  return [...history, { role: 'user', content: prompt }];
+  const interruptionNote = '[This response was interrupted before completion. Continue the task if asked.]';
+  const interruptedResponse = partialResponse.trim()
+    ? `${partialResponse.trim()}\n\n${interruptionNote}`
+    : '[This task was interrupted before a response was produced. Continue the task if asked.]';
+  return [...history, { role: 'user', content: prompt }, { role: 'assistant', content: interruptedResponse }];
+}
+
+const CONTINUE_INTERRUPTED_TASK_PROMPT = 'Continue the interrupted task from the saved conversation. Start from the unfinished work and avoid repeating completed steps.';
+
+function hasInterruptedTurn(messages: ChatMessage[]): boolean {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role !== 'assistant' || !message.content?.trim()) continue;
+    return message.content.includes('[This response was interrupted before completion.')
+      || message.content.includes('[This task was interrupted before a response was produced.');
+  }
+  return false;
+}
+
+function restoreLastSessionTurn(messages: ChatMessage[]): { question: string; answer: string } {
+  let assistantIndex = -1;
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === 'assistant' && messages[index].content?.trim()) {
+      assistantIndex = index;
+      break;
+    }
+  }
+  if (assistantIndex < 0) {
+    const question = [...messages].reverse().find((message) => message.role === 'user' && message.content?.trim())?.content ?? '';
+    return { question, answer: question ? 'This task was interrupted. Type “continue” to resume with the current model.' : '' };
+  }
+  let question = '';
+  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
+    if (messages[index].role === 'user' && messages[index].content?.trim()) {
+      question = messages[index].content ?? '';
+      break;
+    }
+  }
+  return { question, answer: messages[assistantIndex].content ?? '' };
 }
 
 export function isBareExitCommand(input: string): boolean {
@@ -848,6 +887,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       modelId: currentModel,
       mode: activeMode,
     });
+  currentModel = args.model ?? (activeSession.providerId === activeConnection?.id ? activeSession.modelId : undefined) ?? currentModel;
   if (
     activeSession.usage.available &&
     !activeSession.usage.costKnown &&
@@ -885,9 +925,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const router = new Router();
   const loop = new AgentLoop();
   let conversationHistory: ChatMessage[] = [...activeSession.messages];
-  let lastQuestion = '';
-  let lastAnswer = '';
-  let lastTurnDone = false;
+  const restoredTurn = restoreLastSessionTurn(conversationHistory);
+  let lastQuestion = restoredTurn.question;
+  let lastAnswer = restoredTurn.answer;
+  let lastTurnDone = conversationHistory.length > 0 && !hasInterruptedTurn(conversationHistory);
   let lastThoughtTime = 0;
   let lastOutputTokenRate: number | undefined;
   let lastTokenUsage: UsageEvent | undefined;
@@ -904,10 +945,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       trimmed = commandQueue.shift()!;
       isFirst = false;
     } else {
+      let autoContinueRequested = false;
       const turn = await promptInteractiveTurn({
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
+        takeAutoContinuePrompt: () => {
+          if (!autoContinueRequested) return undefined;
+          autoContinueRequested = false;
+          return CONTINUE_INTERRUPTED_TASK_PROMPT;
+        },
         onExit: exitMessage,
         questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
       onModelSelect: async (drawFrame) => {
@@ -930,15 +977,25 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             activeConnection = { ...activeConnection, defaultModel: modelId };
             saveConnection(activeConnection);
             config = loadConfig();
+            activeSession.providerId = activeConnection.id;
+            activeSession.providerName = activeConnection.displayName;
+            activeSession.modelId = modelId;
+            sessionStore.save(activeSession);
+            autoContinueRequested = hasInterruptedTurn(activeSession.messages);
           }
           return modelId;
         }
         const selection = await selectModelOverlay({ apiKey: activeConnection.id === 'moderado-cloud' ? undefined : activeConnection.apiKey, currentModel, signal, saveSelectionByDefault: true, drawFrame });
-        if (selection.modelId) {
+        if (selection.modelId && selection.modelId !== currentModel) {
           currentModel = selection.modelId;
           activeConnection = { ...activeConnection, defaultModel: selection.modelId };
           saveConnection(activeConnection);
           config = loadConfig();
+          activeSession.providerId = activeConnection.id;
+          activeSession.providerName = activeConnection.displayName;
+          activeSession.modelId = selection.modelId;
+          sessionStore.save(activeSession);
+          autoContinueRequested = hasInterruptedTurn(activeSession.messages);
         }
         return selection.modelId;
       },
@@ -1059,20 +1116,30 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       onSession: async (command, drawFrame) => {
         let action = command.slice('/session'.length).trim();
         if (!action) {
-          action = (await selectListPopup('Session', [
+          const sessionActions = [
             { label: 'New session', value: 'new', description: 'Start with an empty conversation.' },
             { label: 'List or resume', value: 'resume', description: 'Load a saved session for this workspace.' },
+            ...(hasInterruptedTurn(activeSession.messages) ? [{ label: 'Continue interrupted task', value: 'continue', description: 'Continue the last stopped task with the current model.' }] : []),
             { label: 'Export transcript', value: 'export', description: 'Write a redacted Markdown transcript in this workspace.' },
             { label: 'Undo latest agent change', value: 'undo', description: 'Restore the last checkpoint when safe.' },
             { label: 'Redo latest agent change', value: 'redo', description: 'Reapply the last safely undone checkpoint.' },
             { label: 'Share transcript', value: 'share', description: 'Choose an explicit workspace output path.' },
             { label: 'Compact history', value: 'compact', description: 'Reduce older messages without calling a model.' },
-          ], { drawFrame, signal })) ?? '';
+          ];
+          action = (await selectListPopup('Session', sessionActions, { drawFrame, signal })) ?? '';
         }
         if (action === 'new') {
           activeSession = createSession(canonicalWorkspace, { providerId: activeConnection?.id, providerName: activeConnection?.displayName, modelId: currentModel, mode: activeMode });
           conversationHistory = []; sessionTokens = 0; lastQuestion = ''; lastAnswer = ''; lastThoughtTime = 0; lastOutputTokenRate = undefined; lastTokenUsage = undefined;
           sessionStore.save(activeSession);
+          return;
+        }
+        if (action === 'continue') {
+          if (!hasInterruptedTurn(activeSession.messages)) {
+            drawFrame(renderBoxLines('Continue task', ['There is no interrupted task in this session.', '', 'Press Esc or Enter to return.'], 64));
+            return;
+          }
+          autoContinueRequested = true;
           return;
         }
         if (action === 'list' || action === 'resume') {
@@ -1085,7 +1152,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           const loaded = sessions.find((entry) => entry.id === id);
           if (loaded) {
             activeSession = loaded; conversationHistory = [...loaded.messages]; sessionTokens = loaded.usage.totalTokens;
-            currentModel = loaded.modelId ?? currentModel; activeMode = loaded.mode;
+            currentModel = loaded.providerId === activeConnection?.id ? loaded.modelId ?? currentModel : currentModel;
+            activeMode = loaded.mode;
+            const restored = restoreLastSessionTurn(conversationHistory);
+            lastQuestion = restored.question;
+            lastAnswer = restored.answer;
+            lastTurnDone = conversationHistory.length > 0 && !hasInterruptedTurn(conversationHistory);
           }
           return;
         }
@@ -1468,6 +1540,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const requestAbort = new AbortController();
       const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
       let streamedAnswer = '';
+      let lastSessionCheckpointAt = 0;
+      const checkpointInterruptedTurn = (): void => {
+        activeSession.messages = saveFailedTurnPrompt(conversationHistory, effectivePrompt, streamedAnswer);
+        activeSession.providerId = activeConnection?.id;
+        activeSession.providerName = activeConnection?.displayName;
+        activeSession.modelId = currentModel;
+        activeSession.mode = activeMode;
+        sessionStore.save(activeSession);
+        lastSessionCheckpointAt = Date.now();
+      };
       lastAnswer = '';
       lastTurnDone = false;
       let taskStep: { step: number; maxSteps: number } | undefined;
@@ -1640,6 +1722,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
               if (thinkingTimer) clearInterval(thinkingTimer);
             }
             streamedAnswer += event.delta;
+            if (Date.now() - lastSessionCheckpointAt >= 1_000) checkpointInterruptedTurn();
             const area = getChatAnswerArea(process.stdout.columns);
             const renderedDelta = renderChatAnswerDelta(event.delta, answerPosition, area.wrapWidth, area.startColumn);
             answerPosition = renderedDelta;
@@ -1661,6 +1744,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       });
       let result;
       try {
+        checkpointInterruptedTurn();
         result = await runAgent();
       } catch (error) {
         if (!activeConnection || !isAuthenticationFailure(error)) throw error;
@@ -1736,7 +1820,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         sessionStore.save(activeSession);
         streamedAnswer = lastAnswer;
       } else if (resolution.isError) {
-        conversationHistory = saveFailedTurnPrompt(conversationHistory, effectivePrompt);
+        conversationHistory = saveFailedTurnPrompt(conversationHistory, effectivePrompt, streamedAnswer);
         activeSession.messages = conversationHistory;
         activeSession.providerId = activeConnection?.id;
         activeSession.providerName = activeConnection?.displayName;
@@ -1771,7 +1855,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         ? ` (other configured providers: ${otherConnections.join(', ')})`
         : '';
       lastQuestion = trimmed;
-      conversationHistory = saveFailedTurnPrompt(conversationHistory, effectivePrompt);
+      conversationHistory = saveFailedTurnPrompt(conversationHistory, effectivePrompt, streamedAnswer);
       activeSession.messages = conversationHistory;
       activeSession.providerId = activeConnection?.id;
       activeSession.providerName = activeConnection?.displayName;
