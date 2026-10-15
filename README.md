@@ -63,6 +63,14 @@ Both versions use the command name `moderado`. Install the latest release with `
 Chocolatey is deliberately out of scope; the full channel runbook lives in
 [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
+### Any OS (npm)
+
+Requires Node.js >= 20 and works on Windows, macOS, and Linux:
+
+```bash
+npm install -g moderado
+```
+
 ### Linux
 
 ```bash
@@ -70,8 +78,6 @@ Chocolatey is deliberately out of scope; the full channel runbook lives in
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
 curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.28
 
-# npm (requires Node.js >= 20)
-npm install -g moderado
 ```
 
 ### macOS
@@ -83,8 +89,6 @@ brew tap marcuz-apl/moderado && brew install moderado
 # curl installer (arm64), same checksum verification as Linux
 curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.28
 
-# npm (requires Node.js >= 20)
-npm install -g moderado
 ```
 
 ### Windows
@@ -94,8 +98,6 @@ npm install -g moderado
 scoop bucket add moderado https://github.com/marcuz-apl/scoop-moderado
 scoop install moderado
 
-# npm (requires Node.js >= 20)
-npm install -g moderado
 ```
 
 Any npm-compatible runner works on every platform above (`bun add -g
