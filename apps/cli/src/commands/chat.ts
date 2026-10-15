@@ -25,6 +25,7 @@ import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
 import { buildWorkspaceMap } from '../repo_map.js';
 import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
 import { discoverSkills, formatSkillContext, formatSkillsList, getEnabledSkillNames, selectEnabledSkills, setSkillEnabled, UserSkill } from '../skills.js';
+import { getHelpCommandLines } from '../ui/help_content.js';
 
 export function createConnectionProvider(connection: ProviderConnection): NvidiaAdapter {
   return new NvidiaAdapter({ apiKey: connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
@@ -1366,21 +1367,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
     if (trimmed === '/help') {
       lastQuestion = trimmed;
-      lastAnswer = 'Available slash commands:\n' +
-        '  /connect  - Choose a Gateway, hosted, or local provider\n' +
-        '  /model     - Switch active AI model\n' +
-        '  /init      - Scaffold AGENTS.md from workspace scan\n' +
-        '  /mcp       - Manage local MCP servers\n' +
-        '  /session   - Create, resume, undo, redo, share, export, or compact sessions\n' +
-        '  /queue     - Add, inspect, or clear queued follow-up commands\n' +
-        '  /workflow  - Inspect Git, build plans, or undo agent changes\n' +
-        '  /review    - Review current workspace changes for bugs\n' +
-        '  /map       - Show a compact workspace file map\n' +
-        '  /budget    - Set a per-task token limit (/budget 5000, /budget off)\n' +
-        '  /skills    - List skills; use /skills on|off NAME|PATTERN (* for all)\n' +
-        '  /clear     - Reset conversation memory\n' +
-        '  /help      - Display commands, shortcuts & version\n' +
-        '  /exit      - Exit Moderado';
+      lastAnswer = 'Available slash commands:\n' + getHelpCommandLines().map((line) => line.includes(' - ') ? line : `\n${line}`).join('\n');
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
@@ -1536,10 +1523,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       sessionTokens = activeSession.usage.totalTokens;
       usageRecorded = true;
     };
+    let streamedAnswer = '';
     try {
       const requestAbort = new AbortController();
       const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
-      let streamedAnswer = '';
       let lastSessionCheckpointAt = 0;
       const checkpointInterruptedTurn = (): void => {
         activeSession.messages = saveFailedTurnPrompt(conversationHistory, effectivePrompt, streamedAnswer);

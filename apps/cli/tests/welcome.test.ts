@@ -813,6 +813,11 @@ describe('OpenCode-style Welcome TUI', () => {
     }
   });
 
+  it('aligns the Up/Down keyboard shortcut with the other shortcut rows', () => {
+    const plain = stripAnsi(renderHelpPopupBox('v0.2.0', 'd:\\test', 80).join('\n'));
+    expect(plain).toContain('│  Up/Down       Browse slash commands after "/", else recall history');
+  });
+
   it('renderSuggestionsBox encloses all lines within boxWidth and holds full command context', () => {
     const lines = renderSuggestionsBox(SLASH_COMMANDS, 80);
     const plainLines = lines.map((line) => stripAnsi(line));

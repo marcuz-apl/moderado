@@ -1,5 +1,6 @@
 import readline from 'node:readline';
 import { renderBox } from './box.js';
+import { getHelpCommandGroups } from './help_content.js';
 
 export async function showHelpModal(
   version: string,
@@ -14,11 +15,10 @@ export async function showHelpModal(
 
   const lines = [
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
-    '  \x1b[1m/model\x1b[0m       Switch active AI model (Free, Paid, or Custom)',
-    '  \x1b[1m/skills\x1b[0m     List skills; /skills on|off NAME|PATTERN (* for all)',
-    '  \x1b[1m/clear\x1b[0m       Reset conversation memory and context history',
-    '  \x1b[1m/help\x1b[0m        Display this commands, shortcuts & version guide',
-    '  \x1b[1m/exit\x1b[0m        Exit Moderado session cleanly',
+    ...getHelpCommandGroups().flatMap(({ name, commands }) => [
+      `  \x1b[1;38;5;180m${name}:\x1b[0m`,
+      ...commands.map(([command, description]) => `    \x1b[1m${command}\x1b[0m  ${description}`),
+    ]),
     '',
     '\x1b[1;38;5;114mKeyboard Shortcuts:\x1b[0m',
     '  \x1b[1mTab\x1b[0m          Toggle between [Plan] (read-only) and [Execute] mode',

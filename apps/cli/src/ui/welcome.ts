@@ -2,6 +2,7 @@ import readline from 'node:readline';
 import type { GatewayStatusEvent, UsageEvent } from '@moderado/contracts';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
+import { getHelpCommandGroups } from './help_content.js';
 
 export interface WelcomeLayoutOptions {
   model: string;
@@ -519,21 +520,10 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
 
   const content: string[] = [
     '\x1b[1;38;5;75mSlash Commands:\x1b[0m',
-    '\x1b[1m/init\x1b[0m       Scaffold AGENTS.md from workspace scan',
-    '\x1b[1m/model\x1b[0m      Switch active AI model (Free, Paid, or Custom)',
-    '\x1b[1m/connect\x1b[0m   Choose a Gateway, hosted, or local provider',
-    '\x1b[1m/btw\x1b[0m        Ask an ephemeral side question (no session pollution)',
-    '\x1b[1m/mcp\x1b[0m       Manage local MCP servers',
-    '\x1b[1m/session\x1b[0m   Create, resume, undo, redo, share, export, or compact sessions',
-    '\x1b[1m/queue\x1b[0m     Add, inspect, or clear queued follow-up commands',
-    '\x1b[1m/workflow\x1b[0m  Inspect Git, build plans, or undo agent changes',
-    '\x1b[1m/review\x1b[0m    Review current workspace changes for bugs',
-    '\x1b[1m/map\x1b[0m       Show a compact workspace file map',
-    '\x1b[1m/budget\x1b[0m    Set a per-task token limit',
-    '\x1b[1m/skills\x1b[0m   List skills; enable or disable user skills',
-    '\x1b[1m/clear\x1b[0m      Reset conversation memory and context history',
-    '\x1b[1m/help\x1b[0m       Display this commands, shortcuts & version guide',
-    '\x1b[1m/exit\x1b[0m       Exit Moderado session cleanly',
+    ...getHelpCommandGroups().flatMap(({ name, commands }) => [
+      `\x1b[1;38;5;180m${name}:\x1b[0m`,
+      ...commands.map(([command, description]) => `\x1b[1m${command.padEnd(11)}\x1b[0m${description}`),
+    ]),
     '',
     '\x1b[1;38;5;114mKeyboard Shortcuts:\x1b[0m',
     '\x1b[1mTab\x1b[0m          Toggle between [Plan] and [Execute] mode',
@@ -541,7 +531,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1mCtrl+C\x1b[0m       Cancel active inference or exit session',
     '\x1b[1mEsc\x1b[0m          Stop the active task',
     '\x1b[1mLeft/Right\x1b[0m   Move the caret inside the bottom input line',
-    '  \x1b[1mUp/Down\x1b[0m       Browse slash commands after "/", else recall history',
+    '\x1b[1mUp/Down\x1b[0m       Browse slash commands after "/", else recall history',
     '\x1b[1mMouse click\x1b[0m  Place the caret on the input line',
     '',
     `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,
