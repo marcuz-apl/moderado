@@ -6,7 +6,7 @@ const HELP_COMMAND_GROUPS = [
 ] as const;
 
 export function getHelpCommandLines(): string[] {
-  return HELP_COMMAND_GROUPS.flatMap(({ name, commands }) => [name, ...commands.map(([command, description]) => `  ${command.padEnd(10)}- ${description}`)]);
+  return HELP_COMMAND_GROUPS.flatMap(({ name, commands }) => [name, ...commands.map(([command, description]) => `  ${command.padEnd(11)}- ${description}`)]);
 }
 
 export function getHelpCommandGroups(): readonly typeof HELP_COMMAND_GROUPS[number][] {

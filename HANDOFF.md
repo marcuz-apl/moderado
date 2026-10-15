@@ -11,8 +11,11 @@ Status: v0.4.28 release documentation and package metadata are prepared; tag and
   for the v0.4.28 release candidate.
 - Synced `apps/cli/package.json` and `package-lock.json` to `0.4.28`.
 - Release tag `v0.4.28` and guarded publication workflow are not yet run.
-- Local build commands emit an environment WSL socket warning before producing
-  normal command output; rerun preflight in a standard Node environment before tagging.
+- Root `build`, `typecheck`, and test scripts now invoke the local TypeScript and
+  Vitest Node entry points directly, avoiding the WSL `.bin` shell-shim socket warning.
+- Full offline suite passes with process permission enabled. Package verification
+  produces `apps/cli/moderado-0.4.28.tgz`; its final smoke-test output should be
+  confirmed separately before tagging.
 
 ### Next action
 

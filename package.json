@@ -7,10 +7,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "tsc -b --force && npm run prepare:package",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "typecheck": "tsc -b --noEmit",
+    "build": "node node_modules/typescript/bin/tsc -b --force && npm run prepare:package",
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "test:watch": "node node_modules/vitest/vitest.mjs",
+    "typecheck": "node node_modules/typescript/bin/tsc -b --noEmit",
     "moderado": "node apps/cli/dist/index.js",
     "prepare:package": "node scripts/prepare_npm_package.mjs",
     "verify:package": "npm run build && node scripts/verify_npm_package.mjs",
