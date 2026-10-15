@@ -100,6 +100,31 @@ scoop install moderado
 
 ```
 
+### Uninstall Moderado
+
+Use the command that matches how Moderado was installed:
+
+```bash
+# npm (Windows, macOS, or Linux)
+npm uninstall -g moderado
+
+# Other npm-compatible runners
+bun remove -g moderado
+pnpm remove -g moderado
+yarn global remove moderado
+
+# Homebrew (macOS)
+brew uninstall moderado
+
+# curl installer (Linux or macOS)
+rm ~/.local/bin/moderado
+```
+
+```powershell
+# Scoop (Windows)
+scoop uninstall moderado
+```
+
 Any npm-compatible runner works on every platform above (`bun add -g
 moderado`, `pnpm add -g moderado`, `yarn global add moderado`), and you can
 try Moderado without installing via `npx -y moderado@latest --help`.
