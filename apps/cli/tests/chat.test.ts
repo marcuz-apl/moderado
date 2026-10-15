@@ -652,7 +652,8 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(errorText).toContain('⚠️ **Model Error (ERR_RATE_LIMIT):**');
     expect(errorText).toContain('Rate limit reached');
     expect(errorText).toContain('meta/llama-3.3-70b-instruct');
-    expect(errorText).toContain('other configured providers: openrouter, agnes-ai');
+    expect(errorText).toContain('Please retry shortly or choose another model with `/model`.');
+    expect(errorText).not.toContain('choose a provider with `/connect`');
   });
 
   it('resolves current turn assistant answer without leaking earlier turn answers on failure', () => {
@@ -688,6 +689,7 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(resolution.answer).toContain('⚠️ **Model Error (ERR_RATE_LIMIT):**');
     expect(resolution.answer).toContain('Rate limit exceeded on provider');
     expect(resolution.answer).toContain('openrouter/auto');
+    expect(resolution.answer).toContain('Please retry shortly or choose another model with `/model`.');
   });
 
   it('resolves current turn assistant answer on success without leaking earlier turn answers', () => {
