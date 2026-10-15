@@ -88,7 +88,8 @@ npm install -g moderado
 moderado --help
 ```
 
-The latest published release is 0.4.26. Its `/connect` flow handles the
+The 0.4.28 release candidate adds organized `/help` command groups and resumes
+interrupted chat sessions. Its `/connect` flow handles the
 Gateway and direct providers; `/login` is no longer offered. The previous
 0.4.8 release uses `/login` for the Gateway. The earlier 0.3.10 release is
 self-contained and works without the Gateway. All three use the `moderado`

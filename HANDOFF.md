@@ -1,8 +1,23 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-14 (chat status-row width fix)
+Updated: 2026-10-15 (v0.4.28 release preparation)
 Branch: master (tracking origin/master)
-Status: Every chat-card element — header, question, streamed answer, temporary status rows, and the slash/mention/queued boxes — is clamped to the centered composer card columns.
+Status: v0.4.28 release documentation and package metadata are prepared; tag and publication remain intentionally pending.
+
+## Session 2026-10-15 — v0.4.28 release preparation
+
+- Added `CHANGELOG.md` with the curated v0.4.28 milestone entry.
+- Updated README, CLI README, guide, distribution runbook, and release runbook
+  for the v0.4.28 release candidate.
+- Synced `apps/cli/package.json` and `package-lock.json` to `0.4.28`.
+- Release tag `v0.4.28` and guarded publication workflow are not yet run.
+- Local build commands emit an environment WSL socket warning before producing
+  normal command output; rerun preflight in a standard Node environment before tagging.
+
+### Next action
+
+Run `npm run build`, `npm test`, `npm run typecheck`, and `npm run verify:package`
+in a standard environment, then review and tag `v0.4.28` only after all pass.
 
 ## Session 2026-10-14 — chat temporary status rows width fix
 
