@@ -24,7 +24,7 @@ const openRouter = {
 describe('provider connection setup', () => {
   it('offers NVIDIA NIM, Moderado Cloud, OpenRouter, and Agnes AI presets', () => {
     expect(PROVIDER_PRESETS.map((preset) => preset.value)).toEqual([
-      'moderado-cloud', 'nvidia-nim', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
+      'moderado-cloud', 'nvidia-nim', 'agnes-ai', 'openrouter', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
     ]);
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')?.baseUrl)
       .toBe('https://openrouter.ai/api/v1');

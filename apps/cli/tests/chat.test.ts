@@ -864,7 +864,10 @@ describe('failed turn recovery', () => {
 
     const recovered = saveFailedTurnPrompt(history, 'Task stopped by token budget');
 
-    expect(recovered.at(-1)).toEqual({ role: 'user', content: 'Task stopped by token budget' });
+    expect(recovered.slice(-2)).toEqual([
+      { role: 'user', content: 'Task stopped by token budget' },
+      { role: 'assistant', content: '[This task was interrupted before a response was produced. Continue the task if asked.]' },
+    ]);
     expect(history.at(-1)?.content).toBe('Earlier answer');
   });
 });
