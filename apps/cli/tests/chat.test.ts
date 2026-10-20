@@ -339,9 +339,16 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(digest).not.toContain('https://example.test/weather');
     expect(digest).not.toContain('Title:');
     expect(digest).not.toContain('#');
-    expect(digest).toContain('raw search excerpt');
+    expect(digest).toContain('Live web search excerpt. Connect a model for a summary.');
     expect(formatDirectWebSearchAnswer({ toolName: 'web_search', status: 'success', output: 'URL: https://example.test/only' })).toBe('Web search returned no readable content.');
     expect(formatDirectWebSearchAnswer({ toolName: 'web_search', status: 'error', output: 'Search endpoint returned HTTP 500.' })).toContain('Web search failed');
+  });
+  it('labels readable search content without suggesting an error when a model is connected', () => {
+    const answer = formatDirectWebSearchAnswer(
+      { toolName: 'web_search', status: 'success', output: 'Weather in Benghazi: 24 C and clear.' },
+      true,
+    );
+    expect(answer).toBe('Weather in Benghazi: 24 C and clear.\n\nLive web search excerpt.');
   });
   it('prefers the configured search provider and ignores unknown values', () => {
     const original = process.env.MODERADO_WEB_SEARCH_PROVIDER;

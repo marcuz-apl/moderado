@@ -548,7 +548,8 @@ export function formatDirectWebSearchAnswer(result: ToolResult, modelConnected =
     .map((line) => line.trim().replace(/^#{1,6}\s*/, '').replace(/\*\*/g, ''))
     .filter((line) => line && line !== '...' && line !== '---' && !SEARCH_BLOCK_METADATA.test(line) && !/^https?:\/\//i.test(line));
   if (!lines.length) return 'Web search returned no readable content.';
-  return `${lines.slice(0, 10).join('\n')}\n\n(${modelConnected ? 'model summary unavailable — ' : 'no model connected — '}raw search excerpt)`;
+  const excerpt = lines.slice(0, 10).join('\n');
+  return `${excerpt}\n\n${modelConnected ? 'Live web search excerpt.' : 'Live web search excerpt. Connect a model for a summary.'}`;
 }
 /** Environment configuration overrides the persistent search provider preference. */
 export function resolveWebSearchProvider(config: ModeradoConfig): WebSearchProviderName | undefined {
