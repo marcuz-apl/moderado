@@ -434,3 +434,11 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 - Branch: `master`; chat generation now repaints the frame when the terminal width changes, so maximized windows keep the question, answer, and composer centered. The resize listener is removed when generation ends.
 - Tests cover a 200-column static frame and a resize during streamed output. Checks: `npm run build` PASS; `npm test` PASS (65 files, 632 tests); `git diff --check` PASS.
 - Blockers: None. Next action: Review the centered-layout diff and commit the change.
+
+## Version history renumbering (2026-10-20)
+
+- The active branch jumped from v0.4.28 to v0.4.30 when the v0.4.29 commit was removed from master. The owner authorized renumbering the active history.
+- October 20 builds now run without gaps from `2610201` through `261020a`. The first two commits are v0.4.29, the next four are v0.4.30, and the CLI provider-flow rename commit and later work are v0.4.31.
+- Every rewritten commit aligns its subject, VERSION, CLI package version, and lockfile package version. Current connected version: v0.4.31+261020a; CLI package: 0.4.31.
+- The previous master tips are preserved locally at backup/pre-2026-10-20-version-renumber and backup/pre-2026-10-20-sequence-fix. Checks on the rewritten tree: npm run build passed; npm test passed (65 files, 632 tests); git diff --check passed.
+- Blockers: none. Smallest next action: verify the rewritten master tip on origin after the authorized force push.
