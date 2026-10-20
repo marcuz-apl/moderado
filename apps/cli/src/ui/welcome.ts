@@ -6,6 +6,7 @@ import { getHelpCommandGroups } from './help_content.js';
 
 export interface WelcomeLayoutOptions {
   model: string;
+  provider?: string;
   tokens: number;
   cost: string;
   usageAvailable?: boolean;
@@ -163,13 +164,21 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const spaces4Count = Math.max(1, width - visibleLen(left4) - right4Raw.length);
   const line4 = left4 + ' '.repeat(spaces4Count) + right4;
 
-  // Line 5: Working directory (left) ... model and Auto-approve (right)
+  // Line 5: Working directory (left) ... provider, model, and Auto-approve (right)
   const approvalLabelRaw = options.autoApprove
     ? 'Auto-approve enabled (Shift+Tab)'
     : 'Auto-approve off (Shift+Tab)';
   const modelSpace = Math.max(8, width - approvalLabelRaw.length - 10);
-  const shortModel = options.model.length > modelSpace ? '...' + options.model.slice(-(modelSpace - 3)) : options.model;
-  const workspaceSpace = Math.max(3, width - approvalLabelRaw.length - shortModel.length - 2);
+  const provider = options.provider?.trim() ?? '';
+  const providerSpace = Math.max(1, modelSpace - 6);
+  const shortProvider = provider.length > providerSpace ? provider.slice(0, providerSpace - 1) + '…' : provider;
+  const prefix = shortProvider ? `${shortProvider} | ` : '';
+  const availableModelSpace = modelSpace - prefix.length;
+  const shortModel = options.model.length > availableModelSpace
+    ? availableModelSpace > 3 ? '...' + options.model.slice(-(availableModelSpace - 3)) : options.model.slice(-availableModelSpace)
+    : options.model;
+  const modelText = prefix + shortModel;
+  const workspaceSpace = Math.max(3, width - approvalLabelRaw.length - modelText.length - 2);
   const shortWs =
     options.workspace.length > workspaceSpace
       ? '...' + options.workspace.slice(-(workspaceSpace - 3))
@@ -179,8 +188,8 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const approvalLabel = options.autoApprove
     ? '\x1b[38;5;114mAuto-approve enabled (Shift+Tab)\x1b[0m'
     : '\x1b[38;5;242mAuto-approve off (Shift+Tab)\x1b[0m';
-  const modelLabel = `\x1b[38;5;180m${shortModel}\x1b[0m`;
-  const spaces5Count = Math.max(1, width - shortWs.length - shortModel.length - approvalLabelRaw.length - 1);
+  const modelLabel = `\x1b[38;5;180m${modelText}\x1b[0m`;
+  const spaces5Count = Math.max(1, width - shortWs.length - modelText.length - approvalLabelRaw.length - 1);
   const line5 = left5 + ' '.repeat(spaces5Count) + modelLabel + ' ' + approvalLabel;
 
   const cardLines: string[] = [];
@@ -598,6 +607,7 @@ export interface InteractiveTurnResult {
 
 export interface PromptInteractiveTurnOptions {
   model: string;
+  getProviderName?: () => string | undefined;
   tokens: number;
   cost: string;
   usageAvailable?: boolean;
@@ -710,6 +720,7 @@ export async function promptInteractiveTurn(
 
   const getOptions = (): WelcomeLayoutOptions => ({
     model: currentModel,
+    provider: options.getProviderName?.(),
     tokens: options.tokens,
     cost: options.cost,
     usageAvailable: options.usageAvailable,

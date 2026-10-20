@@ -9,6 +9,13 @@ v0.4.26 (Unified provider connection flow)
 
 ## Milestone Change Log Details
 
+### [Unreleased]
+**Feat: Provider shown beside model in composer status row**
+- **Type**: `feat`
+- **Scope**: `apps/cli` composer status line
+- **Key Deliverables**:
+  - **Composer status**: The bottom row now shows the active provider before the model as `provider | model`, including after switching connections.
+
 ### [v0.4.28] — 2026-10-15
 **Fix: Organized help navigation and resilient chat recovery**
 - **Type**: `feat` / `fix` / `patch-level`

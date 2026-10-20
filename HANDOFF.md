@@ -421,3 +421,10 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 - Decision: a free route requires a valid, unexpired, unrevoked Moderado website API key; paid routes and public discovery do not. The Gateway may choose either access type for auto.
 - Blocker: none for code changes. This historical file already contains invalid UTF-8 bytes, so the note was appended without rewriting its existing bytes.
 - Smallest next action: review and commit the CLI change with the corresponding Gateway and IDE contract updates when ready.
+## Composer provider and model status (2026-10-20 07:40 UTC)
+
+- Branch: `master`; HEAD carries the composer status work.
+- Bottom composer row now displays the active connection name before the model as `provider | model`, including immediately after `/connect`; long names are shortened to stay within the card width.
+- CLI package and lockfile metadata synced to the connected version; current connected version is `v0.4.29+2610201`, with package version `0.4.29`.
+- Checks: `npm run build` PASS; `npm test` PASS (65 files, 628 tests); focused composer and metadata tests PASS.
+- Blockers: None. Next action: Commit and push the verified status row and metadata changes.

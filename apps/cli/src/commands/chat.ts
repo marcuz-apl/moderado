@@ -951,6 +951,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     } else {
       let autoContinueRequested = false;
       const turn = await promptInteractiveTurn({
+        getProviderName: () => activeConnection?.displayName,
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
@@ -1248,7 +1249,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
@@ -1263,7 +1264,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
@@ -1294,7 +1295,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       }
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1327,7 +1328,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1359,7 +1360,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({ model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
+      process.stdout.write(renderFullWelcomeScreen({ provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
       process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
       continue;
     }
@@ -1375,7 +1376,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1407,7 +1408,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       sessionStore.save(activeSession);
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1427,7 +1428,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       sessionStore.save(activeSession);
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
         chatThoughtTime: lastThoughtTime,
@@ -1452,7 +1453,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
+        provider: activeConnection?.displayName, model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
         autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
       }, process.stdout.rows));
@@ -1477,7 +1478,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         sessionStore.save(activeSession);
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen({
-          model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
+          provider: activeConnection?.displayName, model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
           usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
           autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
           chatThoughtTime: lastThoughtTime,
@@ -1494,7 +1495,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         drawFrame: (popupLines) => {
           process.stdout.write('\x1b[H\x1b[J');
           process.stdout.write(renderWelcomePopupLayer({
-            model: currentModel ?? 'No model connected — use /connect',
+            provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect',
             tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace,
             mode: activeMode, autoApprove: activeAutoApprove,
             chatQuestion: lastQuestion, chatAnswer: lastAnswer,
@@ -1556,7 +1557,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         const displayAnswer = streamedAnswer || lastAnswer;
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen({
-          model: currentModel ?? 'No model connected — use /connect',
+          provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect',
           tokens: Math.round(sessionTokens + (usageRecorded ? 0 : turnUsage?.usage.totalTokens ?? 0)),
           cost: costLabel(),
           usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
@@ -1608,7 +1609,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
                 async (popupLines, frameOpts) => {
                   process.stdout.write('\x1b[H\x1b[J');
                   process.stdout.write(renderWelcomePopupLayer({
-                    model: currentModel ?? 'No model connected',
+                    provider: activeConnection?.displayName, model: currentModel ?? 'No model connected',
                     tokens: Math.round(sessionTokens),
                     cost: costLabel(),
                     usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
@@ -1861,7 +1862,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastOutputTokenRate = undefined;
       process.stdout.write('\x1b[H\x1b[J');
       process.stdout.write(renderFullWelcomeScreen({
-        model: currentModel ?? 'No model connected — use /connect',
+        provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect',
         tokens: Math.round(sessionTokens),
         cost: costLabel(),
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
