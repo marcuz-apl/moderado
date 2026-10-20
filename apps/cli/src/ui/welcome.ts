@@ -425,13 +425,32 @@ export function navigateQuestionHistory(history: string[], direction: -1 | 1, in
   return { input: nextIndex === history.length ? draft : history[nextIndex], index: nextIndex, draft };
 }
 
-/** Update the fixed chat elapsed-time row without repainting the terminal. */
-export function renderChatThoughtTimeUpdate(thoughtTime: number, taskStep?: { step: number; maxSteps: number }, width?: number): string {
+export interface ChatActivity {
+  /** Leading glyph: a spinner frame while the turn runs, a check when it settles. */
+  glyph: string;
+  /** What the agent is doing right now, for example `Running run_command`. */
+  label: string;
+}
+
+/**
+ * Update the fixed chat elapsed-time row without repainting the terminal.
+ * With an activity, the row is a live "still running" indicator that stays
+ * visible after text starts streaming and during silent tool execution.
+ */
+export function renderChatThoughtTimeUpdate(
+  thoughtTime: number,
+  taskStep?: { step: number; maxSteps: number },
+  width?: number,
+  activity?: ChatActivity,
+): string {
   const area = getChatAnswerArea(width);
   const label = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  const status = (taskStep && taskStep.maxSteps > 0 && taskStep.step >= 0
-    ? `Processing task… Step ${taskStep.step}/${taskStep.maxSteps} · ${label}`
-    : `Thought for ${label}`).slice(0, area.cardWidth);
+  const stepText = taskStep && taskStep.maxSteps > 0 && taskStep.step >= 0
+    ? `Step ${taskStep.step}/${taskStep.maxSteps}`
+    : undefined;
+  const status = (activity
+    ? [`${activity.glyph} ${activity.label}`, stepText, label].filter(Boolean).join(' · ')
+    : stepText ? `Processing task… ${stepText} · ${label}` : `Thought for ${label}`).slice(0, area.cardWidth);
   return `\x1b7\x1b[13;${area.startColumn}H\x1b[K\x1b[38;5;244m${status}\x1b[0m\x1b8`;
 }
 

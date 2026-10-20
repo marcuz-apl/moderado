@@ -263,6 +263,9 @@ export function saveFailedTurnPrompt(
 
 const CONTINUE_INTERRUPTED_TASK_PROMPT = 'Continue the interrupted task from the saved conversation. Start from the unfinished work and avoid repeating completed steps.';
 
+/** Braille spinner frames for the live "still running" status row. */
+const ACTIVITY_SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
 function hasInterruptedTurn(messages: ChatMessage[]): boolean {
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
@@ -1562,7 +1565,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = '';
       lastTurnDone = false;
       let taskStep: { step: number; maxSteps: number } | undefined;
-      let firstAssistantDeltaAt: number | undefined;
+      let activityLabel: string | undefined;
+      let activityFrame = 0;
+      let turnActive = true;
       let outputTokenRate: number | undefined;
       let budgetWarningIssued = false;
       let budgetStopped = false;
@@ -1570,6 +1575,22 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const usedModels = new Set<string>();
       let answerPosition = { row: 15, column: getChatAnswerArea(process.stdout.columns).startColumn };
       let lastErrorEvent: { code?: string; message: string } | undefined;
+      // Keep a live spinner on the status row for the whole turn: streaming
+      // text and silent tool execution both leave the screen looking settled.
+      const stopActivity = (): void => {
+        if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
+      };
+      const paintActivity = (glyph: string, label: string): void => {
+        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns, { glyph, label }));
+      };
+      const startActivity = (): void => {
+        stopActivity();
+        if (!turnActive) return;
+        activityLabel = undefined;
+        thinkingTimer = setInterval(() => {
+          paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
+        }, 200);
+      };
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
         const displayAnswer = streamedAnswer || lastAnswer;
@@ -1597,6 +1618,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           const area = getChatAnswerArea(process.stdout.columns);
           answerPosition = renderChatAnswerDelta(displayAnswer, { row: 15, column: area.startColumn }, area.wrapWidth, area.startColumn);
         }
+        // The frame paints a static status; keep the live row authoritative while the turn runs.
+        if (thinkingTimer) paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
       };
 
       const onGenerationKeypress = (str: string, key: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined): void => {
@@ -1613,6 +1636,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           },
           onBtw: async (command) => {
             const resume = suspendGenerationInput?.();
+            stopActivity();
             const ac = new AbortController();
             const onBtwKey = (s: string, k: any) => {
               if ((k && k.name === 'escape') || s === '\x1b') {
@@ -1664,6 +1688,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
               );
             } finally {
               process.stdin.removeListener('keypress', onBtwKey);
+              startActivity();
               redrawChatFrame();
               resume?.();
             }
@@ -1694,11 +1719,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
       // Move to the chat layout before the provider can emit its first event.
       redrawChatFrame();
-      thinkingTimer = setInterval(() => {
-        if (!firstAssistantDeltaAt && !turnUsage) {
-          process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns));
-        }
-      }, 400);
+      startActivity();
       const evidenceTask = liveSearch ? buildSearchAnswerTask(effectivePrompt, liveSearch) : undefined;
       const runAgent = () => loop.run(isReview ? createReviewTask(reviewFiles) : evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools: isReview ? createReviewToolRegistry() : tools, approvalHandler, router, policy,
@@ -1709,8 +1730,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           if (event.type === 'model_change') usedModels.add(event.newModelId);
           if (event.type === 'progress') {
             taskStep = { step: event.step, maxSteps: event.maxSteps ?? 0 };
-            if (!firstAssistantDeltaAt) process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns));
+            activityLabel = event.status;
+            paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
           }
+          if (event.type === 'tool_call_initiated') {
+            activityLabel = `Running ${event.toolName}`;
+            paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel);
+          }
+          if (event.type === 'tool_result') {
+            activityLabel = undefined;
+            if (!thinkingTimer) startActivity();
+          }
+          // The approval prompt owns the screen until the tool result arrives.
+          if (event.type === 'approval_request') stopActivity();
           if (event.type === 'gateway_status') process.stdout.write(renderGatewayFallbackUpdate(event, process.stdout.columns || 80));
           if (event.type === 'usage') {
             turnUsage = event;
@@ -1729,10 +1761,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             }
           }
           if (event.type === 'assistant_delta') {
-            if (!firstAssistantDeltaAt && event.delta.trim().length > 0) {
-              firstAssistantDeltaAt = Date.now();
-              if (thinkingTimer) clearInterval(thinkingTimer);
-            }
             streamedAnswer += event.delta;
             if (Date.now() - lastSessionCheckpointAt >= 1_000) checkpointInterruptedTurn();
             const area = getChatAnswerArea(process.stdout.columns);
@@ -1757,7 +1785,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       /** Prompt for a replacement credential once, persist it, and activate it. Falsy when the user cancels. */
       const recoverAuthenticationFailure = async (): Promise<ProviderConnection | undefined> => {
         if (!activeConnection) return undefined;
-        if (thinkingTimer) clearInterval(thinkingTimer);
+        stopActivity();
         const connection = activeConnection;
         const moderadoOAuth = isModeradoOAuthConnection(connection);
         const moderadoWithoutKey = connection.id === 'moderado' && !connection.apiKey;
@@ -1775,6 +1803,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         usageRecorded = false;
         const secured = requiresCredentialReference(replacement) ? await storeConnectionCredential(replacement, credentialStore) : replacement;
         saveConnection(secured); config = loadConfig(); activateConnection(secured);
+        startActivity();
         return secured;
       };
       let result;
@@ -1794,6 +1823,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (!(await recoverAuthenticationFailure())) throw error;
         result = await runAgent();
       }
+      // The turn is over: replace the spinner with the settled state while
+      // usage accounting and catalog refresh finish.
+      turnActive = false;
+      stopActivity();
+      process.stdout.write(renderChatThoughtTimeUpdate(
+        (Date.now() - startedAt) / 1000,
+        undefined,
+        process.stdout.columns,
+        {
+          glyph: result.status === 'completed' ? '✔' : '✖',
+          label: result.status === 'completed' ? 'Done' : result.status === 'cancelled' ? 'Stopped' : 'Failed',
+        },
+      ));
       if (turnUsage) {
         let pricing: Record<string, string> | undefined;
         const modelIds = new Set([...usedModels, result.selectedModel.id]);
@@ -1869,11 +1911,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       lastOutputTokenRate = outputTokenRate;
-      if (thinkingTimer) clearInterval(thinkingTimer);
+      turnActive = false;
+      stopActivity();
       removeGenerationListener?.();
       redrawChatFrame();
     } catch (err: any) {
-      if (thinkingTimer) clearInterval(thinkingTimer);
+      if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
       removeGenerationListener?.();
       recordTurnUsage();
       if (turnUsage) sessionStore.save(activeSession);

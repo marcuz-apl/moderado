@@ -451,6 +451,13 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/\x1b8$/);
     expect(renderChatThoughtTimeUpdate(2.2, { step: 2, maxSteps: 8 })).toContain('Processing task… Step 2/8 · 2s');
     expect(renderChatThoughtTimeUpdate(2.2, { step: -1, maxSteps: 0 })).toContain('Thought for 2s');
+    // A live activity row proves the turn is still running after text streams.
+    expect(renderChatThoughtTimeUpdate(14.2, { step: 2, maxSteps: 8 }, 100, { glyph: '⠹', label: 'Running run_command' }))
+      .toContain('⠹ Running run_command · Step 2/8 · 14s');
+    expect(renderChatThoughtTimeUpdate(14.2, undefined, 100, { glyph: '⠹', label: 'Working' }))
+      .toContain('⠹ Working · 14s');
+    expect(renderChatThoughtTimeUpdate(14.2, undefined, 100, { glyph: '✔', label: 'Done' }))
+      .toContain('✔ Done · 14s');
     expect(renderChatAnswerDelta('Hi', { row: 15, column: 1 }, 100)).toMatchObject({ row: 15, column: 3 });
   });
 
