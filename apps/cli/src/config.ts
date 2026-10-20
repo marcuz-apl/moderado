@@ -3,10 +3,10 @@ import { z } from 'zod';
 import path from 'node:path';
 import os from 'node:os';
 import { McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
-import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, resolveModeradoCloudBaseUrl } from '@moderado/providers';
+import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, resolveModeradoBaseUrl } from '@moderado/providers';
 import type { ConnectProviderPresetId, ConnectProvidersConfig, ProviderConnectionKind } from '@moderado/providers';
 import { credentialReference, CredentialStore, resolveCredential } from './credentials.js';
-export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLoopbackBaseUrl, MODERADO_CLOUD_BASE_URL, resolveModeradoCloudBaseUrl } from '@moderado/providers';
+export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLoopbackBaseUrl, MODERADO_BASE_URL, MODERADO_DEVELOPMENT_BASE_URL, MODERADO_PRODUCTION_BASE_URL, MODERADO_CLOUD_BASE_URL, MODERADO_CLOUD_DEVELOPMENT_BASE_URL, MODERADO_CLOUD_PRODUCTION_BASE_URL, resolveModeradoBaseUrl, resolveModeradoCloudBaseUrl } from '@moderado/providers';
 export type { ConnectProviderPresetId, ConnectProvidersConfig, CustomConnectProvider, ProviderConnectionKind, ProviderPresetMeta, ProviderFreePolicy } from '@moderado/providers';
 
 export interface ModeradoConfig {
@@ -43,6 +43,11 @@ export interface ProviderConnection {
 
 const CONFIG_DIR_NAME = '.moderado';
 const CONFIG_FILE_NAME = 'config.json';
+const LEGACY_MODERADO_ID = 'moderado-cloud';
+
+function canonicalProviderId(id: string): string {
+  return id === LEGACY_MODERADO_ID ? 'moderado' : id;
+}
 
 export function getConfigPath(customHome?: string): string {
   const home = customHome || os.homedir();
@@ -60,15 +65,15 @@ export function loadConfig(customHome?: string): ModeradoConfig {
     const parsed = JSON.parse(raw);
     if (typeof parsed === 'object' && parsed !== null) {
       const connections = parseConnections(parsed.connections);
+      const activeConnectionId = typeof parsed.activeConnectionId === 'string'
+        ? canonicalProviderId(parsed.activeConnectionId)
+        : undefined;
       return {
         apiKey: typeof parsed.apiKey === 'string' ? parsed.apiKey : undefined,
         defaultModel: typeof parsed.defaultModel === 'string' ? parsed.defaultModel : undefined,
         allowPaid: typeof parsed.allowPaid === 'boolean' ? parsed.allowPaid : undefined,
         allowUnknown: typeof parsed.allowUnknown === 'boolean' ? parsed.allowUnknown : undefined,
-        activeConnectionId:
-          typeof parsed.activeConnectionId === 'string' && connections[parsed.activeConnectionId]
-            ? parsed.activeConnectionId
-            : undefined,
+        activeConnectionId: activeConnectionId && connections[activeConnectionId] ? activeConnectionId : undefined,
         connections: Object.keys(connections).length > 0 ? connections : undefined,
         connectProviders: parseConnectProviders(parsed.connectProviders),
         mcpServers: parseMcpServers(parsed.mcpServers),
@@ -98,6 +103,7 @@ function parseConnectProviders(value: unknown): ConnectProvidersConfig | undefin
   const schema = z.object({ enabled: z.array(z.enum(CONNECT_PROVIDER_PRESET_IDS)).optional(), custom: z.array(custom).optional() });
   const parsed = schema.safeParse(value);
   if (!parsed.success) return undefined;
+  if (parsed.data.enabled) parsed.data.enabled = parsed.data.enabled.map((id) => canonicalProviderId(id) as ConnectProviderPresetId);
   if (parsed.data.custom) parsed.data.custom = parsed.data.custom.filter((item, index, items) => items.findIndex(other => other.id === item.id) === index);
   return parsed.data;
 }
@@ -112,6 +118,7 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
   if (typeof value !== 'object' || value === null) return {};
 
   const result: Record<string, ProviderConnection> = {};
+  const priorities = new Map<string, number>();
   for (const candidate of Object.values(value as Record<string, unknown>)) {
     if (typeof candidate !== 'object' || candidate === null) continue;
     const item = candidate as Record<string, unknown>;
@@ -123,12 +130,21 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
       (kind !== 'nvidia-nim' && kind !== 'openai-compatible')
     ) continue;
 
-    result[item.id] = {
-      id: item.id,
-      displayName: item.displayName,
+    const id = canonicalProviderId(item.id);
+    const priority = id === item.id ? 1 : 0;
+    if ((priorities.get(id) ?? -1) > priority) continue;
+    priorities.set(id, priority);
+    const displayName = item.displayName === 'Moderado Cloud' ? 'Moderado' : item.displayName;
+    const isModerado = id === 'moderado';
+    result[id] = {
+      id,
+      displayName,
       kind,
-      baseUrl: item.id === 'moderado-cloud'
-        ? resolveModeradoCloudBaseUrl(process.env.MODERADO_CLOUD_ENV, process.env.MODERADO_CLOUD_BASE_URL ?? item.baseUrl)
+      baseUrl: isModerado
+        ? resolveModeradoBaseUrl(
+          process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV,
+          process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL ?? item.baseUrl,
+        )
         : item.baseUrl,
       credentialReference: typeof item.credentialReference === 'string' ? item.credentialReference : undefined,
       credentialExpiresAt: typeof item.credentialExpiresAt === 'number' && Number.isFinite(item.credentialExpiresAt) ? item.credentialExpiresAt : undefined,
@@ -193,8 +209,14 @@ export function getActiveConnection(config: ModeradoConfig): ProviderConnection 
 
 /** Save a provider profile and select it for future chat sessions. */
 export function saveConnection(connection: ProviderConnection, customHome?: string): void {
+  const id = canonicalProviderId(connection.id);
+  const normalized = {
+    ...connection,
+    id,
+    displayName: connection.displayName === 'Moderado Cloud' ? 'Moderado' : connection.displayName,
+  };
   const existing = loadConfig(customHome);
-  const persisted = connection.credentialReference ? { ...connection, apiKey: undefined } : connection;
+  const persisted = normalized.credentialReference ? { ...normalized, apiKey: undefined } : normalized;
   saveConfig(
     {
       connections: { ...existing.connections, [persisted.id]: persisted },
@@ -232,20 +254,29 @@ export function removeMcpServer(name: string, customHome?: string): void {
 }
 
 export async function storeConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
-  if (!connection.apiKey?.trim()) return connection;
-  const reference = credentialReference(connection.id);
-  await store.set(reference, connection.apiKey.trim());
-  return { ...connection, credentialReference: reference };
+  const id = canonicalProviderId(connection.id);
+  const normalized = {
+    ...connection,
+    id,
+    displayName: connection.displayName === 'Moderado Cloud' ? 'Moderado' : connection.displayName,
+  };
+  if (!normalized.apiKey?.trim()) return normalized;
+  const reference = credentialReference(id);
+  await store.set(reference, normalized.apiKey.trim());
+  return { ...normalized, credentialReference: reference };
 }
 
 export function requiresCredentialReference(connection: Pick<ProviderConnection, 'id' | 'apiKey'>, platform: NodeJS.Platform = process.platform): boolean {
-  return Boolean(connection.apiKey?.trim()) && (platform === 'win32' || connection.id === 'moderado-cloud');
+  return Boolean(connection.apiKey?.trim()) && (platform === 'win32' || canonicalProviderId(connection.id) === 'moderado');
 }
 
 export async function resolveConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
   if (connection.credentialExpiresAt !== undefined && connection.credentialExpiresAt <= Date.now()) return { ...connection, apiKey: undefined };
-  const environmentName = connection.id === 'nvidia-nim' ? 'NVIDIA_API_KEY' : `${connection.id.replace(/[^a-z0-9]/gi, '_').toUpperCase()}_API_KEY`;
-  const apiKey = await resolveCredential(process.env[environmentName], connection.credentialReference, connection.apiKey, store);
+  const id = canonicalProviderId(connection.id);
+  const environmentKey = id === 'moderado'
+    ? process.env.MODERADO_API_KEY ?? process.env.MODERADO_CLOUD_API_KEY
+    : id === 'nvidia-nim' ? process.env.NVIDIA_API_KEY : process.env[`${id.replace(/[^a-z0-9]/gi, '_').toUpperCase()}_API_KEY`];
+  const apiKey = await resolveCredential(environmentKey, connection.credentialReference, connection.apiKey, store);
   return { ...connection, apiKey };
 }
 
