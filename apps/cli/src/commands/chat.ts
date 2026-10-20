@@ -214,6 +214,14 @@ export function formatTurnFailureAnswer(
   return `⚠️ **Model Error (${errorEvent?.code || 'ERR_INFERENCE_FAILED'}):**\n${cleanDetail || 'Model returned no response.'}\n\n👉 **Suggestion:** The model \`${modelId}\` encountered an error. Switch models with \`/model\` or choose a provider with \`/connect\`${altSuggestion}.`;
 }
 
+/** A turn whose provider rejected its credential may recover by re-entering a key once. */
+export function turnFailedAuthentication(
+  status: string,
+  errorEvent: { code?: string; message: string } | undefined,
+): boolean {
+  return status === 'failed' && isAuthenticationFailure(errorEvent);
+}
+
 export function resolveTurnAssistantAnswer(
   result: { status: string; messages: ChatMessage[]; selectedModel?: { id: string } },
   previousHistoryLength: number,
@@ -1746,29 +1754,44 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           if (paths.length) checkpoints.recordPostWrite(canonicalWorkspace, paths);
         },
       });
-      let result;
-      try {
-        checkpointInterruptedTurn();
-        result = await runAgent();
-      } catch (error) {
-        if (!activeConnection || !isAuthenticationFailure(error)) throw error;
+      /** Prompt for a replacement credential once, persist it, and activate it. Falsy when the user cancels. */
+      const recoverAuthenticationFailure = async (): Promise<ProviderConnection | undefined> => {
+        if (!activeConnection) return undefined;
         if (thinkingTimer) clearInterval(thinkingTimer);
-        const moderadoOAuth = isModeradoOAuthConnection(activeConnection);
-        const moderadoWithoutKey = activeConnection.id === 'moderado' && !activeConnection.apiKey;
+        const connection = activeConnection;
+        const moderadoOAuth = isModeradoOAuthConnection(connection);
+        const moderadoWithoutKey = connection.id === 'moderado' && !connection.apiKey;
         process.stdout.write(moderadoWithoutKey
           ? '\nThis free Gateway route requires a Moderado website API key. Sign in or enter a key to retry once.\n'
           : moderadoOAuth
           ? '\nModerado rejected this browser login. Sign in again to retry once.\n'
-          : `\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
+          : `\nThe saved ${connection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
         const replacement = moderadoOAuth || moderadoWithoutKey
-          ? await loginModeradoInteractive({ signal, gatewayUrl: activeConnection.baseUrl })
-          : await replaceProviderKeyInteractive(activeConnection, { signal });
-        if (!replacement) throw error;
+          ? await loginModeradoInteractive({ signal, gatewayUrl: connection.baseUrl })
+          : await replaceProviderKeyInteractive(connection, { signal });
+        if (!replacement) return undefined;
         recordTurnUsage();
         turnUsage = undefined;
         usageRecorded = false;
         const secured = requiresCredentialReference(replacement) ? await storeConnectionCredential(replacement, credentialStore) : replacement;
         saveConnection(secured); config = loadConfig(); activateConnection(secured);
+        return secured;
+      };
+      let result;
+      try {
+        checkpointInterruptedTurn();
+        result = await runAgent();
+        // The agent loop reports provider failures as error events and resolves
+        // with a failed result instead of throwing, so key re-entry must be
+        // offered here too. Retry once; a second failure falls through to the
+        // formatted error answer.
+        if (turnFailedAuthentication(result.status, lastErrorEvent) && activeConnection && await recoverAuthenticationFailure()) {
+          lastErrorEvent = undefined;
+          result = await runAgent();
+        }
+      } catch (error) {
+        if (!activeConnection || !isAuthenticationFailure(error)) throw error;
+        if (!(await recoverAuthenticationFailure())) throw error;
         result = await runAgent();
       }
       if (turnUsage) {

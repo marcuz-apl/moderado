@@ -72,10 +72,12 @@ export function findReusableConnection(preset: ProviderPresetValue, connections?
   return connections?.[id];
 }
 
+/** Accepts a thrown error or the `{ code, message }` error event the agent loop emits. */
 export function isAuthenticationFailure(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return (error as Error & { code?: string }).code === 'ERR_GATEWAY_UNAUTHORIZED'
-    || /authentication failed \((401|403)\)/i.test(error.message);
+  if (typeof error !== 'object' || error === null) return false;
+  const { code, message } = error as { code?: string; message?: unknown };
+  return code === 'ERR_GATEWAY_UNAUTHORIZED'
+    || (typeof message === 'string' && /authentication failed \((401|403)\)/i.test(message));
 }
 
 export function isModeradoOAuthConnection(connection: ProviderConnection): boolean {

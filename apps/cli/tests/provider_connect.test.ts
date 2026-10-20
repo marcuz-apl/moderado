@@ -60,6 +60,12 @@ describe('provider connection setup', () => {
     expect(isAuthenticationFailure(new Error('request failed with status 429'))).toBe(false);
     expect(isAuthenticationFailure(new GatewayError('unauthorized', 401))).toBe(true);
     expect(isAuthenticationFailure(new GatewayError('scope_denied', 403))).toBe(false);
+    // The agent loop reports provider failures as typed error events, so the
+    // same decision must work on the emitted `{ code, message }` shape.
+    expect(isAuthenticationFailure({ code: 'ERR_GATEWAY_UNAUTHORIZED', message: 'Moderado could not authorize this request.' })).toBe(true);
+    expect(isAuthenticationFailure({ message: 'NVIDIA NIM authentication failed (403) during streamChat' })).toBe(true);
+    expect(isAuthenticationFailure({ code: 'ERR_RATE_LIMIT', message: 'Provider rate limit reached.' })).toBe(false);
+    expect(isAuthenticationFailure(undefined)).toBe(false);
   });
 
   it('identifies expiring Moderado OAuth credentials for browser reauthorization', () => {

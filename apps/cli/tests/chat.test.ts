@@ -32,6 +32,7 @@ import {
   levenshteinDistance,
   resolveTurnAssistantAnswer,
   saveFailedTurnPrompt,
+  turnFailedAuthentication,
   isLocalTokenQuery,
   isLocalVersionQuery,
   isLocalWorkspaceQuery,
@@ -905,5 +906,13 @@ describe('failed turn recovery', () => {
       { role: 'assistant', content: '[This task was interrupted before a response was produced. Continue the task if asked.]' },
     ]);
     expect(history.at(-1)?.content).toBe('Earlier answer');
+  });
+
+  it('offers key re-entry only for failed turns whose error event is an authentication failure', () => {
+    expect(turnFailedAuthentication('failed', { code: 'ERR_GATEWAY_UNAUTHORIZED', message: 'Moderado could not authorize this request.' })).toBe(true);
+    expect(turnFailedAuthentication('failed', { message: 'NVIDIA NIM authentication failed (401) during streamChat' })).toBe(true);
+    expect(turnFailedAuthentication('failed', { code: 'ERR_RATE_LIMIT', message: 'Provider rate limit reached.' })).toBe(false);
+    expect(turnFailedAuthentication('failed', undefined)).toBe(false);
+    expect(turnFailedAuthentication('completed', { code: 'ERR_GATEWAY_UNAUTHORIZED', message: 'Moderado could not authorize this request.' })).toBe(false);
   });
 });
