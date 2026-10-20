@@ -291,18 +291,38 @@ describe('CLI Configuration Storage', () => {
     expect((await resolveConnectionCredential(connection, store)).apiKey).toBeUndefined();
   });
 
-  it('requires credential storage only for Moderado profiles that have a key', () => {
+  it('requires credential storage only where a persistent store exists', () => {
     const moderado = { id: 'moderado' };
     const keyedModerado = { id: 'moderado', apiKey: 'mrd_test' };
     const other = { id: 'openrouter' };
     const keyedOther = { id: 'openrouter', apiKey: 'sk_test' };
-    expect(requiresCredentialReference(moderado, 'linux')).toBe(false);
-    expect(requiresCredentialReference(moderado, 'darwin')).toBe(false);
     expect(requiresCredentialReference(moderado, 'win32')).toBe(false);
-    expect(requiresCredentialReference(keyedModerado, 'linux')).toBe(true);
     expect(requiresCredentialReference(keyedModerado, 'win32')).toBe(true);
-    expect(requiresCredentialReference(other, 'linux')).toBe(false);
+    expect(requiresCredentialReference(keyedModerado, 'linux')).toBe(false);
+    expect(requiresCredentialReference(keyedModerado, 'darwin')).toBe(false);
+    expect(requiresCredentialReference(other, 'win32')).toBe(false);
     expect(requiresCredentialReference(keyedOther, 'win32')).toBe(true);
+    expect(requiresCredentialReference(keyedOther, 'linux')).toBe(false);
+  });
+
+  it('keeps a keyed Moderado connection usable in later sessions when no credential store exists', async () => {
+    // Mirrors the chat /connect flow on linux/darwin, where the only credential
+    // store is process-local: attaching a reference made saveConnection strip
+    // the key from config, so every new session reached the Gateway keyless.
+    const platform: NodeJS.Platform = 'linux';
+    const entered = {
+      id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible' as const,
+      baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_freshkey', defaultModel: 'auto',
+    };
+    const runtime = requiresCredentialReference(entered, platform)
+      ? await storeConnectionCredential(entered, new MemoryCredentialStore())
+      : entered;
+    saveConnection(runtime, tempDir);
+
+    const reloaded = getActiveConnection(loadConfig(tempDir));
+    expect(reloaded?.apiKey).toBe('mrd_freshkey');
+    expect(reloaded?.credentialReference).toBeUndefined();
+    expect((await resolveConnectionCredential(reloaded!, new MemoryCredentialStore())).apiKey).toBe('mrd_freshkey');
   });
 
   it('loads a saved public Gateway as the active connection without credentials', () => {

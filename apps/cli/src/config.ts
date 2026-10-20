@@ -266,8 +266,9 @@ export async function storeConnectionCredential(connection: ProviderConnection, 
   return { ...normalized, credentialReference: reference };
 }
 
+/** Windows is the only platform with a persistent credential store; elsewhere the key stays in config (mode 0600). */
 export function requiresCredentialReference(connection: Pick<ProviderConnection, 'id' | 'apiKey'>, platform: NodeJS.Platform = process.platform): boolean {
-  return Boolean(connection.apiKey?.trim()) && (platform === 'win32' || canonicalProviderId(connection.id) === 'moderado');
+  return platform === 'win32' && Boolean(connection.apiKey?.trim());
 }
 
 export async function resolveConnectionCredential(connection: ProviderConnection, store: CredentialStore): Promise<ProviderConnection> {
