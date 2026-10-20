@@ -12,7 +12,7 @@ import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
-import { connectProviderInteractive, isAuthenticationFailure, isModeradoCloudOAuthConnection, loginModeradoCloudInteractive, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
+import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthConnection, loginModeradoInteractive, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
@@ -29,6 +29,12 @@ import { getHelpCommandLines } from '../ui/help_content.js';
 
 export function createConnectionProvider(connection: ProviderConnection): NvidiaAdapter {
   return new NvidiaAdapter({ apiKey: connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
+}
+
+export function getProviderStatusName(connection?: Pick<ProviderConnection, 'id' | 'displayName'>): string | undefined {
+  return connection?.id === 'moderado' || connection?.id === 'moderado-cloud'
+    ? 'Moderado'
+    : connection?.displayName;
 }
 
 export function formatSessionExitSummary(session: StoredSession, modelId?: string): string {
@@ -952,7 +958,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     } else {
       let autoContinueRequested = false;
       const turn = await promptInteractiveTurn({
-        getProviderName: () => activeConnection?.displayName,
+        getProviderName: () => getProviderStatusName(activeConnection),
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
         usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
@@ -970,7 +976,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         }
         if (activeConnection.kind === 'openai-compatible') {
           const modelId = await selectCompatibleModelOverlay({
-            apiKey: activeConnection.id === 'moderado-cloud' ? undefined : activeConnection.apiKey,
+            apiKey: activeConnection.id === 'moderado' ? undefined : activeConnection.apiKey,
             baseUrl: activeConnection.baseUrl,
             providerId: activeConnection.id,
             providerName: activeConnection.displayName,
@@ -991,7 +997,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           }
           return modelId;
         }
-        const selection = await selectModelOverlay({ apiKey: activeConnection.id === 'moderado-cloud' ? undefined : activeConnection.apiKey, currentModel, signal, saveSelectionByDefault: true, drawFrame });
+        const selection = await selectModelOverlay({ apiKey: activeConnection.id === 'moderado' ? undefined : activeConnection.apiKey, currentModel, signal, saveSelectionByDefault: true, drawFrame });
         if (selection.modelId && selection.modelId !== currentModel) {
           currentModel = selection.modelId;
           activeConnection = { ...activeConnection, defaultModel: selection.modelId };
@@ -1009,7 +1015,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         const connection = await connectProviderInteractive({
           signal,
           drawFrame,
-          gatewayUrl: config.connections?.['moderado-cloud']?.baseUrl,
+          gatewayUrl: config.connections?.moderado?.baseUrl,
           activeConnection,
           savedConnections: config.connections,
           connectProviders: config.connectProviders,
@@ -1496,13 +1502,13 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         drawFrame: (popupLines) => {
           process.stdout.write('\x1b[H\x1b[J');
           process.stdout.write(renderWelcomePopupLayer({
-            provider: activeConnection?.displayName, model: currentModel ?? 'No model connected — use /connect',
+            provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect',
             tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace,
             mode: activeMode, autoApprove: activeAutoApprove,
             chatQuestion: lastQuestion, chatAnswer: lastAnswer,
           }, popupLines, process.stdout.columns, process.stdout.rows));
         },
-        gatewayUrl: config.connections?.['moderado-cloud']?.baseUrl,
+        gatewayUrl: config.connections?.moderado?.baseUrl,
         activeConnection,
         savedConnections: config.connections,
         connectProviders: config.connectProviders,
@@ -1741,15 +1747,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       } catch (error) {
         if (!activeConnection || !isAuthenticationFailure(error)) throw error;
         if (thinkingTimer) clearInterval(thinkingTimer);
-        const cloudOAuth = isModeradoCloudOAuthConnection(activeConnection);
-        const cloudWithoutKey = activeConnection.id === 'moderado-cloud' && !activeConnection.apiKey;
-        process.stdout.write(cloudWithoutKey
+        const moderadoOAuth = isModeradoOAuthConnection(activeConnection);
+        const moderadoWithoutKey = activeConnection.id === 'moderado' && !activeConnection.apiKey;
+        process.stdout.write(moderadoWithoutKey
           ? '\nThis free Gateway route requires a Moderado website API key. Sign in or enter a key to retry once.\n'
-          : cloudOAuth
-          ? '\nModerado Cloud rejected this browser login. Sign in again to retry once.\n'
+          : moderadoOAuth
+          ? '\nModerado rejected this browser login. Sign in again to retry once.\n'
           : `\nThe saved ${activeConnection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
-        const replacement = cloudOAuth || cloudWithoutKey
-          ? await loginModeradoCloudInteractive({ signal, gatewayUrl: activeConnection.baseUrl })
+        const replacement = moderadoOAuth || moderadoWithoutKey
+          ? await loginModeradoInteractive({ signal, gatewayUrl: activeConnection.baseUrl })
           : await replaceProviderKeyInteractive(activeConnection, { signal });
         if (!replacement) throw error;
         recordTurnUsage();

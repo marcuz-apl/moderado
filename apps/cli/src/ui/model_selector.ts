@@ -159,7 +159,7 @@ function compatibleModelPopupItem(model: CompatibleModelEntry, providerName: str
     value: model.id,
     tag: isFree ? 'Free' : model.access === 'paid' ? 'Paid' : 'Price unknown',
     description: isFree
-      ? model.access === 'free' && providerName === 'Moderado Cloud' ? `${providerName} free model · website API key required` : `${providerName} free model`
+      ? model.access === 'free' && providerName === 'Moderado' ? `${providerName} free model · website API key required` : `${providerName} free model`
       : price
         ? `${providerName} model · input $${Number(price) * 1_000_000}/M tokens`
         : `${providerName} model · pricing unavailable`,
@@ -170,6 +170,7 @@ export async function selectCompatibleModelOverlay(
   options: CompatibleModelSelectorOptions
 ): Promise<string | undefined> {
   const { apiKey, baseUrl, providerId, providerName, currentModel, signal, drawFrame } = options;
+  const isModerado = providerId === 'moderado' || providerId === 'moderado-cloud';
   // Whether the provider is entirely free is a declared property of the
   // preset, never a provider id hardcoded at the call site.
   const freePolicy = freeModelPolicyFor(providerId);
@@ -183,7 +184,7 @@ export async function selectCompatibleModelOverlay(
       .sort((a, b) => a.id.localeCompare(b.id));
   } catch (error) {
     // Explicit model entry remains available when a provider does not expose /models.
-    if (providerId === 'moderado-cloud') {
+    if (isModerado) {
       discoveryError = error instanceof ProviderError
         ? `${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
         : 'Could not load the model list. Check Gateway connectivity and retry /model.';
@@ -191,7 +192,7 @@ export async function selectCompatibleModelOverlay(
   }
 
   const cloudRoutes = models.filter((model) => model.id !== 'auto');
-  const cloudOptions = providerId === 'moderado-cloud'
+  const menuOptions = isModerado
     ? {
       listModelsDirectly: true,
       autoLabel: 'auto',
@@ -200,8 +201,9 @@ export async function selectCompatibleModelOverlay(
     : undefined;
 
   const picked = await selectListPopup(
-    providerId === 'moderado-cloud' ? `${providerName} Models` : `${providerName} Free Models`,
-    buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy, cloudOptions),
+    isModerado || !models.some((model) => isFreeCompatibleModel(model, freePolicy))
+      ? `${providerName} Models` : `${providerName} Free Models`,
+    buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy, menuOptions),
     { drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close' }
   );
   if (picked === null || picked === 'keep' || picked === 'cancel' || picked === 'catalog-status') return currentModel;

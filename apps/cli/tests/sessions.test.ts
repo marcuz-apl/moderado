@@ -45,6 +45,22 @@ describe('SessionStore', () => {
     expect(fs.readFileSync(store.getSessionPath(session), 'utf8')).not.toContain('apiKey');
   });
 
+  it('normalizes legacy Moderado provider identity when loading a session', () => {
+    const store = new SessionStore(tempHome());
+    const session = createSession('C:/repo');
+    session.providerId = 'moderado-cloud';
+    session.providerName = 'Moderado Cloud';
+    session.messages.push({ role: 'user', content: 'keep this history' });
+    fs.mkdirSync(path.dirname(store.getSessionPath(session)), { recursive: true });
+    fs.writeFileSync(store.getSessionPath(session), JSON.stringify(session));
+
+    expect(store.loadLatestSession('C:/repo')).toMatchObject({
+      providerId: 'moderado',
+      providerName: 'Moderado',
+      messages: [{ role: 'user', content: 'keep this history' }],
+    });
+  });
+
   it('calculates cost only when provider usage and both prices exist', () => {
     expect(calculateSessionCost(
       { promptTokens: 1000, completionTokens: 2000, totalTokens: 3000 },

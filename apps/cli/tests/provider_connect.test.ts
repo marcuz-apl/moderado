@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { createServer } from 'node:http';
 import { GatewayError } from '@moderado/contracts';
-import { authorizeModeradoCloudInBrowser, buildConnection, buildModeradoCloudConnection, connectProviderInteractive, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, loginModeradoCloudInteractive, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { authorizeModeradoCloudInBrowser, authorizeModeradoInBrowser, buildConnection, buildModeradoCloudConnection, buildModeradoConnection, connectProviderInteractive, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, isModeradoOAuthConnection, loginModeradoCloudInteractive, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
 import { stripAnsi } from '../src/ui/welcome.js';
 
 /** Minimal fake stdin: the code only attaches a `keypress` listener to it. */
@@ -22,15 +22,25 @@ const openRouter = {
 };
 
 describe('provider connection setup', () => {
-  it('offers NVIDIA NIM, Moderado Cloud, OpenRouter, and Agnes AI presets', () => {
+  it('offers the supported provider presets with the intended names and badges', () => {
     expect(PROVIDER_PRESETS.map((preset) => preset.value)).toEqual([
-      'moderado-cloud', 'nvidia-nim', 'agnes-ai', 'openrouter', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
+      'moderado', 'nvidia-nim', 'openrouter', 'ollama', 'lm-studio', 'openai-compatible',
     ]);
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'moderado')).toMatchObject({
+      label: 'Moderado',
+    });
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'nvidia-nim')).toMatchObject({
+      label: 'NVIDIA NIM',
+      tag: 'BYOK',
+    });
+    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')).toMatchObject({
+      label: 'OpenRouter',
+      tag: 'BYOK',
+    });
+    expect(PROVIDER_PRESETS.some((preset) => preset.label === 'Agnes AI' || preset.label === 'OrcaRouter')).toBe(false);
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')?.baseUrl)
       .toBe('https://openrouter.ai/api/v1');
-    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'agnes-ai')?.baseUrl)
-      .toBe('https://apihub.agnes-ai.com/v1');
-    expect(PROVIDER_PRESETS.find((preset) => preset.value === 'orcarouter')?.baseUrl).toBe('https://api.orcarouter.ai/v1');
+
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'ollama')?.baseUrl).toBe('http://127.0.0.1:11434/v1');
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'lm-studio')?.baseUrl).toBe('http://127.0.0.1:1234/v1');
   });
@@ -41,10 +51,7 @@ describe('provider connection setup', () => {
     expect(findReusableConnection('openai-compatible', { openrouter: openRouter })).toBeUndefined();
   });
 
-  it('defaults OrcaRouter to its free routing model', () => {
-    const orcarouter = PROVIDER_PRESETS.find((preset) => preset.value === 'orcarouter');
-    expect(orcarouter?.defaultModel).toBe('orcarouter/free');
-  });
+
   it('builds local providers without an API key', () => {
     expect(buildConnection({ kind: 'openai-compatible', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'qwen2.5-coder' })).toMatchObject({ id: 'ollama', apiKey: undefined });
     expect(buildConnection({ kind: 'openai-compatible', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', defaultModel: 'local-model' })).toMatchObject({ id: 'lm-studio', apiKey: undefined });
@@ -58,8 +65,9 @@ describe('provider connection setup', () => {
   });
 
   it('identifies expiring Moderado OAuth credentials for browser reauthorization', () => {
-    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', credentialExpiresAt: Date.now(), displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://mod.alfazen.org/v1' })).toBe(true);
-    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://mod.alfazen.org/v1' })).toBe(false);
+    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', credentialExpiresAt: Date.now(), displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://modr.alfazen.org/v1' })).toBe(true);
+    expect(isModeradoCloudOAuthConnection({ id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible', baseUrl: 'https://modr.alfazen.org/v1' })).toBe(false);
+    expect(isModeradoOAuthConnection({ id: 'moderado', credentialExpiresAt: Date.now(), displayName: 'Moderado', kind: 'openai-compatible', baseUrl: 'https://modr.alfazen.org/v1' })).toBe(true);
   });
 
   it('renders credential entry as a popup, masking secrets', () => {
@@ -86,18 +94,19 @@ describe('provider connection setup', () => {
       .toThrow('/v1');
   });
 
-  it('builds a Moderado Cloud profile from a key and manages the Gateway URL', () => {
+  it('builds a canonical Moderado profile from a key and manages the Gateway URL', () => {
     const previous = process.env.MODERADO_CLOUD_ENV;
     delete process.env.MODERADO_CLOUD_ENV;
     try {
-      expect(buildModeradoCloudConnection('mrd_test-key')).toEqual({
-        id: 'moderado-cloud',
-        displayName: 'Moderado Cloud',
+      expect(buildModeradoConnection('mrd_test-key')).toEqual({
+        id: 'moderado',
+        displayName: 'Moderado',
         kind: 'openai-compatible',
-        baseUrl: 'https://mod.alfazen.org/v1',
+        baseUrl: 'https://modr.alfazen.org/v1',
         apiKey: 'mrd_test-key',
         defaultModel: 'auto',
       });
+      expect(buildModeradoCloudConnection('mrd_test-key')).toEqual(buildModeradoConnection('mrd_test-key'));
       expect(() => buildModeradoCloudConnection('sk_wrong')).toThrow('mrd_');
       expect(() => buildModeradoCloudConnection('mrd_')).toThrow('mrd_');
     } finally {
@@ -110,7 +119,7 @@ describe('provider connection setup', () => {
     process.env.MODERADO_CLOUD_BASE_URL = 'https://gateway.example/v1/';
     try {
       expect(buildModeradoCloudConnection()).toEqual({
-        id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
+        id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible',
         baseUrl: 'https://gateway.example/v1', apiKey: undefined, defaultModel: 'auto',
       });
     } finally {
@@ -153,9 +162,9 @@ describe('provider connection setup', () => {
     }
   });
 
-  it('builds a Moderado Cloud profile from a browser token with expiry metadata', () => {
+  it('builds a Moderado profile from a browser token with expiry metadata', () => {
     expect(buildModeradoCloudConnection('mrd_oauth-token', Date.now() + 2_592_000_000)).toMatchObject({
-      id: 'moderado-cloud',
+      id: 'moderado',
       apiKey: 'mrd_oauth-token',
       credentialExpiresAt: expect.any(Number),
       defaultModel: 'auto',
@@ -186,7 +195,7 @@ describe('browser sign-in wait', () => {
   // the async keypress handler (which would crash the TUI).
   it('returns undefined when Esc cancels the wait instead of hanging', async () => {
     const stdin = fakeStdin();
-    const pending = authorizeModeradoCloudInBrowser(undefined, {
+    const pending = authorizeModeradoInBrowser(undefined, {
       stdin: stdin as unknown as NodeJS.ReadStream,
       openBrowser: () => setImmediate(() => stdin.emit('keypress', undefined, { name: 'escape' })),
       timeoutMs: 60_000, // would fail the test if cancel did not work
@@ -348,7 +357,7 @@ describe('repeat Cloud login', () => {
       },
     });
     const lines = frames.find((frame) => frame.some((line) => stripAnsi(line).includes('Moderado Gateway Base URL')))!.map(stripAnsi);
-    expect(lines.join('\n')).toContain('https://mod.alfazen.org/v1');
+    expect(lines.join('\n')).toContain('https://modr.alfazen.org/v1');
     expect(lines.join('\n')).toContain('Ctrl+A clear to edit');
     expect(lines.every((line) => line.length <= lines[0].length)).toBe(true);
     expect(keyFrame).toContain('Moderado Gateway API key');
@@ -359,7 +368,7 @@ describe('unified provider connection', () => {
   it('shows a saved Gateway key masked and reuses it when confirmed', async () => {
     const saved = {
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible' as const,
-      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_hidden-secret', defaultModel: 'auto',
+      baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_hidden-secret', defaultModel: 'auto',
     };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1_500);
@@ -408,7 +417,7 @@ describe('unified provider connection', () => {
   it('lets the user select Dev Mode for the Gateway and shows both /v1 URLs', async () => {
     const saved = {
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible' as const,
-      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_saved-key', defaultModel: 'auto',
+      baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_saved-key', defaultModel: 'auto',
     };
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1_000);
@@ -450,7 +459,7 @@ describe('unified provider connection', () => {
           }
         },
       });
-      expect(productionModeFrame).toContain('https://mod.alfazen.org/v1');
+      expect(productionModeFrame).toContain('https://modr.alfazen.org/v1');
       expect(developmentModeFrame).toContain('http://127.0.0.1:4788/v1');
       expect(urlFrame).toContain('http://127.0.0.1:4788/v1');
       expect(result?.baseUrl).toBe('http://127.0.0.1:4788/v1');
@@ -498,7 +507,7 @@ describe('unified provider connection', () => {
           } else if (frame.includes('Moderado Gateway API key') && !seen.has('key')) {
             seen.add('key');
             setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Cloud Models') && !seen.has('model')) {
+          } else if (frame.includes('Moderado Models') && !seen.has('model')) {
             seen.add('model');
             setImmediate(() => {
               process.stdin.emit('keypress', undefined, { name: 'down' });
@@ -507,7 +516,7 @@ describe('unified provider connection', () => {
           }
         },
       });
-      expect(result).toMatchObject({ id: 'moderado-cloud', defaultModel: 'vendor/route-one' });
+      expect(result).toMatchObject({ id: 'moderado', displayName: 'Moderado', defaultModel: 'vendor/route-one' });
       expect([...seen]).toEqual(['provider', 'mode', 'url', 'key', 'model']);
     } finally {
       clearTimeout(timeout);

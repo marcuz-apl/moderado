@@ -10,6 +10,7 @@ import {
   createConnectionProvider,
   decideApproval,
   formatDirectWebSearchAnswer,
+  getProviderStatusName,
   handleChatSession,
   handleGenerationKeypress,
   isBareExitCommand,
@@ -121,8 +122,23 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
     }, tempDir);
     const connection = getActiveConnection(loadConfig(tempDir));
-    expect(connection).toMatchObject({ id: 'moderado-cloud', defaultModel: 'auto' });
+    expect(connection).toMatchObject({ id: 'moderado', displayName: 'Moderado', defaultModel: 'auto' });
     expect(connection?.apiKey).toBeUndefined();
+  });
+
+  it('shows the concise Moderado provider name for saved Gateway profiles', () => {
+    expect(getProviderStatusName({
+      id: 'moderado-cloud',
+      displayName: 'Moderado Cloud',
+    })).toBe('Moderado');
+    expect(getProviderStatusName({
+      id: 'moderado',
+      displayName: 'Moderado',
+    })).toBe('Moderado');
+    expect(getProviderStatusName({
+      id: 'openrouter',
+      displayName: 'OpenRouter',
+    })).toBe('OpenRouter');
   });
 
   it('sends the saved Cloud key on inference while keeping keyless paid routes possible', async () => {

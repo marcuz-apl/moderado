@@ -31,7 +31,14 @@ export class SessionStore {
     const dir = this.getDirectory(workspaceRoot);
     if (!fs.existsSync(dir)) return [];
     return fs.readdirSync(dir).filter((entry) => entry.endsWith('.json')).flatMap((entry) => {
-      try { return [StoredSessionSchema.parse(JSON.parse(fs.readFileSync(path.join(dir, entry), 'utf8')))]; } catch { return []; }
+      try {
+        const session = StoredSessionSchema.parse(JSON.parse(fs.readFileSync(path.join(dir, entry), 'utf8')));
+        return [{
+          ...session,
+          providerId: session.providerId === 'moderado-cloud' ? 'moderado' : session.providerId,
+          providerName: session.providerName === 'Moderado Cloud' ? 'Moderado' : session.providerName,
+        }];
+      } catch { return []; }
     }).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
   loadLatestSession(workspaceRoot: string): StoredSession | undefined { return this.listSessions(workspaceRoot)[0]; }

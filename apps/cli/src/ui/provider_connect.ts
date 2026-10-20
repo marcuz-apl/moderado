@@ -1,4 +1,4 @@
-import { freeModelPolicyFor, resolveModeradoCloudBaseUrl, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
+import { freeModelPolicyFor, resolveModeradoBaseUrl, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId, type ProviderFreePolicy } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
@@ -41,11 +41,9 @@ export interface ProviderPreset {
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
-  { label: 'Moderado Gateway', value: 'moderado-cloud', tag: 'Free Models', description: 'Use browser sign-in, a saved key, a new key, or public access.' },
-  { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'Default · Free-first', displayName: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', description: 'Use NVIDIA NIM with automatic free-model routing.' },
-  { label: 'Agnes AI', value: 'agnes-ai', tag: 'Free Models', displayName: 'Agnes AI', baseUrl: 'https://apihub.agnes-ai.com/v1', description: 'Connect your Agnes AI key to access free endpoints.' },
-  { label: 'OpenRouter', value: 'openrouter', tag: 'Free Models', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access free tier models.' },
-  { label: 'OrcaRouter', value: 'orcarouter', tag: 'Free Models', displayName: 'OrcaRouter', baseUrl: 'https://api.orcarouter.ai/v1', defaultModel: 'orcarouter/free', description: 'Connect OrcaRouter for adaptive model routing.' },
+  { label: 'Moderado', value: 'moderado', tag: 'Free Models', description: 'Use browser sign-in, a saved key, a new key, or public access.' },
+  { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'BYOK', displayName: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', description: 'Use NVIDIA NIM with automatic free-model routing.' },
+  { label: 'OpenRouter', value: 'openrouter', tag: 'BYOK', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access models.' },
   { label: 'Ollama', value: 'ollama', tag: 'Local', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', description: 'Use models served locally by Ollama.' },
   { label: 'LM Studio', value: 'lm-studio', tag: 'Local', displayName: 'LM Studio', baseUrl: 'http://127.0.0.1:1234/v1', description: 'Use models served by LM Studio local server.' },
   { label: 'Other OpenAI-compatible provider', value: 'openai-compatible', description: 'Connect any compatible endpoint with its base URL, key, and model ID.' },
@@ -81,7 +79,11 @@ export function isAuthenticationFailure(error: unknown): boolean {
 }
 
 export function isModeradoCloudOAuthConnection(connection: ProviderConnection): boolean {
-  return connection.id === 'moderado-cloud' && connection.credentialExpiresAt !== undefined;
+  return isModeradoOAuthConnection(connection);
+}
+
+export function isModeradoOAuthConnection(connection: ProviderConnection): boolean {
+  return (connection.id === 'moderado' || connection.id === 'moderado-cloud') && connection.credentialExpiresAt !== undefined;
 }
 
 export function renderConnectionPrompt(label: string, value: string, secret = false): string[] {
@@ -148,7 +150,7 @@ export function buildConnection(input: ConnectionInput): ProviderConnection {
   const displayName = input.displayName?.trim() || 'OpenAI-compatible provider';
   const defaultModel = input.defaultModel?.trim();
   if (!defaultModel) throw new Error('A default model is required for an OpenAI-compatible provider.');
-  if (!input.apiKey?.trim() && !['ollama', 'lm-studio', 'moderado-cloud'].includes(connectionId(displayName))) throw new Error('An API key is required.');
+  if (!input.apiKey?.trim() && !['ollama', 'lm-studio', 'moderado'].includes(connectionId(displayName))) throw new Error('An API key is required.');
   if (!input.baseUrl?.trim()) throw new Error('A base URL is required.');
 
   return {
@@ -173,21 +175,23 @@ function validateProviderBaseUrl(value: string): string {
 }
 
 /** Build a public paid-route profile or a keyed Gateway profile. */
-export function buildModeradoCloudConnection(apiKey?: string, credentialExpiresAt?: number, gatewayUrl?: string): ProviderConnection {
+export function buildModeradoConnection(apiKey?: string, credentialExpiresAt?: number, gatewayUrl?: string): ProviderConnection {
   const key = apiKey?.trim();
-  if (key && !/^mrd_.+/.test(key)) throw new Error('Enter a Moderado Cloud key starting with mrd_.');
+  if (key && !/^mrd_.+/.test(key)) throw new Error('Enter a Moderado key starting with mrd_.');
   const connection = buildConnection({
     kind: 'openai-compatible',
-    displayName: 'Moderado Cloud',
-    baseUrl: gatewayUrl ?? resolveModeradoCloudBaseUrl(
-      process.env.MODERADO_CLOUD_ENV,
-      process.env.MODERADO_CLOUD_BASE_URL,
+    displayName: 'Moderado',
+    baseUrl: gatewayUrl ?? resolveModeradoBaseUrl(
+      process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV,
+      process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL,
     ),
     apiKey: key,
     defaultModel: 'auto',
   });
   return credentialExpiresAt === undefined ? connection : { ...connection, credentialExpiresAt };
 }
+
+export const buildModeradoCloudConnection = buildModeradoConnection;
 
 function openAuthorizationPage(url: string): void {
   const [program, args] = process.platform === 'win32'
@@ -215,7 +219,7 @@ export interface BrowserLoginOptions {
 const DEFAULT_BROWSER_LOGIN_TIMEOUT_MS = 5 * 60_000;
 
 function waitingForBrowserFrame(): string[] {
-  return renderBoxLines('Moderado Cloud', [
+  return renderBoxLines('Moderado', [
     'Sign-in page opened in your browser.',
     '',
     'Complete the sign-in, then return here.',
@@ -231,7 +235,7 @@ function waitingForBrowserFrame(): string[] {
  * settle every non-success path as `undefined` (never a rejection, which would
  * surface as an unhandled rejection inside the async keypress handler).
  */
-export async function authorizeModeradoCloudInBrowser(
+export async function authorizeModeradoInBrowser(
   signal?: AbortSignal,
   options: BrowserLoginOptions = {},
 ): Promise<{ accessToken: string; expiresAt: number } | undefined> {
@@ -265,7 +269,7 @@ export async function authorizeModeradoCloudInBrowser(
         if (key?.name === 'escape' || (key?.ctrl && key?.name === 'c')) finish(undefined);
       };
       const timeout = setTimeout(() => {
-        options.drawFrame?.(renderBoxLines('Moderado Cloud', [
+        options.drawFrame?.(renderBoxLines('Moderado', [
           'Browser sign-in timed out.',
           '',
           'Run /connect again when you are ready to sign in.',
@@ -299,7 +303,9 @@ export async function authorizeModeradoCloudInBrowser(
   }
 }
 
-async function chooseModeradoCloudModel(connection: ProviderConnection, options: PopupConnectionOptions): Promise<ProviderConnection> {
+export const authorizeModeradoCloudInBrowser = authorizeModeradoInBrowser;
+
+async function chooseModeradoModel(connection: ProviderConnection, options: PopupConnectionOptions): Promise<ProviderConnection> {
   if (!options.drawFrame) return connection;
   const modelId = await selectCompatibleModelOverlay({
     apiKey: connection.apiKey,
@@ -313,22 +319,22 @@ async function chooseModeradoCloudModel(connection: ProviderConnection, options:
   return modelId ? { ...connection, defaultModel: modelId } : connection;
 }
 
-export async function loginModeradoCloudInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+export async function loginModeradoInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
   const modes = [
-    { label: 'Prod Mode', value: 'production', description: 'https://mod.alfazen.org/v1' },
+    { label: 'Prod Mode', value: 'production', description: 'https://modr.alfazen.org/v1' },
     { label: 'Dev Mode', value: 'development', description: 'http://127.0.0.1:4788/v1' },
   ];
-  if (process.env.MODERADO_CLOUD_ENV === 'development') modes.reverse();
+  if ((process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV) === 'development') modes.reverse();
   const defaultMode = 0;
   const selectedMode = options.drawFrame
     ? await selectListPopup('Moderado Gateway Mode', modes, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
     : (await askSelect('Moderado Gateway Mode', modes, defaultMode, { signal: options.signal })).value;
   if (!selectedMode || options.signal?.aborted) return undefined;
-  const baseUrl = resolveModeradoCloudBaseUrl(selectedMode, process.env.MODERADO_CLOUD_BASE_URL);
+  const baseUrl = resolveModeradoBaseUrl(selectedMode, process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL);
   const enteredBaseUrl = await askProviderBaseUrl('Moderado Gateway Base URL', baseUrl, options);
   if (!enteredBaseUrl) return undefined;
   let savedConnection: ProviderConnection | undefined;
-  const saved = options.savedConnections?.['moderado-cloud'];
+  const saved = options.savedConnections?.moderado ?? options.savedConnections?.['moderado-cloud'];
   if (saved) {
     try {
       const resolved = options.resolveSavedConnection ? await options.resolveSavedConnection(saved) : saved;
@@ -344,8 +350,8 @@ export async function loginModeradoCloudInteractive(options: PopupConnectionOpti
     if (apiKey === undefined) return undefined;
     try {
       const credentialExpiresAt = apiKey === savedConnection?.apiKey ? savedConnection.credentialExpiresAt : undefined;
-      const connection = buildModeradoCloudConnection(apiKey || undefined, credentialExpiresAt, enteredBaseUrl);
-      return chooseModeradoCloudModel(connection, options);
+      const connection = buildModeradoConnection(apiKey || undefined, credentialExpiresAt, enteredBaseUrl);
+      return chooseModeradoModel(connection, options);
     } catch (error) {
       prompt = `Invalid key: ${error instanceof Error ? error.message : String(error)} Try again`;
       initialKey = '';
@@ -353,6 +359,8 @@ export async function loginModeradoCloudInteractive(options: PopupConnectionOpti
   }
   return undefined;
 }
+
+export const loginModeradoCloudInteractive = loginModeradoInteractive;
 
 async function askProviderBaseUrl(label: string, initialValue: string, options: PopupConnectionOptions): Promise<string | undefined> {
   while (!options.signal?.aborted) {
@@ -378,7 +386,7 @@ export async function connectProviderInteractive(options: PopupConnectionOptions
   if (options.signal?.aborted) return undefined;
   const selectedPreset = choices.find((item) => item.value === selectedValue);
   if (!selectedPreset) return undefined;
-  if (selectedPreset.value === 'moderado-cloud') return loginModeradoCloudInteractive(options);
+  if (selectedPreset.value === 'moderado') return loginModeradoInteractive(options);
   const saved = findReusableConnection(selectedPreset.value, options.savedConnections);
   if (saved && options.resolveSavedConnection) {
     try {
