@@ -123,6 +123,7 @@ USAGE:
   moderado upgrade
   moderado run "<task>" [options]
   moderado "<task>" [options]
+  (every command is also available through the "modr" alias)
 
 COMMANDS:
   models                 Discover live models, capability & access tiers

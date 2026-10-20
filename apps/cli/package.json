@@ -1,10 +1,11 @@
 {
   "name": "moderado",
-  "version": "0.4.31",
+  "version": "0.4.32",
   "description": "A lightweight, provider-independent CLI coding agent with free-first model routing.",
   "type": "module",
   "bin": {
-    "moderado": "./dist/index.js"
+    "moderado": "./dist/index.js",
+    "modr": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

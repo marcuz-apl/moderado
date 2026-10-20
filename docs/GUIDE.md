@@ -7,7 +7,7 @@ quick start. This guide reflects the 0.4.28 release candidate. Its `/connect`
 flow handles the Gateway and direct provider connections; the previous
 0.4.8 release uses `/login` for the Gateway. The earlier v0.3.10 release
 is self-contained and does not require the Gateway. All three use the
-`moderado` command name.
+`moderado` command name, with `modr` as a short alias.
 
 ---
 

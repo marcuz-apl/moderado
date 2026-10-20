@@ -9,6 +9,11 @@ describe('CLI package metadata', () => {
     expect(manifest.version).toBe(version.replace(/^v/, '').split(/[+-]/)[0]);
   });
 
+  it('exposes both the long and the short command name', () => {
+    const manifest = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8')) as Record<string, unknown>;
+    expect(manifest.bin).toEqual({ moderado: './dist/index.js', modr: './dist/index.js' });
+  });
+
   it('declares a Node 20+ MIT distributable CLI package', () => {
     const manifest = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, '../package.json'), 'utf8')) as Record<string, unknown>;
     expect(manifest.license).toBe('MIT');

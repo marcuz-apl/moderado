@@ -93,7 +93,7 @@ interrupted chat sessions. Its `/connect` flow handles the
 Gateway and direct providers; `/login` is no longer offered. The previous
 0.4.8 release uses `/login` for the Gateway. The earlier 0.3.10 release is
 self-contained and works without the Gateway. All three use the `moderado`
-command name.
+command name, with `modr` as a short alias.
 
 Install the latest release with `npm install -g moderado`. To install a specific
 version, run `npm install -g moderado@<version>`. Prebuilt binaries and the curl
