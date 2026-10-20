@@ -15,6 +15,7 @@ v0.4.26 (Unified provider connection flow)
 - **Scope**: `apps/cli` composer status line
 - **Key Deliverables**:
   - **Composer status**: The bottom row now shows the active provider before the model as `provider | model`, including after switching connections.
+  - **Maximized layout**: The chat view repaints immediately after a terminal resize, keeping the question, answer, and composer centered at wide widths.
 
 ### [v0.4.28] — 2026-10-15
 **Fix: Organized help navigation and resilient chat recovery**

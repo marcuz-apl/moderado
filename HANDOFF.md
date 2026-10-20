@@ -428,3 +428,9 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
 - CLI package and lockfile metadata synced to the connected version; current connected version is `v0.4.29+2610201`, with package version `0.4.29`.
 - Checks: `npm run build` PASS; `npm test` PASS (65 files, 628 tests); focused composer and metadata tests PASS.
 - Blockers: None. Next action: Commit and push the verified status row and metadata changes.
+
+## Centered CLI on terminal resize (2026-10-20 15:01 UTC)
+
+- Branch: `master`; chat generation now repaints the frame when the terminal width changes, so maximized windows keep the question, answer, and composer centered. The resize listener is removed when generation ends.
+- Tests cover a 200-column static frame and a resize during streamed output. Checks: `npm run build` PASS; `npm test` PASS (65 files, 632 tests); `git diff --check` PASS.
+- Blockers: None. Next action: Review the centered-layout diff and commit the change.

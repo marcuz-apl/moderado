@@ -562,6 +562,35 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(firstContentRow).toBeLessThan(18);
   });
 
+  it('keeps the header, card, and chat frame centered on a maximized 200-column terminal', () => {
+    const width = 200;
+    const cardWidth = getWelcomeCardWidth(width);   // capped at 120
+    const indent = getWelcomeIndent(cardWidth, width); // (200 - 120) / 2 = 40
+    expect(cardWidth).toBe(120);
+    expect(indent).toBe(40);
+
+    const base = {
+      model: 'moonshotai/kimi-k3', tokens: 0, cost: '$0.00', workspace: '/workspace',
+      mode: 'Execute' as const, autoApprove: false, width,
+    };
+    const frames = [
+      stripAnsi(renderModeradoHeader(width)),
+      stripAnsi(renderWelcomeCard(base)),
+      stripAnsi(renderChatScreen({ ...base, chatQuestion: 'Refactor the database layer', chatAnswer: 'Here is the plan.' }, 40)),
+    ];
+    for (const frame of frames) {
+      for (const line of frame.split('\n')) {
+        // Nothing paints left of the centered card's first column…
+        expect(line.slice(0, indent)).toMatch(/^ *$/);
+        // …and nothing escapes past its last column.
+        expect(line.length).toBeLessThanOrEqual(indent + cardWidth);
+      }
+    }
+    // The chat question row starts exactly at the card's first column.
+    const chatLines = stripAnsi(renderChatScreen({ ...base, chatQuestion: 'Refactor the database layer', chatAnswer: 'Here is the plan.' }, 40)).split('\n');
+    expect(chatLines.some((line) => line.startsWith(' '.repeat(indent) + '❯ '))).toBe(true);
+  });
+
   it('composites popups over a dimmed welcome window instead of appending them', () => {
     const rendered = renderWelcomePopupLayer({
       model: 'Auto (Free-First)', tokens: 0, cost: '$0.00', workspace: 'd:\\test',

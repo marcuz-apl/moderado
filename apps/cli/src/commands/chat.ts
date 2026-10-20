@@ -1660,6 +1660,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         });
       };
       if (process.stdin.isTTY) {
+        const onGenerationResize = (): void => redrawChatFrame();
+        process.stdout.on('resize', onGenerationResize);
         const attachGenerationListener = (): void => {
           readline.emitKeypressEvents(process.stdin);
           process.stdin.resume();
@@ -1674,6 +1676,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         };
         removeGenerationListener = () => {
           process.stdin.removeListener('keypress', onGenerationKeypress);
+          process.stdout.removeListener('resize', onGenerationResize);
           suspendGenerationInput = undefined;
         };
       }
