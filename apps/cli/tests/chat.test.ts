@@ -679,6 +679,17 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(errorText).not.toContain('choose a provider with `/connect`');
   });
 
+  it('guides Gateway authorization failures to the current connection flow', () => {
+    const errorText = formatTurnFailureAnswer('failed', {
+      code: 'ERR_GATEWAY_UNAUTHORIZED',
+      message: 'Moderado could not authorize this request. Use /connect to enter a website key, or set MODERADO_API_KEY.',
+    }, 'auto');
+
+    expect(errorText).toContain('Use /connect to enter a website key');
+    expect(errorText).not.toContain('Switch models with `/model`');
+    expect(errorText).not.toContain('/login');
+  });
+
   it('resolves current turn assistant answer without leaking earlier turn answers on failure', () => {
     // Simulate Turn 1: user asked "Who are you?", assistant answered "I am Moderado."
     const turn1History: ChatMessage[] = [

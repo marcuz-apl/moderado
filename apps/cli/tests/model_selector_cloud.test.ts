@@ -97,7 +97,7 @@ describe('Moderado model picker discovery', () => {
     expect(pickerState.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         label: 'Model list unavailable',
-        description: expect.stringContaining('rejected the API key'),
+        description: expect.stringContaining('Use /connect to enter a website key'),
       }),
     ]));
     expect(pickerState.items.some((item) => item.description?.includes('must not be displayed'))).toBe(false);

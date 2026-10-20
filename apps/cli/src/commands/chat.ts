@@ -205,6 +205,9 @@ export function formatTurnFailureAnswer(
   const cleanDetail = rawDetail
     .replace(/^(?:NVIDIA NIM|OpenAI|OpenRouter|[a-zA-Z0-9_-]+)\s*(?:request failed|rate limit exceeded|service or model unavailable)?\s*(?:\([^)]*\))?\s*(?:during\s*streamChat)?:\s*/i, '')
     .trim();
+  if (errorEvent?.code === 'ERR_GATEWAY_UNAUTHORIZED') {
+    return `⚠️ **Gateway Authorization (${errorEvent.code}):**\n${cleanDetail}`;
+  }
   if (errorEvent?.code?.toUpperCase().includes('RATE_LIMIT')) {
     return `⚠️ **Model Error (${errorEvent.code}):**\n${cleanDetail || 'Provider rate limit reached.'}\n\n👉 **Suggestion:** The provider temporarily limited requests for \`${modelId}\`. Please retry shortly or choose another model with \`/model\`.`;
   }

@@ -12,7 +12,7 @@ export class ProviderError extends Error {
 }
 
 const GATEWAY_ERROR_MESSAGES: Record<string, string> = {
-  unauthorized: 'Moderado rejected the API key. Run /login to authorize again.',
+  unauthorized: 'Moderado could not authorize this request. Use /connect to enter a website key, or set MODERADO_API_KEY.',
   scope_denied: 'This Moderado key is not authorized for the selected model. Choose an allowed model or use another key.',
   invalid_request: 'Moderado rejected the request. Check the model, messages, tools, and token limit.',
   model_unavailable: 'The selected Moderado model is unavailable. Choose another available model.',

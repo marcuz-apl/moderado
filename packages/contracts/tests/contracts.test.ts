@@ -124,7 +124,7 @@ describe('Contracts: Provider Error Hierarchy', () => {
   });
 
   it('uses the canonical Moderado name in Gateway errors', () => {
-    expect(new GatewayError('unauthorized', 401).message).toBe('Moderado rejected the API key. Run /login to authorize again.');
+    expect(new GatewayError('unauthorized', 401).message).toBe('Moderado could not authorize this request. Use /connect to enter a website key, or set MODERADO_API_KEY.');
     expect(new GatewayError('service_unavailable', 503).message).toBe('Moderado is temporarily unavailable. Try again later.');
   });
 });
