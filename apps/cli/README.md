@@ -143,27 +143,32 @@ Maintainers can install a verified release artifact directly with
 
 ### Connect to the Moderado Gateway
 
-In the current source build, run `/connect`, choose Moderado Gateway, and then
+In the current source build, run `/connect`, choose Moderado, and then
 choose public access or sign in.
-Browser authorization or a Moderado Cloud `mrd_` API key is optional for account
+Browser authorization or a Moderado `mrd_` API key is optional for account
 features. `/model` lists configured Gateway routes: `auto` follows Gateway
 routing, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
-The same `/connect` menu offers OpenRouter, NVIDIA NIM, Agnes AI, OrcaRouter,
-Ollama, LM Studio, and custom OpenAI-compatible providers. The published 0.4.8
-release still uses `/login` for the Gateway.
+The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama,
+LM Studio, and custom OpenAI-compatible providers. The published 0.4.8 release
+still uses `/login` for the Gateway.
 
-Cloud OAuth credentials last 30 days and have no refresh token; authorize again
+Moderado OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
 On other platforms, the current credential store is memory-only, so log in again
 after starting a new CLI process.
 
-Cloud connections use their configured Gateway URL. Loopback URLs such as
+Moderado connections use their configured Gateway URL. Loopback URLs such as
 `http://127.0.0.1:4788/v1` are treated as local development; HTTPS URLs for a
 NAS, VPS, or other remote host are used as configured. To set the URL before
-first login, define `MODERADO_CLOUD_BASE_URL`. `MODERADO_CLOUD_ENV=development`
-and `MODERADO_CLOUD_ENV=production` remain available as explicit overrides.
+first login, define `MODERADO_BASE_URL`. Production defaults to
+`https://modr.alfazen.org/v1`; `MODERADO_ENV=development` selects the local
+server and `MODERADO_ENV=production` explicitly selects production. The legacy
+`MODERADO_CLOUD_ENV` and `MODERADO_CLOUD_BASE_URL` names remain fallbacks when
+their corresponding canonical variables are unset. For an environment-provided
+Moderado key, use `MODERADO_API_KEY`; `MODERADO_CLOUD_API_KEY` remains its
+fallback when the canonical variable is unset.
 
 Run `moderado doctor` to inspect local setup without exposing secrets. Add
 `--connectivity` only when you want an optional live model-catalog check.
@@ -177,7 +182,7 @@ an API key or a preselected model. The welcome card shows **No model connected â
 use `/connect`** until you add one.
 
 Use `/connect` to choose the Gateway or another provider. The Gateway offers a
-route picker after connection; `/model` can change the route later. Cloud `auto`
+route picker after connection; `/model` can change the route later. Moderado `auto`
 follows the Gateway's configured pool, while choosing a route pins subsequent
 requests to it.
 
@@ -186,14 +191,14 @@ requests to it.
 Moderado stores sessions per workspace in `~/.moderado/sessions/`. Use
 `/session` to create, resume, export, or compact a local conversation. Session
 exports redact recognized API-key prefixes. The status line uses only
-provider-reported token usage. It shows `$0.00` for Moderado Cloud free routes,
+provider-reported token usage. It shows `$0.00` for Moderado free routes,
 calculates cost when a model exposes prompt and completion prices, and shows
 **Cost unknown** when a metered model's pricing is unavailable.
 
 Saved OpenAI-compatible profiles continue to support providers such as
 OpenRouter, Z.AI, DeepSeek, Moonshot, and Mistral. Compatibility depends on each
 provider supporting `/v1/models` and streaming `/v1/chat/completions` with tool
-calls. Cloud keys are never written in plaintext to `~/.moderado/config.json`.
+calls. Moderado keys are never written in plaintext to `~/.moderado/config.json`.
 
 ### 1. Build & Test
 ```bash

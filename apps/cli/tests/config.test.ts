@@ -22,11 +22,11 @@ import { MemoryCredentialStore } from '../src/credentials.js';
 describe('CLI Configuration Storage', () => {
   let tempDir: string;
   const origKey = process.env.NVIDIA_API_KEY;
-  const origCloudEnv = process.env.MODERADO_CLOUD_ENV;
+  const origLegacyModeradoEnv = process.env.MODERADO_CLOUD_ENV;
   const origModeradoEnv = process.env.MODERADO_ENV;
-  const origCloudBaseUrl = process.env.MODERADO_CLOUD_BASE_URL;
+  const origLegacyModeradoBaseUrl = process.env.MODERADO_CLOUD_BASE_URL;
   const origModeradoBaseUrl = process.env.MODERADO_BASE_URL;
-  const origCloudApiKey = process.env.MODERADO_CLOUD_API_KEY;
+  const origLegacyModeradoApiKey = process.env.MODERADO_CLOUD_API_KEY;
   const origModeradoApiKey = process.env.MODERADO_API_KEY;
 
   beforeEach(() => {
@@ -46,15 +46,15 @@ describe('CLI Configuration Storage', () => {
     } else {
       delete process.env.NVIDIA_API_KEY;
     }
-    if (origCloudEnv !== undefined) process.env.MODERADO_CLOUD_ENV = origCloudEnv;
+    if (origLegacyModeradoEnv !== undefined) process.env.MODERADO_CLOUD_ENV = origLegacyModeradoEnv;
     else delete process.env.MODERADO_CLOUD_ENV;
     if (origModeradoEnv !== undefined) process.env.MODERADO_ENV = origModeradoEnv;
     else delete process.env.MODERADO_ENV;
-    if (origCloudBaseUrl !== undefined) process.env.MODERADO_CLOUD_BASE_URL = origCloudBaseUrl;
+    if (origLegacyModeradoBaseUrl !== undefined) process.env.MODERADO_CLOUD_BASE_URL = origLegacyModeradoBaseUrl;
     else delete process.env.MODERADO_CLOUD_BASE_URL;
     if (origModeradoBaseUrl !== undefined) process.env.MODERADO_BASE_URL = origModeradoBaseUrl;
     else delete process.env.MODERADO_BASE_URL;
-    if (origCloudApiKey !== undefined) process.env.MODERADO_CLOUD_API_KEY = origCloudApiKey;
+    if (origLegacyModeradoApiKey !== undefined) process.env.MODERADO_CLOUD_API_KEY = origLegacyModeradoApiKey;
     else delete process.env.MODERADO_CLOUD_API_KEY;
     if (origModeradoApiKey !== undefined) process.env.MODERADO_API_KEY = origModeradoApiKey;
     else delete process.env.MODERADO_API_KEY;
@@ -85,7 +85,7 @@ describe('CLI Configuration Storage', () => {
           id: 'moderado-cloud',
           displayName: 'Moderado Cloud',
           kind: 'openai-compatible',
-          baseUrl: 'https://mod.alfazen.org/v1',
+          baseUrl: 'https://modr.alfazen.org/v1',
           credentialReference: 'moderado/provider/moderado-cloud',
         },
       },
@@ -135,7 +135,7 @@ describe('CLI Configuration Storage', () => {
       connections: {
         'moderado-cloud': {
           id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-          baseUrl: 'https://mod.alfazen.org/v1', credentialReference: 'moderado/provider/moderado-cloud',
+          baseUrl: 'https://modr.alfazen.org/v1', credentialReference: 'moderado/provider/moderado-cloud',
         },
       },
     }));
@@ -238,7 +238,7 @@ describe('CLI Configuration Storage', () => {
     const store = new MemoryCredentialStore();
     const connection = await storeConnectionCredential({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_test-secret', defaultModel: 'auto',
+      baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_test-secret', defaultModel: 'auto',
     }, store);
     expect(connection).toMatchObject({ id: 'moderado', displayName: 'Moderado' });
     saveConnection(connection, tempDir);
@@ -260,7 +260,7 @@ describe('CLI Configuration Storage', () => {
       .toBe('http://127.0.0.1:4788/v1');
   });
 
-  it('preserves a remote HTTPS Gateway URL from the saved Cloud profile', () => {
+  it('preserves a remote HTTPS Gateway URL from a saved legacy profile', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
       baseUrl: 'https://moderado.example.net/v1/', defaultModel: 'auto',
@@ -269,11 +269,11 @@ describe('CLI Configuration Storage', () => {
       .toBe('https://moderado.example.net/v1');
   });
 
-  it('loads the local Gateway URL for saved Cloud profiles in development mode', () => {
+  it('loads the local Gateway URL for a saved legacy profile in development mode', () => {
     process.env.MODERADO_CLOUD_ENV = 'development';
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
+      baseUrl: 'https://modr.alfazen.org/v1', defaultModel: 'auto',
     }, tempDir);
     expect(loadConfig(tempDir).connections?.moderado?.baseUrl)
       .toBe('http://127.0.0.1:4788/v1');
@@ -283,7 +283,7 @@ describe('CLI Configuration Storage', () => {
     const store = new MemoryCredentialStore();
     const connection = await storeConnectionCredential({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_expired', defaultModel: 'auto',
+      baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_expired', defaultModel: 'auto',
       credentialExpiresAt: Date.now() - 1000,
     }, store);
     saveConnection(connection, tempDir);
@@ -291,16 +291,16 @@ describe('CLI Configuration Storage', () => {
     expect((await resolveConnectionCredential(connection, store)).apiKey).toBeUndefined();
   });
 
-  it('requires credential storage only for Cloud profiles that have a key', () => {
-    const cloud = { id: 'moderado-cloud' };
-    const keyedCloud = { id: 'moderado-cloud', apiKey: 'mrd_test' };
+  it('requires credential storage only for Moderado profiles that have a key', () => {
+    const moderado = { id: 'moderado' };
+    const keyedModerado = { id: 'moderado', apiKey: 'mrd_test' };
     const other = { id: 'openrouter' };
     const keyedOther = { id: 'openrouter', apiKey: 'sk_test' };
-    expect(requiresCredentialReference(cloud, 'linux')).toBe(false);
-    expect(requiresCredentialReference(cloud, 'darwin')).toBe(false);
-    expect(requiresCredentialReference(cloud, 'win32')).toBe(false);
-    expect(requiresCredentialReference(keyedCloud, 'linux')).toBe(true);
-    expect(requiresCredentialReference(keyedCloud, 'win32')).toBe(true);
+    expect(requiresCredentialReference(moderado, 'linux')).toBe(false);
+    expect(requiresCredentialReference(moderado, 'darwin')).toBe(false);
+    expect(requiresCredentialReference(moderado, 'win32')).toBe(false);
+    expect(requiresCredentialReference(keyedModerado, 'linux')).toBe(true);
+    expect(requiresCredentialReference(keyedModerado, 'win32')).toBe(true);
     expect(requiresCredentialReference(other, 'linux')).toBe(false);
     expect(requiresCredentialReference(keyedOther, 'win32')).toBe(true);
   });
@@ -308,10 +308,10 @@ describe('CLI Configuration Storage', () => {
   it('loads a saved public Gateway as the active connection without credentials', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
+      baseUrl: 'https://modr.alfazen.org/v1', defaultModel: 'auto',
     }, tempDir);
     expect(getActiveConnection(loadConfig(tempDir))).toMatchObject({
-      id: 'moderado', displayName: 'Moderado', baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
+      id: 'moderado', displayName: 'Moderado', baseUrl: 'https://modr.alfazen.org/v1', defaultModel: 'auto',
     });
     expect(getActiveConnection(loadConfig(tempDir))?.apiKey).toBeUndefined();
   });

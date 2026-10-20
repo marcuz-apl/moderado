@@ -165,16 +165,16 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('shows the active provider before the model on the bottom row', () => {
     const lines = stripAnsi(renderWelcomeCard({
-      provider: 'OpenCode Zen', model: 'big-pickle', tokens: 0, cost: '$0.00',
+      provider: 'OpenRouter', model: 'openrouter/free', tokens: 0, cost: '$0.00',
       workspace: '/workspace', mode: 'Execute', autoApprove: false, width: 80,
     })).split('\n');
-    expect(lines[4]).toContain('OpenCode Zen | big-pickle');
+    expect(lines[4]).toContain('OpenRouter | openrouter/free');
     expect(lines[4].length).toBeLessThanOrEqual(80);
   });
 
   it('keeps a long provider and model inside the bottom row', () => {
     const row = stripAnsi(renderWelcomeCard({
-      provider: 'OpenCode Zen Provider With A Very Long Name',
+      provider: 'A Provider With A Very Long Name',
       model: 'vendor/a-very-long-model-name-for-testing', tokens: 0, cost: '$0.00',
       workspace: '/workspace/with/long/path', mode: 'Execute', autoApprove: true, width: 80,
     })).split('\n')[4];
@@ -239,12 +239,12 @@ describe('OpenCode-style Welcome TUI', () => {
       stdin.emit('keypress', '\r', { name: 'return' });
       await new Promise((resolve) => setImmediate(resolve));
       const screen = stripAnsi(context.writes.join(''));
-      expect(screen).toContain('OpenCode Zen | big-pickle');
+      expect(screen).toContain('OpenRouter | openrouter/free');
       for (const character of 'hello') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
       stdin.emit('keypress', '\r', { name: 'return' });
     }, {
       getProviderName: () => provider,
-      onConnect: async () => { provider = 'OpenCode Zen'; return 'big-pickle'; },
+      onConnect: async () => { provider = 'OpenRouter'; return 'openrouter/free'; },
     });
     expect(result).toBe('hello');
   });

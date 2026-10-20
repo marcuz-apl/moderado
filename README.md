@@ -53,7 +53,7 @@ moderado run "Analyze security boundaries" --read-only
 | Version | Status | How it works |
 |---|---|---|
 | **0.4.28** | Release candidate | Adds organized `/help` command groups, resumes interrupted chat sessions, and keeps help and keyboard-shortcut layout consistent across all help surfaces. |
-| **0.4.26** | Previous release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_CLOUD_ENV` overrides. Chat TUI is polished with dynamic task progress, a Done state in the chat status row, network approval prompts, wildcard skill toggles, and chat status rows clamped inside the composer card columns. |
+| **0.4.26** | Previous release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_ENV` overrides (the legacy `MODERADO_CLOUD_ENV` name remains supported). Chat TUI is polished with dynamic task progress, a Done state in the chat status row, network approval prompts, wildcard skill toggles, and chat status rows clamped inside the composer card columns. |
 | **0.4.18** | Previous release | Gateway-integrated CLI. `moderado update` and `moderado upgrade` self-update commands were introduced in this release. |
 | **0.4.10** | Previous release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
@@ -149,44 +149,48 @@ Maintainers can install a verified release artifact directly with
 
 ### Connect to the Moderado Gateway
 
-In the current source build, run `/connect` and choose Moderado Gateway. Sign in
-with the browser or enter a Moderado Cloud `mrd_` website API key to use free
+In the current source build, run `/connect` and choose Moderado. Sign in
+with the browser or enter a Moderado `mrd_` website API key to use free
 Gateway routes. The public Gateway option
 lists all routes and can use paid routes without a key. `/model` lists configured
 Gateway routes: `auto` follows Gateway routing and may select a free or paid
 route, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
-The same `/connect` menu offers OpenRouter, NVIDIA NIM, Agnes AI, OrcaRouter,
-Ollama, LM Studio, and custom OpenAI-compatible providers. The published 0.4.8
+The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama
+Local, LM Studio, and custom OpenAI-compatible providers. The published 0.4.8
 release still uses `/login` for the Gateway.
 
-Cloud OAuth credentials last 30 days and have no refresh token; authorize again
+Moderado OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
 On other platforms, the current credential store is memory-only, so log in again
 after starting a new CLI process.
 
-Cloud connections use their configured Gateway URL. Loopback URLs such as
+Moderado connections use their configured Gateway URL. Loopback URLs such as
 `http://127.0.0.1:4788/v1` are treated as local development; HTTPS URLs for a
 NAS, VPS, or other remote host are used as configured. To set the URL before
-first connection, define `MODERADO_CLOUD_BASE_URL`. Later Gateway connections
-keep the saved URL unless an environment override is set. The Gateway picker shows
-the resolved Base URL before connecting. To force an environment for the current
-PowerShell session, set `MODERADO_CLOUD_ENV` before starting the CLI:
+first connection, define `MODERADO_BASE_URL`. Production defaults to
+`https://modr.alfazen.org/v1`. Later Gateway connections keep the saved URL
+unless an environment override is set. The Gateway picker shows the resolved
+Base URL before connecting. To force an environment for the current PowerShell
+session, set `MODERADO_ENV` before starting the CLI:
 
 ```powershell
-$env:MODERADO_CLOUD_ENV = "development"
+$env:MODERADO_ENV = "development"
 npm run moderado
 ```
 
 Development uses `http://127.0.0.1:4788/v1`. To force production, set the value
 to `production` instead. To return to the saved Gateway URL, clear the override
-with `Remove-Item Env:MODERADO_CLOUD_ENV`; also clear
-`MODERADO_CLOUD_BASE_URL` if you set that variable. These environment settings
-apply to `npm run moderado` launched from the same PowerShell window. You can
-also set `MODERADO_CLOUD_BASE_URL` to a specific Gateway URL. For a NAS Gateway,
-use its HTTPS `/v1` URL and leave `MODERADO_CLOUD_ENV` unset; `production`
-selects the built-in public URL.
+with `Remove-Item Env:MODERADO_ENV`; also clear `MODERADO_BASE_URL` if you set
+that variable. These environment settings apply to `npm run moderado` launched
+from the same PowerShell window. You can also set `MODERADO_BASE_URL` to a
+specific Gateway URL. For a NAS Gateway, use its HTTPS `/v1` URL and leave
+`MODERADO_ENV` unset; `production` selects the built-in public URL. The legacy
+`MODERADO_CLOUD_ENV` and `MODERADO_CLOUD_BASE_URL` names remain fallbacks when
+their corresponding canonical variables are unset. For an environment-provided
+Moderado key, use `MODERADO_API_KEY`; `MODERADO_CLOUD_API_KEY` remains its
+fallback when the canonical variable is unset.
 
 Run `moderado doctor` to inspect local setup without exposing secrets. Add
 `--connectivity` only when you want an optional live model-catalog check.

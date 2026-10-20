@@ -116,10 +116,10 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(exitCode).toBe(0);
   });
 
-  it('keeps a saved keyless Cloud Gateway active for chat setup', () => {
+  it('migrates a saved keyless legacy Gateway profile for chat setup', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-      baseUrl: 'https://mod.alfazen.org/v1', defaultModel: 'auto',
+      baseUrl: 'https://modr.alfazen.org/v1', defaultModel: 'auto',
     }, tempDir);
     const connection = getActiveConnection(loadConfig(tempDir));
     expect(connection).toMatchObject({ id: 'moderado', displayName: 'Moderado', defaultModel: 'auto' });
@@ -141,7 +141,7 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     })).toBe('OpenRouter');
   });
 
-  it('sends the saved Cloud key on inference while keeping keyless paid routes possible', async () => {
+  it('sends the saved Moderado key on inference while keeping keyless paid routes possible', async () => {
     const requests: string[] = [];
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (_url, init) => {
@@ -149,9 +149,9 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       return new Response('data: [DONE]\n\n', { status: 200 });
     };
     try {
-      const cloud = { id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible' as const, baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'mrd_test-key' };
-      for await (const _ of createConnectionProvider(cloud).streamChat({ modelId: 'free-route', messages: [{ role: 'user', content: 'hi' }] })) { /* consume */ }
-      for await (const _ of createConnectionProvider({ ...cloud, apiKey: undefined }).streamChat({ modelId: 'paid-route', messages: [{ role: 'user', content: 'hi' }] })) { /* consume */ }
+      const moderado = { id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible' as const, baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_test-key' };
+      for await (const _ of createConnectionProvider(moderado).streamChat({ modelId: 'free-route', messages: [{ role: 'user', content: 'hi' }] })) { /* consume */ }
+      for await (const _ of createConnectionProvider({ ...moderado, apiKey: undefined }).streamChat({ modelId: 'paid-route', messages: [{ role: 'user', content: 'hi' }] })) { /* consume */ }
       expect(requests).toEqual(['Bearer mrd_test-key', '']);
     } finally {
       globalThis.fetch = originalFetch;

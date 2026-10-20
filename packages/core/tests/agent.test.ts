@@ -57,8 +57,8 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(completionEvent).toBeDefined();
   });
 
-  it('sends Cloud auto to the Gateway without selecting from the local inventory', async () => {
-    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+  it('sends Moderado auto to the Gateway without selecting from the local inventory', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado' });
     provider.queueTextResponse('Gateway selected a route.');
 
     const result = await loop.run('Answer', {
@@ -71,7 +71,7 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(provider.recordedCalls.map(call => call.modelId)).toEqual(['auto']);
   });
 
-  it('does not locally fail over Cloud auto to another Gateway route', async () => {
+  it('continues to route legacy Moderado IDs without local failover', async () => {
     Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
     provider.queueError(new ModelUnavailableError());
 
@@ -85,8 +85,8 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(events.filter(event => event.type === 'model_change')).toHaveLength(1);
   });
 
-  it('keeps an explicitly pinned Cloud route pinned', async () => {
-    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+  it('keeps an explicitly pinned Moderado route pinned', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado' });
     provider.queueTextResponse('Pinned route answered.');
 
     const result = await loop.run('Answer', {
@@ -550,8 +550,8 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(turn2.messages.length).toBeGreaterThan(turn1.messages.length);
   });
 
-  it('preserves Cloud conversation history without a Gateway message cap', async () => {
-    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+  it('preserves Moderado conversation history without a Gateway message cap', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado' });
     provider.queueTextResponse('Calgary weather answer.');
     let sentMessages: typeof provider.recordedCalls[number]['messages'] = [];
     const streamChat = provider.streamChat.bind(provider);
@@ -578,8 +578,8 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(sentMessages.some(message => message.role === 'user' && message.content === 'old question 0')).toBe(true);
   });
 
-  it('preserves Cloud history on follow-up requests after tool calls', async () => {
-    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+  it('preserves Moderado history on follow-up requests after tool calls', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado' });
     const sentMessageCounts: number[] = [];
     let followUpMessages: typeof provider.recordedCalls[number]['messages'] = [];
     const streamChat = provider.streamChat.bind(provider);
@@ -608,8 +608,8 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(followUpMessages.at(-1)).toMatchObject({ role: 'tool' });
   });
 
-  it('does not set the generic default output token limit for Cloud', async () => {
-    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+  it('does not set the generic default output token limit for Moderado', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado' });
     provider.queueTextResponse('Answer.');
 
     await loop.run('Answer this.', { workspaceRoot: tempDir, provider, tools, approvalHandler: autoApproveHandler });
@@ -643,7 +643,7 @@ describe('AgentLoop (Core Execution Engine)', () => {
   });
 
   it('emits validated Gateway fallback status before streamed answer content', async () => {
-    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
+    Object.defineProperty(provider, 'id', { value: 'moderado' });
     provider.queueResponse([
       { gatewayStatus: { fromProvider: 'provider-a', fromModel: 'free/old', toProvider: 'provider-b', toModel: 'free/new', reason: 'rate_limited_or_unavailable' } },
       { contentDelta: 'hello' },
@@ -752,9 +752,9 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(toolMsg?.content).toContain('earlier tool output truncated for token efficiency');
   });
 
-  it('preserves older Cloud tool output without truncation', async () => {
-    Object.defineProperty(provider, 'id', { value: 'moderado-cloud' });
-    const longToolOutput = 'Cloud result '.repeat(500);
+  it('preserves older Moderado tool output without truncation', async () => {
+    Object.defineProperty(provider, 'id', { value: 'moderado' });
+    const longToolOutput = 'Moderado result '.repeat(500);
     provider.queueTextResponse('Next answer.');
 
     await loop.run('Continue.', {

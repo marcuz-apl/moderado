@@ -57,8 +57,8 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     ]));
   });
 
-  it('offers the full Moderado Cloud route inventory as free models', () => {
-    const items = buildCompatibleModelMenuItems('Moderado Cloud', [
+  it('offers the full Moderado route inventory as free models', () => {
+    const items = buildCompatibleModelMenuItems('Moderado', [
       { id: 'vendor/route-one' }, { id: 'vendor/route-two' },
     ], 'auto', { freeCatalog: true });
     expect(items).toEqual(expect.arrayContaining([
@@ -67,7 +67,7 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
   });
 
   it('lists Moderado Gateway routes directly without claiming they are free', () => {
-    const items = buildCompatibleModelMenuItems('Moderado Cloud', [
+    const items = buildCompatibleModelMenuItems('Moderado', [
       { id: 'auto' }, { id: 'vendor/route-one' }, { id: 'vendor/route-two' },
     ], 'auto', undefined, { listModelsDirectly: true, autoLabel: 'auto' });
 
@@ -79,8 +79,8 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
     expect(items.find((item) => item.label === 'Browse available models')).toBeUndefined();
   });
 
-  it('shows a sanitized catalog diagnostic when no Cloud routes can be loaded', () => {
-    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', undefined, {
+  it('shows a sanitized catalog diagnostic when no Moderado routes can be loaded', () => {
+    const items = buildCompatibleModelMenuItems('Moderado', [], 'auto', undefined, {
       listModelsDirectly: true,
       autoLabel: 'auto',
       catalogError: 'Could not load models (HTTP 401). Check the API key and retry /model.',
@@ -92,7 +92,7 @@ describe('CLI Model Selector (OpenCode-Style Free vs Paid)', () => {
   });
 
   it('explains when the Gateway has no enabled model routes', () => {
-    const items = buildCompatibleModelMenuItems('Moderado Cloud', [], 'auto', undefined, {
+    const items = buildCompatibleModelMenuItems('Moderado', [], 'auto', undefined, {
       listModelsDirectly: true,
       autoLabel: 'auto',
       noAvailableModels: true,

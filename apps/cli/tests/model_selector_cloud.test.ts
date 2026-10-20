@@ -20,7 +20,7 @@ vi.mock('../src/ui/popup.js', async (importOriginal) => {
 
 import { selectCompatibleModelOverlay } from '../src/ui/model_selector.js';
 
-describe('Moderado Gateway model picker discovery', () => {
+describe('Moderado model picker discovery', () => {
   let server: ReturnType<typeof createServer>;
   let baseUrl: string;
   let responseStatus: number;
@@ -54,8 +54,8 @@ describe('Moderado Gateway model picker discovery', () => {
   const pickerOptions = (currentModel = 'auto') => ({
     apiKey: undefined,
     baseUrl,
-    providerId: 'moderado-cloud',
-    providerName: 'Moderado Cloud',
+    providerId: 'moderado',
+    providerName: 'Moderado',
     currentModel,
     drawFrame: vi.fn(),
   });
@@ -103,7 +103,7 @@ describe('Moderado Gateway model picker discovery', () => {
     expect(pickerState.items.some((item) => item.description?.includes('must not be displayed'))).toBe(false);
   });
 
-  it('explains when discovery succeeds but the Cloud pool has no enabled routes', async () => {
+  it('explains when discovery succeeds but no Moderado routes are enabled', async () => {
     responseBody = { data: [] };
 
     await selectCompatibleModelOverlay(pickerOptions());

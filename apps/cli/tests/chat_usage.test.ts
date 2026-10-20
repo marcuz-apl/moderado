@@ -51,17 +51,17 @@ it('shows zero cost for a direct web-search-only session without model usage', a
   expect(duringSearch).toContain('$0.00');
 });
 
-it('shows zero cost for estimated Moderado Cloud usage across a generically paid model', async () => {
+it('shows zero cost for estimated Moderado usage across a generically paid model', async () => {
   originalExitListeners = process.listeners('exit');
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-chat-cloud-free-'));
   homes.push(home);
   vi.spyOn(os, 'homedir').mockReturnValue(home);
   vi.spyOn(config, 'loadConfig').mockReturnValue({
-    activeConnectionId: 'moderado-cloud',
+    activeConnectionId: 'moderado',
     connections: {
-      'moderado-cloud': {
-        id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',
-        baseUrl: 'https://mod.alfazen.org/v1', apiKey: 'test-key',
+      moderado: {
+        id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible',
+        baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'test-key',
       },
     },
   });
@@ -71,7 +71,7 @@ it('shows zero cost for estimated Moderado Cloud usage across a generically paid
   ]);
   const sessionStore = new SessionStore(home);
   const previousSession = createSession(fs.realpathSync(home), {
-    providerId: 'moderado-cloud', providerName: 'Moderado Cloud', modelId: 'openai/gpt-oss-20b',
+    providerId: 'moderado', providerName: 'Moderado', modelId: 'openai/gpt-oss-20b',
   });
   previousSession.usage = {
     promptTokens: 40, completionTokens: 10, totalTokens: 50,

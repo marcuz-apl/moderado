@@ -10,6 +10,7 @@ Replace the “Moderado Cloud” name with “Moderado” throughout the current
 - Rename `ModeradoCloud`, `moderadoCloud`, and `MODERADO_CLOUD_*` identifiers to Moderado equivalents. New environment variables use `MODERADO_ENV` and `MODERADO_BASE_URL`.
 - Replace human-readable “Moderado Cloud” references in source, tests, and current documentation with “Moderado”. Update the existing design/planning documents in the repository, but do not rewrite Git history.
 - Keep unrelated “Gateway” wording and behavior unchanged.
+- Production mode uses `https://modr.alfazen.org/v1`; local development remains `http://127.0.0.1:4788/v1`.
 
 ## Compatibility
 
@@ -18,6 +19,7 @@ Replace the “Moderado Cloud” name with “Moderado” throughout the current
 - Normalize a legacy connection display name of “Moderado Cloud” to “Moderado” when loading configuration.
 - If both legacy and canonical connection entries exist, the canonical `moderado` entry wins. Preserve any explicit `credentialReference` found on the selected entry so credentials stored under the old reference remain resolvable.
 - Prefer `MODERADO_ENV` and `MODERADO_BASE_URL`, falling back to `MODERADO_CLOUD_ENV` and `MODERADO_CLOUD_BASE_URL` only when the corresponding new variable is unset.
+- Prefer `MODERADO_API_KEY`, falling back to `MODERADO_CLOUD_API_KEY` only when the canonical key variable is unset.
 - Do not delete or blindly move old credential-store entries. Existing stored references remain usable; newly stored credentials use `moderado/provider/moderado`.
 - Normalize the legacy provider ID in persisted session records when they are loaded for active use, while retaining historical content and messages.
 

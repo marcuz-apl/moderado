@@ -51,14 +51,16 @@ describe('model discovery', () => {
       authorization = new Headers(init?.headers).get('Authorization') ?? '';
       return jsonResponse({ data: [entry('vendor/specific-route'), entry('auto')] });
     };
-    const models = await fetchProviderModels('https://mod.alfazen.org/v1', 'mrd_test-key', { fetchImpl });
+    const models = await fetchProviderModels('https://modr.alfazen.org/v1', 'mrd_test-key', { fetchImpl });
     expect(authorization).toBe('Bearer mrd_test-key');
     expect(models.map((model) => model.id)).toEqual(['vendor/specific-route', 'auto']);
   });
   it('maps safe Gateway discovery errors without exposing remote messages', async () => {
     const fetchImpl: typeof fetch = async () => new Response(JSON.stringify({ error: { code: 'scope_denied', message: 'private detail' } }), { status: 403 });
+    await expect(fetchProviderModels('https://mod.alfazen.org/v1', 'mrd_test-key', { fetchImpl }))
+      .rejects.toMatchObject({ gatewayCode: 'scope_denied', statusCode: 403 });
     try {
-      await fetchProviderModels('https://mod.alfazen.org/v1', 'mrd_test-key', { fetchImpl });
+      await fetchProviderModels('https://modr.alfazen.org/v1', 'mrd_test-key', { fetchImpl });
       throw new Error('Expected Gateway discovery to reject');
     } catch (error) {
       expect(error).toMatchObject({ gatewayCode: 'scope_denied', statusCode: 403 });

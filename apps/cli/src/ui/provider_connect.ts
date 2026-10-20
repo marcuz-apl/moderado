@@ -1,4 +1,4 @@
-import { freeModelPolicyFor, resolveModeradoBaseUrl, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId, type ProviderFreePolicy } from '../config.js';
+import { freeModelPolicyFor, resolveModeradoBaseUrl, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
@@ -78,13 +78,12 @@ export function isAuthenticationFailure(error: unknown): boolean {
     || /authentication failed \((401|403)\)/i.test(error.message);
 }
 
-export function isModeradoCloudOAuthConnection(connection: ProviderConnection): boolean {
-  return isModeradoOAuthConnection(connection);
-}
-
 export function isModeradoOAuthConnection(connection: ProviderConnection): boolean {
   return (connection.id === 'moderado' || connection.id === 'moderado-cloud') && connection.credentialExpiresAt !== undefined;
 }
+
+/** @deprecated Use isModeradoOAuthConnection. */
+export const isModeradoCloudOAuthConnection = isModeradoOAuthConnection;
 
 export function renderConnectionPrompt(label: string, value: string, secret = false): string[] {
   const shown = secret ? '*'.repeat(value.length) : value;
@@ -191,6 +190,7 @@ export function buildModeradoConnection(apiKey?: string, credentialExpiresAt?: n
   return credentialExpiresAt === undefined ? connection : { ...connection, credentialExpiresAt };
 }
 
+/** @deprecated Use buildModeradoConnection. */
 export const buildModeradoCloudConnection = buildModeradoConnection;
 
 function openAuthorizationPage(url: string): void {
@@ -303,6 +303,7 @@ export async function authorizeModeradoInBrowser(
   }
 }
 
+/** @deprecated Use authorizeModeradoInBrowser. */
 export const authorizeModeradoCloudInBrowser = authorizeModeradoInBrowser;
 
 async function chooseModeradoModel(connection: ProviderConnection, options: PopupConnectionOptions): Promise<ProviderConnection> {
@@ -360,6 +361,7 @@ export async function loginModeradoInteractive(options: PopupConnectionOptions =
   return undefined;
 }
 
+/** @deprecated Use loginModeradoInteractive. */
 export const loginModeradoCloudInteractive = loginModeradoInteractive;
 
 async function askProviderBaseUrl(label: string, initialValue: string, options: PopupConnectionOptions): Promise<string | undefined> {

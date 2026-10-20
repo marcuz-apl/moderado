@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { createServer } from 'node:http';
 import { GatewayError } from '@moderado/contracts';
-import { authorizeModeradoCloudInBrowser, authorizeModeradoInBrowser, buildConnection, buildModeradoCloudConnection, buildModeradoConnection, connectProviderInteractive, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, isModeradoOAuthConnection, loginModeradoCloudInteractive, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { authorizeModeradoCloudInBrowser, authorizeModeradoInBrowser, buildConnection, buildModeradoCloudConnection, buildModeradoConnection, connectProviderInteractive, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, isModeradoOAuthConnection, loginModeradoCloudInteractive, loginModeradoInteractive, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
 import { stripAnsi } from '../src/ui/welcome.js';
 
 /** Minimal fake stdin: the code only attaches a `keypress` listener to it. */
@@ -40,7 +40,6 @@ describe('provider connection setup', () => {
     expect(PROVIDER_PRESETS.some((preset) => preset.label === 'Agnes AI' || preset.label === 'OrcaRouter')).toBe(false);
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'openrouter')?.baseUrl)
       .toBe('https://openrouter.ai/api/v1');
-
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'ollama')?.baseUrl).toBe('http://127.0.0.1:11434/v1');
     expect(PROVIDER_PRESETS.find((preset) => preset.value === 'lm-studio')?.baseUrl).toBe('http://127.0.0.1:1234/v1');
   });
@@ -50,7 +49,6 @@ describe('provider connection setup', () => {
     expect(findReusableConnection('agnes-ai', { openrouter: openRouter })).toBeUndefined();
     expect(findReusableConnection('openai-compatible', { openrouter: openRouter })).toBeUndefined();
   });
-
 
   it('builds local providers without an API key', () => {
     expect(buildConnection({ kind: 'openai-compatible', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', defaultModel: 'qwen2.5-coder' })).toMatchObject({ id: 'ollama', apiKey: undefined });
@@ -95,8 +93,8 @@ describe('provider connection setup', () => {
   });
 
   it('builds a canonical Moderado profile from a key and manages the Gateway URL', () => {
-    const previous = process.env.MODERADO_CLOUD_ENV;
-    delete process.env.MODERADO_CLOUD_ENV;
+    const previous = process.env.MODERADO_ENV;
+    delete process.env.MODERADO_ENV;
     try {
       expect(buildModeradoConnection('mrd_test-key')).toEqual({
         id: 'moderado',
@@ -107,63 +105,63 @@ describe('provider connection setup', () => {
         defaultModel: 'auto',
       });
       expect(buildModeradoCloudConnection('mrd_test-key')).toEqual(buildModeradoConnection('mrd_test-key'));
-      expect(() => buildModeradoCloudConnection('sk_wrong')).toThrow('mrd_');
-      expect(() => buildModeradoCloudConnection('mrd_')).toThrow('mrd_');
+      expect(() => buildModeradoConnection('sk_wrong')).toThrow('mrd_');
+      expect(() => buildModeradoConnection('mrd_')).toThrow('mrd_');
     } finally {
-      if (previous !== undefined) process.env.MODERADO_CLOUD_ENV = previous;
+      if (previous !== undefined) process.env.MODERADO_ENV = previous;
     }
   });
 
   it('builds a public Moderado Gateway profile without an account key', () => {
-    const previousBaseUrl = process.env.MODERADO_CLOUD_BASE_URL;
-    process.env.MODERADO_CLOUD_BASE_URL = 'https://gateway.example/v1/';
+    const previousBaseUrl = process.env.MODERADO_BASE_URL;
+    process.env.MODERADO_BASE_URL = 'https://gateway.example/v1/';
     try {
-      expect(buildModeradoCloudConnection()).toEqual({
+      expect(buildModeradoConnection()).toEqual({
         id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible',
         baseUrl: 'https://gateway.example/v1', apiKey: undefined, defaultModel: 'auto',
       });
     } finally {
-      if (previousBaseUrl === undefined) delete process.env.MODERADO_CLOUD_BASE_URL;
-      else process.env.MODERADO_CLOUD_BASE_URL = previousBaseUrl;
+      if (previousBaseUrl === undefined) delete process.env.MODERADO_BASE_URL;
+      else process.env.MODERADO_BASE_URL = previousBaseUrl;
     }
   });
 
   it('targets the local Gateway when login runs in development mode', () => {
-    const previous = process.env.MODERADO_CLOUD_ENV;
-    process.env.MODERADO_CLOUD_ENV = 'development';
+    const previous = process.env.MODERADO_ENV;
+    process.env.MODERADO_ENV = 'development';
     try {
-      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://127.0.0.1:4788/v1');
+      expect(buildModeradoConnection('mrd_test-key').baseUrl).toBe('http://127.0.0.1:4788/v1');
     } finally {
-      if (previous === undefined) delete process.env.MODERADO_CLOUD_ENV;
-      else process.env.MODERADO_CLOUD_ENV = previous;
+      if (previous === undefined) delete process.env.MODERADO_ENV;
+      else process.env.MODERADO_ENV = previous;
     }
   });
 
   it('uses the selected Gateway Base URL even when an environment mode is set', () => {
-    const previous = process.env.MODERADO_CLOUD_ENV;
-    process.env.MODERADO_CLOUD_ENV = 'production';
+    const previous = process.env.MODERADO_ENV;
+    process.env.MODERADO_ENV = 'production';
     try {
-      expect(buildModeradoCloudConnection('mrd_test-key', undefined, 'http://127.0.0.1:4788/v1').baseUrl)
+      expect(buildModeradoConnection('mrd_test-key', undefined, 'http://127.0.0.1:4788/v1').baseUrl)
         .toBe('http://127.0.0.1:4788/v1');
     } finally {
-      if (previous === undefined) delete process.env.MODERADO_CLOUD_ENV;
-      else process.env.MODERADO_CLOUD_ENV = previous;
+      if (previous === undefined) delete process.env.MODERADO_ENV;
+      else process.env.MODERADO_ENV = previous;
     }
   });
 
-  it('uses a configured loopback Gateway URL for a new Cloud login', () => {
-    const previous = process.env.MODERADO_CLOUD_BASE_URL;
-    process.env.MODERADO_CLOUD_BASE_URL = 'http://localhost:4788/v1/';
+  it('uses a configured loopback Gateway URL for a new Moderado login', () => {
+    const previous = process.env.MODERADO_BASE_URL;
+    process.env.MODERADO_BASE_URL = 'http://localhost:4788/v1/';
     try {
-      expect(buildModeradoCloudConnection('mrd_test-key').baseUrl).toBe('http://localhost:4788/v1');
+      expect(buildModeradoConnection('mrd_test-key').baseUrl).toBe('http://localhost:4788/v1');
     } finally {
-      if (previous === undefined) delete process.env.MODERADO_CLOUD_BASE_URL;
-      else process.env.MODERADO_CLOUD_BASE_URL = previous;
+      if (previous === undefined) delete process.env.MODERADO_BASE_URL;
+      else process.env.MODERADO_BASE_URL = previous;
     }
   });
 
   it('builds a Moderado profile from a browser token with expiry metadata', () => {
-    expect(buildModeradoCloudConnection('mrd_oauth-token', Date.now() + 2_592_000_000)).toMatchObject({
+    expect(buildModeradoConnection('mrd_oauth-token', Date.now() + 2_592_000_000)).toMatchObject({
       id: 'moderado',
       apiKey: 'mrd_oauth-token',
       credentialExpiresAt: expect.any(Number),
@@ -278,7 +276,7 @@ describe('browser sign-in wait', () => {
   });
 });
 
-describe('repeat Cloud login', () => {
+describe('repeat Moderado login', () => {
   it('offers the saved key and shows the active provider without exposing the key', async () => {
     let authorization: string | undefined;
     const server = createServer((request, response) => {
@@ -289,7 +287,7 @@ describe('repeat Cloud login', () => {
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
-    const saved = { ...buildModeradoCloudConnection('mrd_saved-secret'), baseUrl: `http://127.0.0.1:${address.port}/v1` };
+    const saved = { ...buildModeradoConnection('mrd_saved-secret'), baseUrl: `http://127.0.0.1:${address.port}/v1` };
     const frames: string[][] = [];
     let modeSelected = false;
     let urlSelected = false;
@@ -319,7 +317,7 @@ describe('repeat Cloud login', () => {
             keyConfirmed = true;
             setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
           }
-          else if (frame.includes('Moderado Cloud Models')) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+          else if (frame.includes('Moderado Models')) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
         },
       });
       expect(result).toEqual(saved);
@@ -340,7 +338,7 @@ describe('repeat Cloud login', () => {
     let urlSelected = false;
     let keyFrame = '';
     await loginModeradoCloudInteractive({
-      activeConnection: buildModeradoCloudConnection(),
+      activeConnection: buildModeradoConnection(),
       drawFrame: (lines) => {
         frames.push(lines);
         const frame = lines.map(stripAnsi).join('\n');
@@ -367,7 +365,7 @@ describe('repeat Cloud login', () => {
 describe('unified provider connection', () => {
   it('shows a saved Gateway key masked and reuses it when confirmed', async () => {
     const saved = {
-      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible' as const,
+      id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible' as const,
       baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_hidden-secret', defaultModel: 'auto',
     };
     const controller = new AbortController();
@@ -378,9 +376,9 @@ describe('unified provider connection', () => {
     let keyFrame = '';
     let showedMethodMenu = false;
     try {
-      const result = await loginModeradoCloudInteractive({
+      const result = await loginModeradoInteractive({
         signal: controller.signal,
-        savedConnections: { 'moderado-cloud': saved },
+        savedConnections: { moderado: saved },
         resolveSavedConnection: async (connection) => connection,
         drawFrame: (lines) => {
           const frame = lines.map(stripAnsi).join('\n');
@@ -400,7 +398,7 @@ describe('unified provider connection', () => {
           } else if (frame.includes('Login · Active:')) {
             showedMethodMenu = true;
             setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Cloud Models')) {
+          } else if (frame.includes('Moderado Models')) {
             setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
           }
         },
@@ -416,7 +414,7 @@ describe('unified provider connection', () => {
 
   it('lets the user select Dev Mode for the Gateway and shows both /v1 URLs', async () => {
     const saved = {
-      id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible' as const,
+      id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible' as const,
       baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_saved-key', defaultModel: 'auto',
     };
     const controller = new AbortController();
@@ -427,13 +425,13 @@ describe('unified provider connection', () => {
     let productionModeFrame = '';
     let developmentModeFrame = '';
     let urlFrame = '';
-    const previousMode = process.env.MODERADO_CLOUD_ENV;
-    delete process.env.MODERADO_CLOUD_ENV;
+    const previousMode = process.env.MODERADO_ENV;
+    delete process.env.MODERADO_ENV;
     try {
-      const result = await loginModeradoCloudInteractive({
+      const result = await loginModeradoInteractive({
         signal: controller.signal,
         gatewayUrl: saved.baseUrl,
-        savedConnections: { 'moderado-cloud': saved },
+        savedConnections: { moderado: saved },
         resolveSavedConnection: async (connection) => connection,
         drawFrame: (lines) => {
           const frame = lines.map(stripAnsi).join('\n');
@@ -454,7 +452,7 @@ describe('unified provider connection', () => {
           } else if (frame.includes('Moderado Gateway API key') && !confirmedKey) {
             confirmedKey = true;
             setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Cloud Models')) {
+          } else if (frame.includes('Moderado Models')) {
             setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
           }
         },
@@ -465,8 +463,8 @@ describe('unified provider connection', () => {
       expect(result?.baseUrl).toBe('http://127.0.0.1:4788/v1');
     } finally {
       clearTimeout(timeout);
-      if (previousMode === undefined) delete process.env.MODERADO_CLOUD_ENV;
-      else process.env.MODERADO_CLOUD_ENV = previousMode;
+      if (previousMode === undefined) delete process.env.MODERADO_ENV;
+      else process.env.MODERADO_ENV = previousMode;
     }
   });
 
@@ -479,10 +477,10 @@ describe('unified provider connection', () => {
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
     const gatewayUrl = `http://127.0.0.1:${address.port}/v1`;
-    const previousEnvironment = process.env.MODERADO_CLOUD_ENV;
-    const previousUrl = process.env.MODERADO_CLOUD_BASE_URL;
-    delete process.env.MODERADO_CLOUD_ENV;
-    delete process.env.MODERADO_CLOUD_BASE_URL;
+    const previousEnvironment = process.env.MODERADO_ENV;
+    const previousUrl = process.env.MODERADO_BASE_URL;
+    delete process.env.MODERADO_ENV;
+    delete process.env.MODERADO_BASE_URL;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 1_000);
     const seen = new Set<string>();
@@ -520,10 +518,10 @@ describe('unified provider connection', () => {
       expect([...seen]).toEqual(['provider', 'mode', 'url', 'key', 'model']);
     } finally {
       clearTimeout(timeout);
-      if (previousEnvironment === undefined) delete process.env.MODERADO_CLOUD_ENV;
-      else process.env.MODERADO_CLOUD_ENV = previousEnvironment;
-      if (previousUrl === undefined) delete process.env.MODERADO_CLOUD_BASE_URL;
-      else process.env.MODERADO_CLOUD_BASE_URL = previousUrl;
+      if (previousEnvironment === undefined) delete process.env.MODERADO_ENV;
+      else process.env.MODERADO_ENV = previousEnvironment;
+      if (previousUrl === undefined) delete process.env.MODERADO_BASE_URL;
+      else process.env.MODERADO_BASE_URL = previousUrl;
       await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     }
   });

@@ -30,6 +30,10 @@ import { ThinkTagStreamFilter } from './think_filter.js';
 
 export const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 
+function isModeradoProvider(providerId: string): boolean {
+  return providerId === 'moderado' || providerId === 'moderado-cloud';
+}
+
 export interface AgentRunOptions {
   workspaceRoot: string;
   provider: IProviderAdapter;
@@ -212,7 +216,7 @@ export class AgentLoop {
     if (signal?.aborted) return cancelBeforeRouting();
 
     // 1. Model Discovery & Routing
-    const gatewayAuto = options.provider.id === 'moderado-cloud' && !options.routeOptions?.pinnedModelId;
+    const gatewayAuto = isModeradoProvider(options.provider.id) && !options.routeOptions?.pinnedModelId;
     let inventory = options.modelInventory;
     if (!gatewayAuto && (!inventory || inventory.length === 0)) {
       if (options.routeOptions?.pinnedModelId) {
@@ -279,7 +283,7 @@ export class AgentLoop {
     // Layer 4: Truncate oversized tool outputs from older turns in history to prevent token ballooning
     const messages: ChatMessage[] = [
       ...baseHistory.map((msg, idx) => {
-        if (options.provider.id !== 'moderado-cloud' && msg.role === 'tool' && idx < baseHistory.length - 1 && typeof msg.content === 'string' && msg.content.length > 1500) {
+        if (!isModeradoProvider(options.provider.id) && msg.role === 'tool' && idx < baseHistory.length - 1 && typeof msg.content === 'string' && msg.content.length > 1500) {
           return {
             ...msg,
             content: msg.content.slice(0, 1500) + '\n... [earlier tool output truncated for token efficiency]',
@@ -364,7 +368,7 @@ export class AgentLoop {
                   ...(options.skills?.length ? [LOAD_SKILL_DECLARATION] : []),
                   ...(options.allowSubagentDelegation === false ? [] : [SUBAGENT_DECLARATION]),
                 ],
-          ...(options.provider.id === 'moderado-cloud' && options.maxOutputTokens === undefined
+          ...(isModeradoProvider(options.provider.id) && options.maxOutputTokens === undefined
             ? {}
             : { maxTokens: options.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS }),
           signal,

@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { createModeradoOAuthRequest, exchangeModeradoOAuthCode, validateModeradoOAuthCallback } from '../src/moderado_oauth.js';
 
-describe('Moderado Cloud browser authorization', () => {
+describe('Moderado browser authorization', () => {
   it('creates a state-bound S256 authorization request for the exact loopback URI', () => {
     const request = createModeradoOAuthRequest('http://127.0.0.1:45123/callback');
     const url = new URL(request.authorizationUrl);

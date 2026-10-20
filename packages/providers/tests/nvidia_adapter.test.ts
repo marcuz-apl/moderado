@@ -44,7 +44,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(adapter.name).toBe('OpenRouter');
   });
 
-  it('does not send the NVIDIA environment key to a keyless Cloud Gateway', async () => {
+  it('keeps the legacy Moderado ID from inheriting the NVIDIA environment key', async () => {
     const previousKey = process.env.NVIDIA_API_KEY;
     process.env.NVIDIA_API_KEY = 'nvapi-must-not-leak';
     const authorizations: Array<string | undefined> = [];
@@ -80,8 +80,8 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(chunks).toEqual([{ gatewayStatus: { fromModel: 'old', toModel: 'new', reason: 'rate_limited_or_unavailable' } }]);
   });
 
-  it('sends Cloud inference requests without client-side token, message, or body limits', async () => {
-    const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+  it('sends Moderado inference requests without client-side token, message, or body limits', async () => {
+    const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado' });
     let sentPayload: Record<string, any> | undefined;
     nextHandler = (req, res) => {
       let body = '';
@@ -104,7 +104,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
 
   });
 
-  it('sends Cloud requests larger than the former 4096-byte combined limit unchanged', async () => {
+  it('sends Moderado requests larger than the former 4096-byte combined limit unchanged', async () => {
     let sentPayload: Record<string, any> | undefined;
     nextHandler = (req, res) => {
       let body = '';
@@ -116,7 +116,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
         res.end('data: [DONE]\n\n');
       });
     };
-    const gateway = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const gateway = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado' });
     const systemMessage = 'You are Moderado. '.repeat(180);
     const userMessage = 'What is the weather in Calgary today? '.repeat(100);
     const toolDescription = 'Tool description '.repeat(150);
@@ -137,7 +137,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(sentPayload?.tools[0].function.description).toBe(toolDescription);
     expect(sentPayload?.tools[0].function.parameters.properties.query.description).toBe(parameterDescription);
   });
-  it('preserves the requested output limit for Cloud', async () => {
+  it('preserves the requested output limit for Moderado', async () => {
     let sentMaxTokens: unknown;
     nextHandler = (req, res) => {
       let body = '';
@@ -149,7 +149,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
         res.end('data: [DONE]\n\n');
       });
     };
-    const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado' });
 
     for await (const _ of gateway.streamChat({
       modelId: 'nvidia:deepseek-ai/deepseek-v4.1-flash',
@@ -169,7 +169,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
       res.writeHead(status, { 'Content-Type': 'application/json', ...(code === 'quota_exceeded' ? { 'Retry-After': '17' } : {}) });
       res.end(JSON.stringify({ error: { code, message: 'secret upstream details' } }));
     };
-    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado' });
     let caught: unknown;
     try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }], maxTokens: 10 })) {} }
     catch (error) { caught = error; }
@@ -183,12 +183,12 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     }
   });
 
-  it('maps raw Cloud upstream 401 responses as provider authentication errors', async () => {
+  it('maps raw Gateway upstream 401 responses as provider authentication errors', async () => {
     nextHandler = (_req, res) => {
       res.writeHead(401, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: { message: 'upstream token expired', code: 'invalid_api_key' } }));
     };
-    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado' });
     let caught: unknown;
     try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) {} }
     catch (error) { caught = error; }
@@ -196,12 +196,12 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     expect(String(caught)).toContain('upstream token expired');
   });
 
-  it('maps raw Cloud upstream 429 responses as provider rate limits', async () => {
+  it('maps raw Gateway upstream 429 responses as provider rate limits', async () => {
     nextHandler = (_req, res) => {
       res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': '12' });
       res.end(JSON.stringify({ error: { message: 'upstream capacity reached', code: 'rate_limit_exceeded' } }));
     };
-    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado' });
     let caught: unknown;
     try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) {} }
     catch (error) { caught = error; }
@@ -215,7 +215,7 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
       res.writeHead(429, { 'Content-Type': 'application/json', 'Retry-After': retryAt });
       res.end(JSON.stringify({ error: { code: 'quota_exceeded' } }));
     };
-    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
+    const adapter = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado' });
     let caught: unknown;
     try { for await (const _ of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }], maxTokens: 10 })) {} }
     catch (error) { caught = error; }

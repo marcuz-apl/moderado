@@ -24,16 +24,16 @@ describe('shared provider presets', () => {
   });
 
   it('uses a configured Gateway URL, inferring the default environment from loopback hosts', () => {
-    expect(resolveModeradoCloudBaseUrl(undefined, 'http://localhost:4788/v1')).toBe('http://localhost:4788/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined, 'http://127.0.0.1:4788/v1')).toBe('http://127.0.0.1:4788/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined, 'https://cloud.moderado.example/v1')).toBe('https://cloud.moderado.example/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined)).toBe('https://modr.alfazen.org/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined, 'https://api.mod.alfazen.org/v1')).toBe('https://modr.alfazen.org/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined, 'http://127.0.0.1:8787/v1')).toBe('http://127.0.0.1:4788/v1');
-    expect(resolveModeradoCloudBaseUrl('development')).toBe('http://127.0.0.1:4788/v1');
-    expect(resolveModeradoCloudBaseUrl('production', 'http://localhost:4788/v1')).toBe('https://modr.alfazen.org/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined, 'http://nas.lan:8787/v1')).toBe('https://modr.alfazen.org/v1');
-    expect(resolveModeradoBaseUrl('development')).toBe(resolveModeradoCloudBaseUrl('development'));
+    expect(resolveModeradoBaseUrl(undefined, 'http://localhost:4788/v1')).toBe('http://localhost:4788/v1');
+    expect(resolveModeradoBaseUrl(undefined, 'http://127.0.0.1:4788/v1')).toBe('http://127.0.0.1:4788/v1');
+    expect(resolveModeradoBaseUrl(undefined, 'https://gateway.moderado.example/v1')).toBe('https://gateway.moderado.example/v1');
+    expect(resolveModeradoBaseUrl(undefined)).toBe('https://modr.alfazen.org/v1');
+    expect(resolveModeradoBaseUrl(undefined, 'https://api.mod.alfazen.org/v1')).toBe('https://modr.alfazen.org/v1');
+    expect(resolveModeradoBaseUrl(undefined, 'http://127.0.0.1:8787/v1')).toBe('http://127.0.0.1:4788/v1');
+    expect(resolveModeradoBaseUrl('development')).toBe('http://127.0.0.1:4788/v1');
+    expect(resolveModeradoBaseUrl('production', 'http://localhost:4788/v1')).toBe('https://modr.alfazen.org/v1');
+    expect(resolveModeradoBaseUrl(undefined, 'http://nas.lan:8787/v1')).toBe('https://modr.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl('development')).toBe(resolveModeradoBaseUrl('development'));
     expect(resolveModeradoBaseUrl('production')).toBe('https://modr.alfazen.org/v1');
   });
 
@@ -44,13 +44,13 @@ describe('shared provider presets', () => {
   });
 
   it('uses Gateway route access for cost and leaves unannotated routes unknown', () => {
-    const cloudFreePolicy = freeModelPolicyFor('moderado-cloud');
+    const moderadoFreePolicy = freeModelPolicyFor('moderado');
     const genericPaidClassification = { modelId: 'openai/gpt-oss-20b', accessTier: 'paid', toolSupport: 'supported', source: 'official_metadata' } as const;
 
-    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b' }, genericPaidClassification, cloudFreePolicy)).toBe(false);
-    expect(isFreeModelOption({ id: 'auto' }, { ...genericPaidClassification, modelId: 'auto', source: 'heuristic' }, cloudFreePolicy)).toBe(false);
-    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b', pricing: { prompt: '0.001', completion: '0.002' } }, genericPaidClassification, cloudFreePolicy)).toBe(false);
-    expect(isFreeModelOption({ id: 'paid-route', access: 'paid' }, genericPaidClassification, cloudFreePolicy)).toBe(false);
-    expect(isFreeModelOption({ id: 'free-route', access: 'free' }, genericPaidClassification, cloudFreePolicy)).toBe(true);
+    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b' }, genericPaidClassification, moderadoFreePolicy)).toBe(false);
+    expect(isFreeModelOption({ id: 'auto' }, { ...genericPaidClassification, modelId: 'auto', source: 'heuristic' }, moderadoFreePolicy)).toBe(false);
+    expect(isFreeModelOption({ id: 'openai/gpt-oss-20b', pricing: { prompt: '0.001', completion: '0.002' } }, genericPaidClassification, moderadoFreePolicy)).toBe(false);
+    expect(isFreeModelOption({ id: 'paid-route', access: 'paid' }, genericPaidClassification, moderadoFreePolicy)).toBe(false);
+    expect(isFreeModelOption({ id: 'free-route', access: 'free' }, genericPaidClassification, moderadoFreePolicy)).toBe(true);
   });
 });

@@ -49,7 +49,7 @@ it('parses validated Gateway fallback status events before content', async () =>
   ]);
 });
 
-it('continues to accept the deprecated Moderado Cloud SSE option', async () => {
+it('continues to accept the deprecated SSE status option', async () => {
   async function* bytes() {
     yield new TextEncoder().encode('event: moderado_status\ndata: {"from_model":"old","to_model":"new","reason":"rate_limited_or_unavailable"}\n\n');
   }

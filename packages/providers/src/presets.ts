@@ -24,9 +24,13 @@ export function resolveModeradoBaseUrl(mode?: string, gatewayUrl?: string): stri
 }
 
 export const MODERADO_BASE_URL = MODERADO_PRODUCTION_BASE_URL;
+/** @deprecated Use MODERADO_PRODUCTION_BASE_URL. */
 export const MODERADO_CLOUD_PRODUCTION_BASE_URL = MODERADO_PRODUCTION_BASE_URL;
+/** @deprecated Use MODERADO_DEVELOPMENT_BASE_URL. */
 export const MODERADO_CLOUD_DEVELOPMENT_BASE_URL = MODERADO_DEVELOPMENT_BASE_URL;
+/** @deprecated Use MODERADO_BASE_URL. */
 export const MODERADO_CLOUD_BASE_URL = MODERADO_BASE_URL;
+/** @deprecated Use resolveModeradoBaseUrl. */
 export const resolveModeradoCloudBaseUrl = resolveModeradoBaseUrl;
 
 export const CONNECT_PROVIDER_PRESET_IDS = [
