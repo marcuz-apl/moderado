@@ -17,7 +17,7 @@ describe('shared provider presets', () => {
   it('declares Moderado as a public catalog with key-gated free routes', () => {
     expect(CONNECT_PROVIDER_PRESET_META.find((item) => item.id === 'moderado')).toMatchObject({
       kind: 'openai-compatible',
-      baseUrl: 'https://mod.alfazen.org/v1',
+      baseUrl: 'https://modr.alfazen.org/v1',
       defaultModel: 'auto',
       requiresApiKey: false,
     });
@@ -27,13 +27,14 @@ describe('shared provider presets', () => {
     expect(resolveModeradoCloudBaseUrl(undefined, 'http://localhost:4788/v1')).toBe('http://localhost:4788/v1');
     expect(resolveModeradoCloudBaseUrl(undefined, 'http://127.0.0.1:4788/v1')).toBe('http://127.0.0.1:4788/v1');
     expect(resolveModeradoCloudBaseUrl(undefined, 'https://cloud.moderado.example/v1')).toBe('https://cloud.moderado.example/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined)).toBe('https://mod.alfazen.org/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined, 'https://api.mod.alfazen.org/v1')).toBe('https://mod.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl(undefined)).toBe('https://modr.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl(undefined, 'https://api.mod.alfazen.org/v1')).toBe('https://modr.alfazen.org/v1');
     expect(resolveModeradoCloudBaseUrl(undefined, 'http://127.0.0.1:8787/v1')).toBe('http://127.0.0.1:4788/v1');
     expect(resolveModeradoCloudBaseUrl('development')).toBe('http://127.0.0.1:4788/v1');
-    expect(resolveModeradoCloudBaseUrl('production', 'http://localhost:4788/v1')).toBe('https://mod.alfazen.org/v1');
-    expect(resolveModeradoCloudBaseUrl(undefined, 'http://nas.lan:8787/v1')).toBe('https://mod.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl('production', 'http://localhost:4788/v1')).toBe('https://modr.alfazen.org/v1');
+    expect(resolveModeradoCloudBaseUrl(undefined, 'http://nas.lan:8787/v1')).toBe('https://modr.alfazen.org/v1');
     expect(resolveModeradoBaseUrl('development')).toBe(resolveModeradoCloudBaseUrl('development'));
+    expect(resolveModeradoBaseUrl('production')).toBe('https://modr.alfazen.org/v1');
   });
 
   it('does not grant a provider-specific free declaration to another provider', () => {

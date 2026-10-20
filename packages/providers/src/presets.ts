@@ -1,7 +1,7 @@
 import type { ModelClassification, ModelInventoryEntry } from '@moderado/contracts';
 import { isFreeModelEntry } from './model_discovery.js';
 
-export const MODERADO_PRODUCTION_BASE_URL = 'https://mod.alfazen.org/v1';
+export const MODERADO_PRODUCTION_BASE_URL = 'https://modr.alfazen.org/v1';
 export const MODERADO_DEVELOPMENT_BASE_URL = 'http://127.0.0.1:4788/v1';
 
 export function resolveModeradoBaseUrl(mode?: string, gatewayUrl?: string): string {
