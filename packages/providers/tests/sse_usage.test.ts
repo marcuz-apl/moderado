@@ -42,11 +42,20 @@ it('parses validated Gateway fallback status events before content', async () =>
     yield new TextEncoder().encode(`event: moderado_status\ndata: ${JSON.stringify({ from_model: 'free/old', to_model: `free/model_${'a'.repeat(229)}`, reason: 'rate_limited_or_unavailable' })}\n\ndata: {"choices":[{"delta":{"content":"hello"}}]}\n\n`);
   }
   const chunks = [];
-  for await (const chunk of parseSseStream(bytes(), { moderadoCloud: true })) chunks.push(chunk);
+  for await (const chunk of parseSseStream(bytes(), { moderado: true })) chunks.push(chunk);
   expect(chunks).toEqual([
     { gatewayStatus: { fromModel: 'free/old', toModel: `free/model_${'a'.repeat(229)}`, reason: 'rate_limited_or_unavailable' } },
     { contentDelta: 'hello', finishReason: null },
   ]);
+});
+
+it('continues to accept the deprecated Moderado Cloud SSE option', async () => {
+  async function* bytes() {
+    yield new TextEncoder().encode('event: moderado_status\ndata: {"from_model":"old","to_model":"new","reason":"rate_limited_or_unavailable"}\n\n');
+  }
+  const chunks = [];
+  for await (const chunk of parseSseStream(bytes(), { moderadoCloud: true })) chunks.push(chunk);
+  expect(chunks).toEqual([{ gatewayStatus: { fromModel: 'old', toModel: 'new', reason: 'rate_limited_or_unavailable' } }]);
 });
 
 it('rejects unsafe Gateway fallback metadata', async () => {

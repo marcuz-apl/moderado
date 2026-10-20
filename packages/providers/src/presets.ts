@@ -1,32 +1,36 @@
 import type { ModelClassification, ModelInventoryEntry } from '@moderado/contracts';
 import { isFreeModelEntry } from './model_discovery.js';
 
-export const MODERADO_CLOUD_PRODUCTION_BASE_URL = 'https://mod.alfazen.org/v1';
-export const MODERADO_CLOUD_DEVELOPMENT_BASE_URL = 'http://127.0.0.1:4788/v1';
+export const MODERADO_PRODUCTION_BASE_URL = 'https://mod.alfazen.org/v1';
+export const MODERADO_DEVELOPMENT_BASE_URL = 'http://127.0.0.1:4788/v1';
 
-export function resolveModeradoCloudBaseUrl(mode?: string, gatewayUrl?: string): string {
-  if (mode === 'development') return MODERADO_CLOUD_DEVELOPMENT_BASE_URL;
-  if (mode === 'production') return MODERADO_CLOUD_PRODUCTION_BASE_URL;
-  if (!gatewayUrl) return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+export function resolveModeradoBaseUrl(mode?: string, gatewayUrl?: string): string {
+  if (mode === 'development') return MODERADO_DEVELOPMENT_BASE_URL;
+  if (mode === 'production') return MODERADO_PRODUCTION_BASE_URL;
+  if (!gatewayUrl) return MODERADO_PRODUCTION_BASE_URL;
 
   try {
     const url = new URL(gatewayUrl);
     const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
     if (url.username || url.password || (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback))) {
-      return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+      return MODERADO_PRODUCTION_BASE_URL;
     }
-    if (url.hostname === 'api.mod.alfazen.org') return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+    if (url.hostname === 'api.mod.alfazen.org') return MODERADO_PRODUCTION_BASE_URL;
     if (loopback && url.port === '8787') url.port = '4788';
     return url.toString().replace(/\/+$/, '');
   } catch {
-    return MODERADO_CLOUD_PRODUCTION_BASE_URL;
+    return MODERADO_PRODUCTION_BASE_URL;
   }
 }
 
-export const MODERADO_CLOUD_BASE_URL = MODERADO_CLOUD_PRODUCTION_BASE_URL;
+export const MODERADO_BASE_URL = MODERADO_PRODUCTION_BASE_URL;
+export const MODERADO_CLOUD_PRODUCTION_BASE_URL = MODERADO_PRODUCTION_BASE_URL;
+export const MODERADO_CLOUD_DEVELOPMENT_BASE_URL = MODERADO_DEVELOPMENT_BASE_URL;
+export const MODERADO_CLOUD_BASE_URL = MODERADO_BASE_URL;
+export const resolveModeradoCloudBaseUrl = resolveModeradoBaseUrl;
 
 export const CONNECT_PROVIDER_PRESET_IDS = [
-  'nvidia-nim', 'moderado-cloud', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
+  'nvidia-nim', 'moderado', 'moderado-cloud', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio', 'openai-compatible',
 ] as const;
 
 export type ConnectProviderPresetId = typeof CONNECT_PROVIDER_PRESET_IDS[number];
@@ -130,11 +134,11 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     requiresApiKey: true,
   },
   {
-    id: 'moderado-cloud',
-    label: 'Moderado Cloud',
+    id: 'moderado',
+    label: 'Moderado',
     description: 'Browse public Gateway routes; sign in with a website key for free routes.',
     kind: 'openai-compatible',
-    baseUrl: MODERADO_CLOUD_BASE_URL,
+    baseUrl: MODERADO_BASE_URL,
     defaultModel: 'auto',
     requiresApiKey: false,
   },
@@ -205,7 +209,8 @@ export function isLoopbackBaseUrl(baseUrl: string): boolean {
 }
 
 export function findProviderPreset(id: string): ProviderPresetMeta | undefined {
-  return CONNECT_PROVIDER_PRESET_META.find((preset) => preset.id === id);
+  const canonicalId = id === 'moderado-cloud' ? 'moderado' : id;
+  return CONNECT_PROVIDER_PRESET_META.find((preset) => preset.id === canonicalId);
 }
 
 /**

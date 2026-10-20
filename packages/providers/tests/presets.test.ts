@@ -1,18 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, isFreeModelOption, resolveModeradoCloudBaseUrl } from '../src/presets.js';
+import { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, isFreeModelOption, resolveModeradoBaseUrl, resolveModeradoCloudBaseUrl } from '../src/presets.js';
 
 describe('shared provider presets', () => {
   it('keeps the built-in presets available to other hosts', () => {
     // `openai-compatible` is a CLI pick-list entry with no fixed base URL, so
     // it has no preset metadata.
     expect(CONNECT_PROVIDER_PRESET_META.map((item) => item.id)).toEqual([
-      'nvidia-nim', 'moderado-cloud', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio',
+      'nvidia-nim', 'moderado', 'openrouter', 'agnes-ai', 'orcarouter', 'ollama', 'lm-studio',
     ]);
     expect(CONNECT_PROVIDER_PRESET_IDS).toContain('openai-compatible');
+    expect(CONNECT_PROVIDER_PRESET_IDS).toContain('moderado-cloud');
+    expect(CONNECT_PROVIDER_PRESET_META.find((item) => item.id === 'moderado')).toMatchObject({ label: 'Moderado' });
+    expect(freeModelPolicyFor('moderado-cloud')).toEqual(freeModelPolicyFor('moderado'));
   });
 
-  it('declares Moderado Gateway as a public catalog with key-gated free routes', () => {
-    expect(CONNECT_PROVIDER_PRESET_META.find((item) => item.id === 'moderado-cloud')).toMatchObject({
+  it('declares Moderado as a public catalog with key-gated free routes', () => {
+    expect(CONNECT_PROVIDER_PRESET_META.find((item) => item.id === 'moderado')).toMatchObject({
       kind: 'openai-compatible',
       baseUrl: 'https://mod.alfazen.org/v1',
       defaultModel: 'auto',
@@ -30,6 +33,7 @@ describe('shared provider presets', () => {
     expect(resolveModeradoCloudBaseUrl('development')).toBe('http://127.0.0.1:4788/v1');
     expect(resolveModeradoCloudBaseUrl('production', 'http://localhost:4788/v1')).toBe('https://mod.alfazen.org/v1');
     expect(resolveModeradoCloudBaseUrl(undefined, 'http://nas.lan:8787/v1')).toBe('https://mod.alfazen.org/v1');
+    expect(resolveModeradoBaseUrl('development')).toBe(resolveModeradoCloudBaseUrl('development'));
   });
 
   it('does not grant a provider-specific free declaration to another provider', () => {

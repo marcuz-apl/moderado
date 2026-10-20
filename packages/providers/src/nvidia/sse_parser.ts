@@ -14,8 +14,9 @@ export function classifyInjectedStreamError(raw: unknown): ProviderError {
 
 export async function* parseSseStream(
   byteStream: AsyncIterable<Uint8Array>,
-  options: { moderadoCloud?: boolean } = {},
+  options: { moderado?: boolean; moderadoCloud?: boolean } = {},
 ): AsyncIterable<ChatCompletionChunk> {
+  const isModerado = options.moderado ?? options.moderadoCloud ?? false;
   const decoder = new TextDecoder('utf8');
   let buffer = '';
   let eventName = '';
@@ -45,7 +46,7 @@ export async function* parseSseStream(
           return;
         }
 
-        if (eventName === 'moderado_status' && !options.moderadoCloud) continue;
+        if (eventName === 'moderado_status' && !isModerado) continue;
 
         let parsed: any;
         try {

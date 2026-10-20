@@ -9,6 +9,7 @@ import {
   AuthenticationError,
   RateLimitError,
   ModelUnavailableError,
+  GatewayError,
   ReadFileParamsSchema,
   WriteFileParamsSchema,
   EditFileParamsSchema,
@@ -120,6 +121,11 @@ describe('Contracts: Provider Error Hierarchy', () => {
     const unavailErr = new ModelUnavailableError('Service down', 503);
     expect(unavailErr.code).toBe('ERR_MODEL_UNAVAILABLE');
     expect(unavailErr.statusCode).toBe(503);
+  });
+
+  it('uses the canonical Moderado name in Gateway errors', () => {
+    expect(new GatewayError('unauthorized', 401).message).toBe('Moderado rejected the API key. Run /login to authorize again.');
+    expect(new GatewayError('service_unavailable', 503).message).toBe('Moderado is temporarily unavailable. Try again later.');
   });
 });
 

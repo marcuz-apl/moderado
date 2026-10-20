@@ -30,12 +30,12 @@ export class NvidiaAdapter implements IProviderAdapter {
   private cachedInventory: ModelInventoryEntry[] | null = null;
   private cacheTimestamp = 0;
   private readonly cacheTtlMs = 15 * 60 * 1000;
-  private readonly isModeradoCloud: boolean;
+  private readonly isModerado: boolean;
 
   constructor(config: NvidiaAdapterConfig = {}) {
     this.id = config.providerId || 'nvidia';
     this.name = config.providerName || 'NVIDIA NIM';
-    this.isModeradoCloud = this.id === 'moderado-cloud';
+    this.isModerado = this.id === 'moderado' || this.id === 'moderado-cloud';
     this.apiKey = config.apiKey || (this.id === 'nvidia' ? process.env.NVIDIA_API_KEY : undefined) || '';
     this.baseUrl = (config.baseUrl || 'https://integrate.api.nvidia.com/v1').replace(/\/+$/, '');
   }
@@ -193,12 +193,12 @@ export class NvidiaAdapter implements IProviderAdapter {
     }
 
     // Node.js Response.body is a ReadableStream<Uint8Array> which is an AsyncIterable in modern Node
-    yield* parseSseStream(response.body as any, { moderadoCloud: this.isModeradoCloud });
+    yield* parseSseStream(response.body as any, { moderado: this.isModerado });
   }
 
   private async handleHttpError(response: Response, action: string): Promise<never> {
     let errorText = '';
-    if (this.isModeradoCloud) {
+    if (this.isModerado) {
       try {
         errorText = await response.text();
       } catch {

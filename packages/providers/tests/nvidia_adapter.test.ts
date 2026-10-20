@@ -69,6 +69,17 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     }
   });
 
+  it('parses Gateway status events for the canonical Moderado provider ID', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      res.end('event: moderado_status\ndata: {"from_model":"old","to_model":"new","reason":"rate_limited_or_unavailable"}\n\ndata: [DONE]\n\n');
+    };
+    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado' });
+    const chunks = [];
+    for await (const chunk of adapter.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) chunks.push(chunk);
+    expect(chunks).toEqual([{ gatewayStatus: { fromModel: 'old', toModel: 'new', reason: 'rate_limited_or_unavailable' } }]);
+  });
+
   it('sends Cloud inference requests without client-side token, message, or body limits', async () => {
     const gateway = new NvidiaAdapter({ apiKey: 'test-key', baseUrl: serverUrl, providerId: 'moderado-cloud' });
     let sentPayload: Record<string, any> | undefined;
