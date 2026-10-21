@@ -34,18 +34,18 @@ export async function handleModelsCommand(
     try {
       const policy = freeModelPolicyFor('nvidia-nim');
       const inventory = await provider.discoverModels();
+      const isLocalProfile = args.profile.includes('local');
       results['NVIDIA NIM'] = inventory
-        .filter((entry) => isFreeModelOption(entry, router.classifyModel(entry.id), policy))
-        .map((entry) => {
-          const meta = router.classifyModel(entry.id, args.profile.includes('local'));
-          return {
-            id: entry.id,
-            provider: 'NVIDIA NIM',
-            accessTier: meta.accessTier,
-            toolSupport: meta.toolSupport,
-            notes: meta.source,
-          };
-        })
+        // Classify once: the free decision and the displayed metadata must agree.
+        .map((entry) => ({ entry, meta: router.classifyModel(entry.id, isLocalProfile) }))
+        .filter(({ entry, meta }) => isFreeModelOption(entry, meta, policy))
+        .map(({ entry, meta }) => ({
+          id: entry.id,
+          provider: 'NVIDIA NIM',
+          accessTier: meta.accessTier,
+          toolSupport: meta.toolSupport,
+          notes: meta.source,
+        }))
         // Free evidence answers cost, not capability. This catalog is the agent's
         // tool-calling pool, so a model that cannot emit tool calls is still not
         // offered here, exactly as before the free-catalog declaration.
@@ -144,7 +144,9 @@ export async function handleModelsCommand(
     }
   }
 
-  if (!args.json && !args.nonInteractive) {
+  // Only prompt when a human can answer: a piped or CI run must not print an
+  // interactive question into captured output and wait on closed stdin.
+  if (!args.json && !args.nonInteractive && process.stdin.isTTY) {
     const wantSelect = await askQuestion('Would you like to select and configure a default model? [y/N]: ');
     if (wantSelect.toLowerCase() === 'y' || wantSelect.toLowerCase() === 'yes') {
       await selectModelInteractive({ saveSelectionByDefault: true });

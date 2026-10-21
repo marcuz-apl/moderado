@@ -136,6 +136,6 @@ If a change introduces breaking public API shifts or fundamental architectural r
 
 When pausing work, encountering a blocker, completing a milestone, or transitioning between agents:
 - Follow the `handoff` skill.
-- Maintain and update [HANDOFF.md](file:///d:/projects/moderado/HANDOFF.md) in the repository root.
+- Maintain and update [HANDOFF.md](HANDOFF.md) in the repository root.
 - Capture current Git status, completed items, in-progress tasks, test check status, explicit decisions made, blockers, and the single smallest concrete next action.
 - Never store API keys, secrets, or raw full transcripts in `HANDOFF.md`.

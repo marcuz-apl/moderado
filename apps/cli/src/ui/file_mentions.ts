@@ -102,10 +102,17 @@ export async function expandMentions(
   let text = input;
 
   const matches = [...input.matchAll(MENTION_PATTERN)];
-  for (const match of matches.reverse()) {
+  // Splice from the end so earlier offsets stay valid, and replace by index:
+  // `String.replace(token, …)` would hit the first duplicate token instead and
+  // would interpret `$&`/`$1` inside file content as substitution patterns.
+  for (const match of [...matches].reverse()) {
+    const start = match.index;
+    if (start === undefined) continue;
+    const end = start + match[0].length;
     const rawToken = match[1];
     const token = rawToken.replace(/\\/g, '/');
-    const full = `@${rawToken}`;
+    let replacement: string | undefined;
+
     try {
       const files = await workspace.listFiles(token);
       const target = files.length === 1 ? files[0] : files[0] ?? token;
@@ -115,40 +122,33 @@ export async function expandMentions(
         if (workspace.readImage) {
           const buffer = await workspace.readImage(target);
           if (buffer.byteLength > 1024 * 1024) {
-            text = text.replace(
-              full,
-              `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes - exceeded 1MB inline limit)]\n--- end @${target} ---`
-            );
+            replacement = `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes - exceeded 1MB inline limit)]\n--- end @${target} ---`;
           } else {
             const base64 = buffer.toString('base64');
-            text = text.replace(
-              full,
-              `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes)]\ndata:${mime};base64,${base64}\n--- end @${target} ---`
-            );
+            replacement = `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime}, ${buffer.byteLength} bytes)]\ndata:${mime};base64,${base64}\n--- end @${target} ---`;
           }
         } else {
           try {
             const content = await workspace.readFile(target);
-            text = text.replace(full, `\n--- @${target} ---\n${content}\n--- end @${target} ---`);
+            replacement = `\n--- @${target} ---\n${content}\n--- end @${target} ---`;
           } catch {
-            text = text.replace(
-              full,
-              `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime})]\n--- end @${target} ---`
-            );
+            replacement = `\n--- @${target} (image) ---\n[Attached image: ${target} (${mime})]\n--- end @${target} ---`;
           }
         }
       } else {
         const content = await workspace.readFile(target);
         const lines = content.split(/\r?\n/).slice(0, maxLines);
-        text = text.replace(full, `\n--- @${target} ---\n${lines.join('\n')}\n--- end @${target} ---`);
+        replacement = `\n--- @${target} ---\n${lines.join('\n')}\n--- end @${target} ---`;
       }
     } catch {
-      unresolved.push(full);
+      unresolved.push(match[0]);
     }
+
+    if (replacement !== undefined) text = text.slice(0, start) + replacement + text.slice(end);
   }
 
   for (const missing of unresolved) {
-    text = text.replace(missing, `${missing} (file not found)`);
+    text = text.split(missing).join(`${missing} (file not found)`);
   }
   return { text: text.trim(), unresolved };
 }

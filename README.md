@@ -1,9 +1,9 @@
 # Moderado
 
-> **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
+> **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an explicit human-in-the-loop approval boundary.**
 
 [![Latest release](https://img.shields.io/github/v/release/marcuz-apl/moderado)](https://github.com/marcuz-apl/moderado/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
 ---
@@ -44,6 +44,17 @@ moderado run "Audit codebase" --profile local-nim
 moderado run "Analyze security boundaries" --read-only
 ```
 
+## Approval and auto-approve
+
+- Reads (`read_file`, `list_files`, `search_files`, `git_diff`) never prompt.
+- Interactive chat starts with **auto-approve enabled**; the composer status row
+  shows `Auto-approve enabled (Shift+Tab)`. Press `Shift+Tab` to require approval
+  for every write, edit, patch, and command.
+- `moderado run` prompts for each mutation unless you pass `-y`/`--auto-approve`.
+  A run without a terminal denies the request instead of waiting on stdin.
+- Network commands and MCP tools always prompt, even when auto-approve is on.
+- `--non-interactive` and `--read-only` deny mutating calls before any prompt.
+
 ---
 
 ## Install Moderado
@@ -52,13 +63,19 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.28** | Release candidate | Adds organized `/help` command groups, resumes interrupted chat sessions, and keeps help and keyboard-shortcut layout consistent across all help surfaces. |
-| **0.4.26** | Previous release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_ENV` overrides (the legacy `MODERADO_CLOUD_ENV` name remains supported). Chat TUI is polished with dynamic task progress, a Done state in the chat status row, network approval prompts, wildcard skill toggles, and chat status rows clamped inside the composer card columns. |
+| **0.4.33** | Release candidate | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Includes the `modr` alias and the Gateway authorization recovery from 0.4.31/0.4.32. |
+| **0.4.32** | Previous release | Publishes `modr` as a short command alias for `moderado`. |
+| **0.4.31** | Previous release | Gateway authorization failures offer key re-entry instead of ending the session, the status row keeps a live progress indicator, and the chat view re-centers after a terminal resize. |
+| **0.4.30** | Previous release | Canonical `moderado` provider identity, an updated production Gateway endpoint, and migration of legacy `moderado-cloud` configuration. |
+| **0.4.28** | Previous release | Organized `/help` command groups, interrupted-chat resume, and consistent help and shortcut layout. |
+| **0.4.26** | Previous release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_ENV` overrides (the legacy `MODERADO_CLOUD_ENV` name remains supported). |
 | **0.4.18** | Previous release | Gateway-integrated CLI. `moderado update` and `moderado upgrade` self-update commands were introduced in this release. |
 | **0.4.10** | Previous release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
-Both versions install the `moderado` command, with `modr` available as a short alias. Install the latest release with `npm install -g moderado`. To keep using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
+Every release from 0.4.32 installs both the `moderado` command and the short
+`modr` alias. Install the latest release with `npm install -g moderado`. To keep
+using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
 
 Chocolatey is deliberately out of scope; the full channel runbook lives in
 [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
@@ -76,7 +93,7 @@ npm install -g moderado
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.28
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.33
 
 ```
 
@@ -87,7 +104,7 @@ curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/
 brew tap marcuz-apl/moderado && brew install moderado
 
 # curl installer (arm64), same checksum verification as Linux
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.28
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.33
 
 ```
 
@@ -158,8 +175,8 @@ route, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
 The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama
-Local, LM Studio, and custom OpenAI-compatible providers. The published 0.4.8
-release still uses `/login` for the Gateway.
+Local, LM Studio, and custom OpenAI-compatible providers. Releases before
+0.4.10 used `/login` for the Gateway; `/connect` replaced it.
 
 Moderado OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
@@ -195,6 +212,7 @@ fallback when the canonical variable is unset.
 Run `moderado doctor` to inspect local setup without exposing secrets. Add
 `--connectivity` only when you want an optional live model-catalog check.
 `npm test` never performs live provider calls.
+
 ## Getting Started & Development
 
 ### Log in and select a model in the TUI

@@ -153,6 +153,28 @@ describe('Composer File Mentions and Image Attachments', () => {
       const result = await expandMentions('Inspect @docs/huge.jpg', mockWorkspace);
       expect(result.text).toContain('exceeded 1MB inline limit');
     });
+
+    it('expands every occurrence of a repeated mention in place', async () => {
+      const mockWorkspace: WorkspaceFileSource = {
+        async listFiles(token) { return token === 'a.txt' ? ['a.txt'] : []; },
+        async readFile() { return 'A'; },
+      };
+
+      const result = await expandMentions('@a.txt then @a.txt', mockWorkspace);
+      expect(result.text.match(/--- @a\.txt ---/g)).toHaveLength(2);
+      // The second mention is replaced in place, keeping the user's wording between them.
+      expect(result.text).toContain('--- end @a.txt --- then');
+    });
+
+    it('keeps file content containing dollar sequences verbatim', async () => {
+      const mockWorkspace: WorkspaceFileSource = {
+        async listFiles() { return ['price.txt']; },
+        async readFile() { return 'total: $& and $1'; },
+      };
+
+      const result = await expandMentions('Read @price.txt', mockWorkspace);
+      expect(result.text).toContain('total: $& and $1');
+    });
   });
 
   describe('createWorkspaceFileSource', () => {

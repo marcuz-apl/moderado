@@ -1,8 +1,59 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-15 (v0.4.28 release preparation)
+Updated: 2026-10-21 (v0.4.33 release preparation)
 Branch: master (tracking origin/master)
-Status: v0.4.28 release documentation and package metadata are prepared; tag and publication remain intentionally pending.
+Status: v0.4.33 is prepared — code fixes, docs, and package metadata are aligned; tag and publication remain intentionally pending.
+
+## Session 2026-10-21 — v0.4.33 release preparation
+
+### Summary
+
+Full-codebase review ahead of the next release. Five defects were fixed, the
+offline suite was made deterministic on Windows, and every document was synced
+to the current version.
+
+### Completed
+
+- **Approval boundary (`apps/cli/src/commands/run.ts`)**: `moderado run`
+  auto-approved every mutating tool regardless of `--auto-approve`, so `-y` was
+  dead and `write_file`/`run_command` never prompted. It now shares
+  `decideApproval` with chat: interactive by default, `-y` to skip, network
+  commands and MCP always prompt, and a non-TTY session denies with guidance
+  instead of blocking on stdin. `createRunApprovalHandler` is covered by
+  `apps/cli/tests/run_approval.test.ts`.
+- **Routing preferences (`run.ts`)**: `args.allowPaid ?? config.allowPaid` could
+  never read the saved value because the flag is a boolean. Flags now OR with
+  the persisted preference.
+- **Composer mentions (`ui/file_mentions.ts`)**: expansion is index-based, so a
+  repeated `@token` no longer rewrites the first occurrence, and file content
+  containing `$&`/`$1` is inserted literally.
+- **Wide-glyph layout (`ui/box.ts`, `ui/welcome.ts`, `ui/popup.ts`)**: new
+  `displayWidth` counts CJK/emoji as two cells and combining marks as zero;
+  box padding, popup width, and `wrapText` use it.
+- **Test harness**: `testTimeout`/`hookTimeout` raised to 30s; `run_command`
+  success paths allow 20s (process creation costs 0.5-3s on Windows);
+  `install_script` cases allow 60s; temp-directory cleanup in the git, install,
+  and self-update suites tolerates sandboxed-fs trash timeouts.
+- **Housekeeping**: deleted the unused `interactive_menu` command, removed a BOM
+  from `sessions.ts`, stopped `moderado models` from prompting on a non-TTY
+  stdin, and documented `--provider`/`--connectivity` in `--help`.
+- **Docs**: CHANGELOG now covers v0.4.29-v0.4.33; README, CLI README, GUIDE,
+  RELEASING, DISTRIBUTION, and ARCHITECTURE are synced to 0.4.33; every
+  `file:///d:/...` link is repository-relative; ARCHITECTURE no longer claims a
+  `SessionStateMachine` that does not exist.
+- **Verification**: `npm run build`, `npm run typecheck`, `npm test`
+  (66 files, exit 0), and `npm run verify:package` pass.
+
+### Decision recorded
+
+Interactive chat keeps starting with auto-approve enabled (asserted by
+`welcome.test.ts`). Documentation now states that default and the `Shift+Tab`
+toggle instead of claiming every write prompts.
+
+### Next action
+
+Tag `v0.4.33` (`cut -d+ -f1 VERSION`) and run the guarded publish workflow when
+the release is approved. No code work is pending.
 
 ## Session 2026-10-15 — v0.4.28 release preparation
 
@@ -341,11 +392,11 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
    - `release(minor):` is the Alfazen trigger for a minor bump, so `v0.2.61` became `v0.3.0`, the version the roadmap declares as the CLI public-distribution gate.
    - The real `.githooks/pre-commit` hook performed the bump to `v0.3.0+260921I`, staged `VERSION`, and `commit-msg` stamped the subject (see item 5 for the hook caveat and the workaround used).
 
-2. **Release metadata aligned to `0.3.0` ([`apps/cli/package.json`](file:///d:/projects/moderado/apps/cli/package.json), [`package-lock.json`](file:///d:/projects/moderado/package-lock.json), [`README.md`](file:///d:/projects/moderado/README.md), [`apps/cli/README.md`](file:///d:/projects/moderado/apps/cli/README.md))**:
-   - The publishable package version and the `apps/cli` lockfile workspace entry are `0.3.0`, so `verify:package` emits `moderado-0.3.0.tgz` and the GitHub Release cannot attach a mislabelled artifact; npm installs report `v0.3.0` through the `package.json` fallback in [`apps/cli/src/index.ts`](file:///d:/projects/moderado/apps/cli/src/index.ts).
+2. **Release metadata aligned to `0.3.0` ([`apps/cli/package.json`](apps/cli/package.json), [`package-lock.json`](package-lock.json), [`README.md`](README.md), [`apps/cli/README.md`](apps/cli/README.md))**:
+   - The publishable package version and the `apps/cli` lockfile workspace entry are `0.3.0`, so `verify:package` emits `moderado-0.3.0.tgz` and the GitHub Release cannot attach a mislabelled artifact; npm installs report `v0.3.0` through the `package.json` fallback in [`apps/cli/src/index.ts`](apps/cli/src/index.ts).
    - Both README badges read `v0.3.0+260921I` at release time (since refreshed to `v0.3.1+2609225` by the README reorg below).
 
-3. **Release runbook updated ([`docs/RELEASING.md`](file:///d:/projects/moderado/docs/RELEASING.md))**:
+3. **Release runbook updated ([`docs/RELEASING.md`](docs/RELEASING.md))**:
    - Pre-flight Step 0 requires the npm version to match the SemVer portion of `VERSION`; all examples now reference `v0.3.0` and `moderado-0.3.0.tgz`.
    - Step 2 derives the tag from `cut -d+ -f1 VERSION` instead of hard-coding a version.
 
@@ -365,13 +416,13 @@ Status: npm `moderado@0.3.0` is PUBLISHED (manual first publish, no `--provenanc
    - `packages/tools/tests/jail.test.ts` asserted that backslash-only UNC notation escapes the jail, which is only true on Windows. That assertion is now guarded by the same drive-letter check the neighbouring tests use, while the POSIX-absolute and WSL-UNC escape assertions still run on every platform.
    - `apps/cli/tests/npm_package.test.ts` no longer depends on the ambient `npm_execpath` and now passes the target platform explicitly, so the Windows invocation contracts are asserted on every runner instead of only on Windows.
    - Reproduced and re-verified in a fresh clone of the tag commit: without the build 24 suites fail exactly as CI reported, and with `npm run build` first the full 49 suites / 343 tests pass.
-   - macOS `/var` → `/private/var` symlink resolution surfaced two further defects. [`packages/tools/src/tools/list_files.ts`](file:///d:/projects/moderado/packages/tools/src/tools/list_files.ts) computed workspace-relative paths against the *supplied* root while walking a canonicalized directory, so an existing-subdirectory query returned escaped paths (for example `../../private/var/...`) instead of `src/index.ts`; `listFiles` and `ListFilesTool` now canonicalize the walk root once and fall back to the supplied root when it cannot be resolved. The `/session share` assertion in [`apps/cli/tests/chat.test.ts`](file:///d:/projects/moderado/apps/cli/tests/chat.test.ts) now compares against the canonicalized root.
+   - macOS `/var` → `/private/var` symlink resolution surfaced two further defects. [`packages/tools/src/tools/list_files.ts`](packages/tools/src/tools/list_files.ts) computed workspace-relative paths against the *supplied* root while walking a canonicalized directory, so an existing-subdirectory query returned escaped paths (for example `../../private/var/...`) instead of `src/index.ts`; `listFiles` and `ListFilesTool` now canonicalize the walk root once and fall back to the supplied root when it cannot be resolved. The `/session share` assertion in [`apps/cli/tests/chat.test.ts`](apps/cli/tests/chat.test.ts) now compares against the canonicalized root.
    - The `binary-metadata` merge gate then failed with `ENOENT ... collected/win/manifest.json` because `upload-artifact` keeps the `artifacts/<version>/<target>/` nesting (it roots the archive at the glob's static prefix), while `merge-binaries --source` expects the manifest at the source root; the merge step now resolves each per-target source directory through the connected version.
    - Reproduced that macOS class of defect locally with a Windows junction root (`path !== realpath`): the query form returned `../reprow-.../src/index.ts` before the fix and `src/index.ts` after it.
 
 7. **README reorganized (`bbe1506`, `v0.3.1+2609225`, docs-only)**:
    - Added a simple **Tech Stack** section (TypeScript, Node.js >= 20, ESM, Zod, Vitest, npm workspaces, `@yao-pkg/pkg`, GitHub Actions OIDC).
-   - Moved Highlights, Documentation Index, Workspace Layout, Practical coding workflow, Diagnostics evidence, TypeScript language intelligence, Local MCP tools, Host event protocol, and Doctor command byte-for-byte into the new [`docs/GUIDE.md`](file:///d:/projects/moderado/docs/GUIDE.md); no tests assert README structure, and the `#install-moderado` anchor used by `docs/FIRST_PUBLISH.md` still resolves.
+   - Moved Highlights, Documentation Index, Workspace Layout, Practical coding workflow, Diagnostics evidence, TypeScript language intelligence, Local MCP tools, Host event protocol, and Doctor command byte-for-byte into the new [`docs/GUIDE.md`](docs/GUIDE.md); no tests assert README structure, and the `#install-moderado` anchor used by `docs/FIRST_PUBLISH.md` still resolves.
    - Rewrote **Install Moderado** as per-OS subsections (Linux, macOS, Windows) covering every live channel; the "Other install channels" table was folded in and removed as a heading.
 
 ## Checks

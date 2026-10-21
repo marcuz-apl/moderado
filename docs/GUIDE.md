@@ -3,11 +3,11 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. This guide reflects the 0.4.28 release candidate. Its `/connect`
-flow handles the Gateway and direct provider connections; the previous
-0.4.8 release uses `/login` for the Gateway. The earlier v0.3.10 release
-is self-contained and does not require the Gateway. All three use the
-`moderado` command name, with `modr` as a short alias.
+quick start. This guide reflects the 0.4.33 release candidate. Its `/connect`
+flow handles the Gateway and direct provider connections; releases before
+0.4.10 used `/login` for the Gateway. The earlier v0.3.10 release
+is self-contained and does not require the Gateway. Every release from 0.4.32
+installs the `moderado` command with `modr` as a short alias.
 
 ---
 
@@ -17,9 +17,29 @@ is self-contained and does not require the Gateway. All three use the
 - **Provider-Independent Core**: Core agent loops, tool dispatching, and routing depend on pure contracts (`packages/contracts`) using Dependency Injection.
 - **Dynamic NVIDIA Discovery**: Queries live `/v1/models` from NVIDIA NIM hosted catalog or local NIM instances; never relies on stale static lists.
 - **Free-First AUTO Routing**: Intelligently ranks and selects verified free/trial tool-capable models before any paid endpoints. Paid models and unverified pricing require explicit user opt-in.
-- **Strict Approval Boundary**: Auto-approved reads; interactive human approval for file writes, edits, and command executions. Non-interactive sessions fail closed.
+- **Approval Boundary**: Reads never prompt. Interactive chat starts with auto-approve on and toggles with `Shift+Tab`; `moderado run` prompts for every mutation unless you pass `-y`. Network commands and MCP tools always prompt, and non-interactive sessions fail closed.
 - **Minimalist & Bloat-Free (`ponytail`)**: Follows the Decision Ladder: YAGNI, standard library first (native Node `fetch`, `AbortController`, `child_process.spawn`), and zero unnecessary dependencies.
 - **Alfazen Versioning (`versioning-alfazen`)**: SemVer 2.0.0 with high-traceability connected UTC build prefixes (`v<m.n.p>+<yymmddc>`) and mandatory owner advisory gates for major releases.
+
+---
+
+## Approval and auto-approve
+
+- **Reads never prompt.** `read_file`, `list_files`, `search_files`, and `git_diff` are auto-approved.
+- **Interactive chat starts with auto-approve enabled.** The composer status row
+  reads `Auto-approve enabled (Shift+Tab)`; press `Shift+Tab` to require approval
+  for each write, edit, patch, and command. The choice is per session.
+- **`moderado run` prompts by default.** Pass `-y`/`--auto-approve` for an
+  unattended task. Without a terminal, a mutation is denied with an actionable
+  message instead of waiting on stdin.
+- **Network commands always prompt.** `run_command` invocations containing
+  `curl`, `wget`, or an `http(s)://` URL ask for approval even when auto-approve
+  is on.
+- **MCP tools always prompt.** Every `mcp.<server>.<tool>` call needs its own
+  approval.
+- **Non-interactive and read-only fail closed.** `--non-interactive` denies any
+  call that would need approval, and `--read-only` blocks every mutation and
+  command before the prompt.
 
 ---
 
@@ -68,7 +88,7 @@ Use `/workflow` from the TUI to work through a change safely:
 - **Git status** shows the current branch and changed files without using a shell.
 - **Review diff** shows the bounded working-tree diff.
 - In **Plan** mode, Moderado asks the model for a concise checklist and cannot make workspace changes. Choose **Build plan** and confirm to send that checklist to Execute mode.
-- File writes, exact edits, and multi-file patches show their change preview and still require approval. Moderado records a byte-preserving checkpoint immediately before an approved file mutation.
+- File writes, exact edits, and multi-file patches show their change preview and still require approval while auto-approve is off. Moderado records a byte-preserving checkpoint immediately before an approved file mutation.
 - **Undo latest agent change** requires its own approval. It restores the latest completed checkpoint from `~/.moderado/checkpoints/` only when every affected file still has the expected post-change digest. If a file changed externally, it reports the conflict and restores nothing.
 
 ### Diagnostics evidence

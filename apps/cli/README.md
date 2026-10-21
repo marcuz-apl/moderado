@@ -1,9 +1,9 @@
 # Moderado
 
-> **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an uncompromised human-in-the-loop approval boundary.**
+> **A lightweight, provider-independent CLI coding agent with dynamic NVIDIA NIM discovery, free-first AUTO routing, and an explicit human-in-the-loop approval boundary.**
 
 [![Latest release](https://img.shields.io/github/v/release/marcuz-apl/moderado)](https://github.com/marcuz-apl/moderado/releases/latest)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](file:///d:/projects/moderado/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Standards: Alfazen](https://img.shields.io/badge/standard-alfazen--coding-green.svg)](https://github.com/marcuz-apl/alfazen-skills)
 
 ---
@@ -14,7 +14,7 @@
 - **Provider-Independent Core**: Core agent loops, tool dispatching, and routing depend on pure contracts (`packages/contracts`) using Dependency Injection.
 - **Dynamic NVIDIA Discovery**: Queries live `/v1/models` from NVIDIA NIM hosted catalog or local NIM instances; never relies on stale static lists.
 - **Free-First AUTO Routing**: Intelligently ranks and selects verified free/trial tool-capable models before any paid endpoints. Paid models and unverified pricing require explicit user opt-in.
-- **Strict Approval Boundary**: Auto-approved reads; interactive human approval for file writes, edits, and command executions. Non-interactive sessions fail closed.
+- **Approval Boundary**: Reads never prompt. Interactive chat starts with auto-approve on and toggles with `Shift+Tab`; `moderado run` prompts for every mutation unless you pass `-y`. Network commands and MCP tools always prompt, and non-interactive sessions fail closed.
 - **Minimalist & Bloat-Free (`ponytail`)**: Follows the Decision Ladder: YAGNI, standard library first (native Node `fetch`, `AbortController`, `child_process.spawn`), and zero unnecessary dependencies.
 - **Alfazen Versioning (`versioning-alfazen`)**: SemVer 2.0.0 with high-traceability connected UTC build prefixes (`v<m.n.p>+<yymmddc>`) and mandatory owner advisory gates for major releases.
 
@@ -24,14 +24,15 @@
 
 | Document | Purpose |
 |---|---|
-| [**PRD.md**](file:///d:/projects/moderado/PRD.md) | **Product Requirements Document**: Personas, requirements, CLI specs, and acceptance criteria |
-| [**AGENTS.md**](file:///d:/projects/moderado/AGENTS.md) | **Agent Operational Manual**: Rules of engagement, Ponytail Decision Ladder, and subagent patterns |
-| [**docs/ARCHITECTURE.md**](file:///d:/projects/moderado/docs/ARCHITECTURE.md) | **System Architecture**: Workspaces, Dependency Injection, state machines, and event streams |
-| [**docs/TOOLS.md**](file:///d:/projects/moderado/docs/TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the workspace tools |
-| [**docs/ROUTING.md**](file:///d:/projects/moderado/docs/ROUTING.md) | **Discovery & Routing**: Classification taxonomy, AUTO selection algorithm, and retry/fallback cascades |
-| [**docs/SECURITY.md**](file:///d:/projects/moderado/docs/SECURITY.md) | **Security Model**: Workspace jail, `shell: false` isolation, environment cleansing, and injection defense |
+| [**PRD.md**](../../PRD.md) | **Product Requirements Document**: Personas, requirements, CLI specs, and acceptance criteria |
+| [**AGENTS.md**](../../AGENTS.md) | **Agent Operational Manual**: Rules of engagement, Ponytail Decision Ladder, and subagent patterns |
+| [**docs/ARCHITECTURE.md**](../../docs/ARCHITECTURE.md) | **System Architecture**: Workspaces, Dependency Injection, and event streams |
+| [**docs/TOOLS.md**](../../docs/TOOLS.md) | **Tool Specifications**: Schemas, limits, atomic writes, and validation rules for the workspace tools |
+| [**docs/ROUTING.md**](../../docs/ROUTING.md) | **Discovery & Routing**: Classification taxonomy, AUTO selection algorithm, and retry/fallback cascades |
+| [**docs/SECURITY.md**](../../docs/SECURITY.md) | **Security Model**: Workspace jail, `shell: false` isolation, environment cleansing, and injection defense |
+| [**docs/GUIDE.md**](../../docs/GUIDE.md) | **User Guide**: TUI capabilities, skills, MCP servers, and provider presets |
 | [**docs/COMPETITIVE_ANALYSIS.md**](../../docs/COMPETITIVE_ANALYSIS.md) | **Competitive Analysis**: Verified Cline CLI and OpenCode CLI feature survey, gap analysis, and deliberate non-goals |
-| [**HANDOFF.md**](file:///d:/projects/moderado/HANDOFF.md) | **Project Handoff Snapshot**: Real-time status, decisions, blockers, and next implementation milestones |
+| [**HANDOFF.md**](../../HANDOFF.md) | **Project Handoff Snapshot**: Status, decisions, blockers, and next implementation milestones |
 
 ---
 
@@ -42,11 +43,11 @@ Moderado is organized as an npm workspace:
 ```text
 moderado/
 ├── apps/
-│   └── cli/                 # v0.1 CLI application and terminal event rendering
+│   └── cli/                 # CLI application and terminal event rendering
 ├── packages/
 │   ├── contracts/           # Pure TypeScript interfaces, Zod schemas, events
-│   ├── core/                # Agent loop, routing policy, session state machine
-│   ├── providers/           # NVIDIA NIM HTTP adapter and mock/fake providers
+│   ├── core/                # Agent loop, routing policy, subagent delegation
+│   ├── providers/           # NVIDIA NIM and OpenAI-compatible adapters, presets
 │   └── tools/               # Workspace file jail and process execution engine
 ├── tests/                   # Cross-package and CLI integration tests
 ├── docs/                    # Architectural and subsystem specifications
@@ -67,6 +68,9 @@ moderado models
 # Run a bounded coding task in the current workspace (default AUTO routing)
 moderado run "Add unit tests for user authentication"
 
+# Approve mutations without prompting (required when stdin is not a terminal)
+moderado run "Add unit tests" --auto-approve
+
 # Pin a specific model (disables fallback)
 moderado run "Refactor database client" --model meta/llama-3.3-70b-instruct
 
@@ -76,6 +80,8 @@ moderado run "Audit codebase" --profile local-nim
 # Run in read-only audit mode (denies all writes and commands)
 moderado run "Analyze security boundaries" --read-only
 ```
+
+Every command is also available through the short `modr` alias.
 
 ---
 
@@ -88,12 +94,13 @@ npm install -g moderado
 moderado --help
 ```
 
-The 0.4.28 release candidate adds organized `/help` command groups and resumes
-interrupted chat sessions. Its `/connect` flow handles the
-Gateway and direct providers; `/login` is no longer offered. The previous
-0.4.8 release uses `/login` for the Gateway. The earlier 0.3.10 release is
-self-contained and works without the Gateway. All three use the `moderado`
-command name, with `modr` as a short alias.
+The 0.4.33 release candidate restores the approval boundary in `moderado run`,
+fixes `@file` mention replacement, aligns boxes and wrapped text for CJK and
+emoji, and makes the offline suite deterministic on Windows. It builds on
+0.4.32 (`modr` alias) and 0.4.31 (Gateway authorization recovery, live progress
+row). `/connect` handles the Gateway and direct providers; releases before
+0.4.10 used `/login` for the Gateway. The 0.3.10 release is self-contained and
+works without the Gateway.
 
 Install the latest release with `npm install -g moderado`. To install a specific
 version, run `npm install -g moderado@<version>`. Prebuilt binaries and the curl
@@ -127,6 +134,7 @@ an actionable error and leaves the current installation intact. Update it
 manually with its original installer or package manager, for example
 `npm install -g moderado` or the Homebrew/Scoop command above. An interrupted
 update reports cancellation; run the command again when ready.
+
 To build from source instead:
 
 ```bash
@@ -151,8 +159,8 @@ routing, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
 The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama,
-LM Studio, and custom OpenAI-compatible providers. The published 0.4.8 release
-still uses `/login` for the Gateway.
+LM Studio, and custom OpenAI-compatible providers. Releases before 0.4.10 used
+`/login` for the Gateway.
 
 Moderado OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
@@ -170,9 +178,8 @@ their corresponding canonical variables are unset. For an environment-provided
 Moderado key, use `MODERADO_API_KEY`; `MODERADO_CLOUD_API_KEY` remains its
 fallback when the canonical variable is unset.
 
-Run `moderado doctor` to inspect local setup without exposing secrets. Add
-`--connectivity` only when you want an optional live model-catalog check.
-`npm test` never performs live provider calls.
+---
+
 ## Getting Started & Development
 
 ### Log in and select a model in the TUI
@@ -200,37 +207,6 @@ OpenRouter, Z.AI, DeepSeek, Moonshot, and Mistral. Compatibility depends on each
 provider supporting `/v1/models` and streaming `/v1/chat/completions` with tool
 calls. Moderado keys are never written in plaintext to `~/.moderado/config.json`.
 
-### 1. Build & Test
-```bash
-# Install workspace dependencies
-npm install
-
-# Build all packages via TypeScript project references
-npm run build
-
-# Run full automated test suite (100% offline, zero API keys required)
-npm test
-```
-
-### 2. Manual Live Smoke Test (Optional)
-To test live model discovery and chat against NVIDIA NIM with real credentials:
-```bash
-# PowerShell
-$env:NVIDIA_API_KEY="nvapi-..."
-node scripts/smoke_test.js
-
-# POSIX (bash/zsh)
-export NVIDIA_API_KEY="nvapi-..."
-node scripts/smoke_test.js
-```
-
----
-
-## License
-
-This project is licensed under the MIT License.
-*NVIDIA NIM, NGC, and model weights/APIs are subject to their respective terms and licenses. Moderado is independent and not endorsed by NVIDIA.*
-
 ### Practical coding workflow
 
 Use `/workflow` from the TUI to work through a change safely:
@@ -238,7 +214,7 @@ Use `/workflow` from the TUI to work through a change safely:
 - **Git status** shows the current branch and changed files without using a shell.
 - **Review diff** shows the bounded working-tree diff.
 - In **Plan** mode, Moderado asks the model for a concise checklist and cannot make workspace changes. Choose **Build plan** and confirm to send that checklist to Execute mode.
-- File writes, exact edits, and multi-file patches show their change preview and still require approval. Moderado records a byte-preserving checkpoint immediately before an approved file mutation.
+- File writes, exact edits, and multi-file patches show their change preview and still require approval when auto-approve is off. Moderado records a byte-preserving checkpoint immediately before an approved file mutation.
 - **Undo latest agent change** requires its own approval. It restores the latest completed checkpoint from `~/.moderado/checkpoints/` only when every affected file still has the expected post-change digest. If a file changed externally, it reports the conflict and restores nothing.
 
 ### Diagnostics evidence
@@ -259,7 +235,36 @@ Moderado exposes a versioned host-event envelope with session identity and monot
 
 ### Doctor command
 
-Run `moderado doctor` to check the local Node runtime, workspace, Moderado home directory, provider/key presence, Git, and npm without exposing credentials. Run `moderado doctor --connectivity` only when you want an explicit live provider catalog check.
+Run `moderado doctor` to check the local Node runtime, workspace, Moderado home directory, provider/key presence, Git, and npm without exposing credentials. Add `--connectivity` only when you want an explicit live provider catalog check. `npm test` never performs live provider calls.
+
+### 1. Build & Test
+
+```bash
+# Install workspace dependencies
+npm install
+
+# Build all packages via TypeScript project references
+npm run build
+
+# Run full automated test suite (100% offline, zero API keys required)
+npm test
+```
+
+### 2. Manual Live Smoke Test (Optional)
+
+To test live model discovery and chat against NVIDIA NIM with real credentials:
+
+```bash
+# PowerShell
+$env:NVIDIA_API_KEY="nvapi-..."
+node scripts/smoke_test.js
+
+# POSIX (bash/zsh)
+export NVIDIA_API_KEY="nvapi-..."
+node scripts/smoke_test.js
+```
+
+---
 
 ## Windows credential storage
 
@@ -268,3 +273,8 @@ Manager and keeps only a credential reference in `~/.moderado/config.json`.
 Non-Windows platforms use the current memory-only credential store, so log in
 again for each new CLI process. Existing BYOK environment variables and saved
 profiles remain independent.
+
+## License
+
+This project is licensed under the MIT License.
+*NVIDIA NIM, NGC, and model weights/APIs are subject to their respective terms and licenses. Moderado is independent and not endorsed by NVIDIA.*

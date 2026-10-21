@@ -2,7 +2,7 @@
 
 **Document Version:** `v0.1.0+2609161`  
 **Status:** Approved Specification  
-**Parent Document:** [PRD.md](file:///d:/projects/moderado/PRD.md)  
+**Parent Document:** [PRD.md](../PRD.md)  
 **Standard Adherence:** Minimalist Engineering (`ponytail`), Cost-Aware Architecture
 
 ---
@@ -141,10 +141,29 @@ Transient HTTP errors (`429 Too Many Requests`, `500 Internal Server Error`, `50
 
 ## 5. M7 Provider and Web Routing
 
-OpenRouter, Agnes, and future OpenAI-compatible providers use the shared
-provider transport with explicit provider IDs, names, base URLs, credentials,
-and model classifications. Routing remains free-first and never infers price
-or tool support from a provider name.
+OpenRouter, Agnes, OrcaRouter, and future OpenAI-compatible providers use the
+shared provider transport with explicit provider IDs, names, base URLs,
+credentials, and model classifications. Routing remains free-first and never
+infers price or tool support from a provider name.
+
+### 5.1 Provider presets
+
+`packages/providers/src/presets.ts` is the single source of truth for the
+`/connect` menu. A preset carries its id, base URL, transport kind, API-key
+requirement, and the rule that proves a model is free.
+
+| Preset id | Label | Transport | Free evidence |
+|---|---|---|---|
+| `nvidia-nim` | NVIDIA NIM | `nvidia-nim` | `freeCatalog`: hosted NIM runs on build.nvidia.com trial credits |
+| `moderado` | Moderado | `openai-compatible` | Gateway route catalog; `auto` is the default route |
+| `openrouter` | OpenRouter | `openai-compatible` | Advertised zero `pricing` |
+| `agnes-ai` | Agnes AI | `openai-compatible` | `freeCatalog`: every endpoint is free |
+| `orcarouter` | OrcaRouter | `openai-compatible` | `freeIdSuffixes: ['free']` |
+| `ollama` | Ollama | `openai-compatible` | Loopback, no key |
+| `lm-studio` | LM Studio | `openai-compatible` | Loopback, no key |
+
+The legacy `moderado-cloud` id and display name are canonicalized to
+`moderado` on config load, and the canonical record wins when both exist.
 
 Web search is routed separately through the automatic `web_search` tool. It
 returns bounded source metadata and does not participate in model AUTO ranking or
@@ -158,5 +177,5 @@ then sends one evidence-bearing model turn, so answering costs a single inferenc
 round trip instead of a tool round trip plus an answer. That turn is instructed to
 reply with the values themselves — one context line plus short factual bullets —
 and never to list sources or narrate the search. See
-[TOOLS.md](file:///d:/projects/moderado/docs/TOOLS.md) for the search-site table
+[TOOLS.md](TOOLS.md) for the search-site table
 and configuration keys.

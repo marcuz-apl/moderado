@@ -1,8 +1,8 @@
 # Moderado Architecture & Subsystem Specification
 
-**Document Version:** `v0.1.0+2609161`  
+**Document Version:** `v0.4.33`  
 **Status:** Approved Technical Architecture  
-**Parent Document:** [PRD.md](file:///d:/projects/moderado/PRD.md)  
+**Parent Document:** [PRD.md](../PRD.md)  
 **Standard Adherence:** Minimalist Engineering (`ponytail`), Alfazen Versioning (`versioning-alfazen`)
 
 ---
@@ -52,7 +52,9 @@ The execution and decision engine. Completely provider-agnostic and UI-agnostic.
 - **`AgentLoop`**: Orchestrates the multi-step cycle: context assembly, model invocation, tool call validation, approval delegation, tool execution, and context updating.
 - **`Router`**: Implements dynamic model filtering, access class constraints, free-first ranking, retry backoff with jitter, and failover model switching.
 - **`PolicyManager`**: Enforces maximum step limits (`--max-steps`), global timeouts, read-only mode rules, and non-interactive execution constraints.
-- **`SessionStateMachine`**: Manages execution states (`INITIALIZING`, `ROUTING`, `INFERRING`, `AWAITING_APPROVAL`, `EXECUTING_TOOL`, `COMPLETED`, `CANCELLED`, `FAILED`).
+- **`HostEventStream`**: Wraps the agent event listener in a versioned envelope with session identity and monotonic sequence numbers, so a non-CLI host can consume the same stream.
+- **`SubagentDelegator`**: Runs one bounded child loop for the `subagent` tool under the same workspace, approval, and step policy; nested delegation is refused.
+- **`ThinkTagStreamFilter`**: Separates inline reasoning (`<think>` blocks) from answer text while streaming.
 
 ### 2.3 `packages/providers`
 Implements concrete provider adapters behind `IProviderAdapter`.
@@ -64,19 +66,25 @@ Implements concrete provider adapters behind `IProviderAdapter`.
   - Parses HTTP status codes and `Retry-After` headers.
 - **`FakeProviderAdapter`**:
   - In-memory mock adapter used for deterministic, offline Vitest testing. Simulates responses, tool calls, rate limits, and failure modes without network access or credentials.
+- **`OpenAICompatibleAdapter`**: Shares the NIM transport for any provider that serves `/v1/models` and streaming `/v1/chat/completions` with tool calls.
+- **`presets.ts`**: Provider presets (NVIDIA NIM, OpenRouter, OrcaRouter, Agnes AI, Ollama, LM Studio, custom) with base URLs, access tiers, and free-model policy.
+- **`model_discovery.ts`**: Normalizes catalog responses and detects declared-free model entries.
 
 ### 2.4 `packages/tools`
 Implements workspace manipulation and execution behind `IToolRegistry`.
 - **`WorkspaceJail`**: Realpath resolution, traversal prevention (`../`), symlink validation, and protected file blacklisting.
 - **`FilesystemTools`**: `read_file`, `write_file`, `edit_file`, `list_files`, `search_files`.
-- **`ExecutionTools`**: `run_command` via `child_process.spawn` with `shell: false`, environment variable scrubbing, and output truncation.
-- **`GitTools`**: `git_diff` using fixed CLI invocations without external diff drivers or user-supplied flags.
+- **`ExecutionTools`**: `run_command` via `child_process.spawn` with `shell: false`, environment variable scrubbing, output truncation, and dev-server detection that backgrounds a started server.
+- **`GitTools`**: `git_diff` and `git status` using fixed CLI invocations without external diff drivers or user-supplied flags.
+- **`CheckpointStore`**: Byte-preserving snapshots taken immediately after a mutation is approved, used by `/workflow undo`.
+- **`McpAdapter`**: Namespaced `mcp.<server>.<tool>` tools for configured local stdio servers; every call requires approval.
+- **`WebSearchTool`**, **`DiagnosticsTool`**, **`LanguageIntelligenceTool`**: Declared search, script-runner diagnostics, and read-only definition/reference lookup.
 
 ### 2.5 `apps/cli`
-The entrypoint and user interface for v0.1.
-- Parses command line arguments and environment variables.
+The entrypoint and terminal user interface.
+- Parses command line arguments and environment variables (`args.ts`).
 - Instantiates concrete providers and tool registries.
-- Implements terminal-based interactive approval prompts using standard streams (`process.stdin`, `process.stdout`).
+- Implements terminal approval prompts, the composer/card renderer, popups, model and provider pickers, sessions, skills, MCP management, and self-update.
 - Renders structured agent events with clean terminal formatting.
 - Handles `SIGINT` / `SIGTERM` signals and triggers clean `AbortController` cancellation.
 

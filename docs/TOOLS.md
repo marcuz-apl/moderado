@@ -2,7 +2,7 @@
 
 **Document Version:** `v0.1.0+2609161`  
 **Status:** Approved Specification  
-**Parent Document:** [PRD.md](file:///d:/projects/moderado/PRD.md)  
+**Parent Document:** [PRD.md](../PRD.md)  
 **Standard Adherence:** Minimalist Engineering (`ponytail`), Strict Validation
 
 ---
@@ -40,8 +40,8 @@ export interface ToolResult {
 ---
 ## 2. Tool Inventory
 
-Sections 2.1–2.7 below carry the full schema for the core workspace tools.
-Four further registered tools, two core-owned tools, and dynamic MCP tools
+Sections 3.1–3.7 below carry the full schema for the core workspace tools.
+Five further registered tools, two core-owned tools, and dynamic MCP tools
 complete the set. `createDefaultToolRegistry` in
 `packages/tools/src/registry.ts` is the source of truth.
 

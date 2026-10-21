@@ -7,7 +7,7 @@ import { inspectGitWorkspace } from '../src/git_workspace.js';
 
 describe('inspectGitWorkspace', () => {
   const dirs: string[] = [];
-  afterEach(() => dirs.splice(0).forEach((dir) => fs.rmSync(dir, { recursive: true, force: true })));
+  afterEach(() => dirs.splice(0).forEach((dir) => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })));
 
   it('reports branch and changed workspace-relative files', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-git-'));

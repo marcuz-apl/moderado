@@ -127,7 +127,8 @@ USAGE:
 
 COMMANDS:
   models                 Discover live models, capability & access tiers
-  run "<task>"           Execute a bounded coding task in the workspace\n  skills                 List built-in and user skills
+  run "<task>"           Execute a bounded coding task in the workspace
+  skills                 List built-in and user skills
   skills on|off NAME|PATTERN Enable or disable user skills (* matches all)
   doctor                 Check local Moderado setup
   update                 Update within the current major version
@@ -137,14 +138,16 @@ OPTIONS:
   -w, --workspace <path> Target workspace directory (default: current directory)
   -m, --model <id>       Pin a specific model (disables AUTO fallback)
   -p, --profile <name>   Target configured profile (default: hosted-nvidia)
+  --provider <name>      Limit the models catalog to one provider
   --max-steps <int>      Upper bound on tool interaction cycles (default: 25)
   --max-tokens <int>     Hard limit on generated output tokens per response (default: 1024)
   --timeout <seconds>    Global session execution timeout (default: 600s)
   --read-only            Enforce read-only mode (blocks writes & commands)
-  -y, --auto-approve     Automatically approve all tool operations
+  -y, --auto-approve     Approve every tool operation without prompting
   --non-interactive      Fail closed on operations requiring approval
   --allow-paid           Permit paid models during AUTO routing
   --allow-unknown        Permit unverified/unknown access models in AUTO
+  --connectivity         Run a live provider catalog check (doctor)
   --verbose              Display raw tool inputs and event logs
   --json                 Output results in structured JSON (models command)
   --migrate-credentials  Move legacy Windows config keys into Credential Manager

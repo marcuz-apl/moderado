@@ -209,9 +209,12 @@ describe('Workspace Tools Suite', () => {
   });
 
   describe('run_command', () => {
+    // Success paths allow 20s: creating a process costs 0.5-3s on Windows and
+    // the full suite runs files in parallel. The timeout-enforcement test keeps
+    // its own 1s budget so the failure path stays fast.
     it('executes external commands with arguments array and shell: false', async () => {
       const result = await RunCommandTool.execute(
-        { command: process.execPath, args: ['-e', 'console.log("hello from child")'], timeoutSeconds: 5 },
+        { command: process.execPath, args: ['-e', 'console.log("hello from child")'], timeoutSeconds: 20 },
         { workspaceRoot: tempDir }
       );
 
@@ -226,7 +229,7 @@ describe('Workspace Tools Suite', () => {
         {
           command: process.execPath,
           args: ['-e', 'console.log(process.env.NVIDIA_API_KEY || "CLEARED")'],
-          timeoutSeconds: 5,
+          timeoutSeconds: 20,
         },
         { workspaceRoot: tempDir }
       );
@@ -273,7 +276,7 @@ describe('Workspace Tools Suite', () => {
         {
           command: `${process.execPath} -e "console.log(12345)"`,
           args: [],
-          timeoutSeconds: 5,
+          timeoutSeconds: 20,
         },
         { workspaceRoot: tempDir }
       );

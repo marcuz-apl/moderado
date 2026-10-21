@@ -1,4 +1,5 @@
 import { stripAnsi } from './welcome.js';
+import { displayWidth } from './box.js';
 import { emitKeypressEvents, type Key } from 'node:readline';
 
 /**
@@ -15,7 +16,7 @@ import { emitKeypressEvents, type Key } from 'node:readline';
 export function renderBoxLines(title: string, lines: string[], boxWidth: number): string[] {
   const out: string[] = [];
   const titleStr = title;
-  const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
+  const remainingDashes = Math.max(0, boxWidth - displayWidth(titleStr) - 5);
   out.push(
     '\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m'
   );
@@ -26,7 +27,7 @@ export function renderBoxLines(title: string, lines: string[], boxWidth: number)
       continue;
     }
     const plain = stripAnsi(line);
-    const spaces = Math.max(0, boxWidth - 4 - plain.length);
+    const spaces = Math.max(0, boxWidth - 4 - displayWidth(plain));
     out.push('\x1b[38;5;240m│\x1b[0m  ' + line + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
   }
 
@@ -36,7 +37,7 @@ export function renderBoxLines(title: string, lines: string[], boxWidth: number)
 
 /** Plain-text width of the widest line in a set of popup lines. */
 export function popupWidth(popupLines: string[]): number {
-  return popupLines.reduce((max, l) => Math.max(max, stripAnsi(l).length), 0);
+  return popupLines.reduce((max, l) => Math.max(max, displayWidth(l)), 0);
 }
 
 /**

@@ -2,13 +2,16 @@
 
 Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
-Release context: `0.4.28` is the release candidate: organized `/help` command
-groups and interrupted-chat resume are ready for release; `/connect` handles the
-Gateway and direct providers. The previous `0.4.18` release adds the
-`moderado update` and `moderado upgrade` self-update commands. `0.3.10`
-remains available as the earlier
-self-contained CLI. Windows installation uses npm and Scoop; no Winget
-submission or package-index release is planned.
+Release context: `0.4.33` is the release candidate. It restores the approval
+boundary in `moderado run`, fixes `@file` mention replacement, aligns box and
+text layout for CJK/emoji, and makes the offline suite deterministic on Windows.
+It follows `0.4.32` (`modr` alias) and `0.4.31` (Gateway authorization recovery,
+live progress row, resize centering). `/connect` handles the Gateway and direct
+providers. The `0.4.18` release added the `moderado update` and
+`moderado upgrade` self-update commands. `0.3.10` remains available as the
+earlier self-contained CLI. Windows installation uses npm and Scoop; the
+`winget` and AUR manifests are published as reviewable release attachments but
+are not submitted to those indexes.
 
 ---
 
@@ -20,7 +23,7 @@ version, then run the local verification suite:
 ```bash
 # 0. Sync apps/cli/package.json (and package-lock.json) with the SemVer portion
 #    of VERSION, so the release tag and the published artifact agree.
-#    For this release: VERSION "v0.4.28+<UTC-build>" -> "version": "0.4.28"
+#    For this release: VERSION "v0.4.33+<UTC-build>" -> "version": "0.4.33"
 cat VERSION
 
 # 1. Ensure clean build across all workspace packages
@@ -36,7 +39,7 @@ npm run typecheck
 npm run verify:package
 ```
 
-The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.28`), and
+The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.33`), and
 `npm run verify:package` produces `apps/cli/moderado-<package.json version>.tgz`.
 Both must carry the same `major.minor.patch`, otherwise the GitHub Release would
 attach an artifact whose version disagrees with its tag.
@@ -53,7 +56,7 @@ attach an artifact whose version disagrees with its tag.
 ## 2. Push Release Tag (Artifact Verification Gate)
 
 When ready for release, tag the verified commit with the SemVer portion of `VERSION`
-(`cut -d+ -f1 VERSION`; for this release `v0.4.28`):
+(`cut -d+ -f1 VERSION`; for this release `v0.4.33`):
 
 ```bash
 git tag "$(cut -d+ -f1 VERSION)"
@@ -75,7 +78,7 @@ Pushing a `v*` tag automatically triggers the read-only verification workflow:
 
 Maintainers should download and smoke-test the generated tarball locally:
 ```bash
-npm install -g ./moderado-0.4.28.tgz
+npm install -g ./moderado-0.4.33.tgz
 moderado --help
 ```
 
@@ -89,7 +92,7 @@ Public publication requires explicit maintainer confirmation through the manual 
 - **Trigger**: Manual `workflow_dispatch` only (never runs on push).
 - **Required Inputs**:
   - `confirm`: Must enter string `PUBLISH` (exact match required).
-  - `tag`: The verified release tag to publish (e.g. `v0.4.28`).
+  - `tag`: The verified release tag to publish (e.g. `v0.4.33`).
 - **Permissions**:
   - `id-token: write` for npm OIDC Provenance.
   - `contents: write` for GitHub Release creation.
@@ -130,3 +133,9 @@ community-maintained packages stay in sync without hand-written hashes:
 Binaries are unsigned (`signed: false` in `manifest.json`); expect first-run
 prompts from Windows SmartScreen and macOS Gatekeeper. Chocolatey is
 deliberately out of scope.
+
+`npm run generate:manifests` also emits `distribution/winget/Moderado.yaml` (plus
+its `en-US` locale file) and `distribution/aur/PKGBUILD`, and `publish.yml`
+attaches both to the GitHub Release so they can be reviewed. Submitting them to
+the winget-pkgs or AUR indexes stays a manual maintainer decision; no automated
+submission job exists.

@@ -2,7 +2,7 @@
 
 **Document Version:** `v0.1.0+2609161`  
 **Status:** Approved Architecture Specification  
-**Reference Design:** [Moderado-design.md](file:///d:/projects/moderado/Moderado-design.md)  
+**Reference Design:** [Moderado-design.md](Moderado-design.md)  
 **Standard Adherence:** Alfazen Versioning (`versioning-alfazen`), Minimalist Engineering (`ponytail`), Test-Driven Development (`test-driven-development`)
 
 ---

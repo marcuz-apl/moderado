@@ -2,6 +2,7 @@ import path from 'node:path';
 import { AgentLoop, DEFAULT_MAX_OUTPUT_TOKENS, PolicyManager, Router } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
 import { createDefaultToolRegistry, canonicalizeRoot } from '@moderado/tools';
+import type { ApprovalDecision, ApprovalRequest, IApprovalHandler } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { TerminalRenderer } from '../ui/renderer.js';
@@ -11,6 +12,20 @@ import { askQuestion, askSecret } from '../ui/prompt.js';
 import { selectModelInteractive } from '../ui/model_selector.js';
 import { discoverSkills, formatSkillContext, getEnabledSkillNames, selectEnabledSkills } from '../skills.js';
 import { resolveVersion } from '../index.js';
+import { decideApproval } from './chat.js';
+
+/**
+ * `moderado run` is non-interactive by default, so a mutation may only proceed
+ * when the operator asked for it with `--auto-approve`. Everything else goes
+ * through the same policy as the chat session: network commands always prompt,
+ * and a session without a terminal denies instead of hanging on stdin.
+ */
+export function createRunApprovalHandler(options: {
+  autoApprove: boolean;
+  requestInteractiveApproval: (request: ApprovalRequest, signal?: AbortSignal) => Promise<ApprovalDecision>;
+}): IApprovalHandler {
+  return { requestApproval: (request, signal) => decideApproval(request, options, signal) };
+}
 
 export async function handleRunCommand(
   args: CliParsedArgs,
@@ -73,8 +88,10 @@ export async function handleRunCommand(
 
   const config = loadConfig();
   let selectedModel = args.model ?? config.defaultModel;
-  let allowPaid = args.allowPaid ?? config.allowPaid;
-  let allowUnknown = args.allowUnknown ?? config.allowUnknown;
+  // The flags are booleans, so `??` could never fall through to the saved
+  // preference. Either source may enable paid or unverified models.
+  let allowPaid = args.allowPaid || (config.allowPaid ?? false);
+  let allowUnknown = args.allowUnknown || (config.allowUnknown ?? false);
 
   if (!args.model && !args.nonInteractive) {
     const selection = await selectModelInteractive({
@@ -91,14 +108,19 @@ export async function handleRunCommand(
   const provider = new NvidiaAdapter({ apiKey });
   const tools = createDefaultToolRegistry();
   const terminalApproval = new TerminalApprovalHandler();
-  const approvalHandler = {
-    requestApproval: async (req: any, sig?: AbortSignal) => {
-      if (args.autoApprove || ['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'].includes(req.toolName)) {
-        return { requestId: req.requestId, status: 'approved' as const };
+  const approvalHandler = createRunApprovalHandler({
+    autoApprove: args.autoApprove,
+    requestInteractiveApproval: async (request, approvalSignal) => {
+      if (!process.stdin.isTTY) {
+        return {
+          requestId: request.requestId,
+          status: 'denied',
+          reason: 'Interactive approval requires a terminal. Re-run with --auto-approve to allow workspace mutations.',
+        };
       }
-      return terminalApproval.requestApproval(req, sig);
+      return terminalApproval.requestApproval(request, approvalSignal);
     },
-  };
+  });
   const renderer = new TerminalRenderer({ verbose: args.verbose });
   const policy = new PolicyManager({
     maxSteps: args.maxSteps,

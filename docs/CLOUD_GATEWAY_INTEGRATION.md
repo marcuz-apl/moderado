@@ -1,4 +1,4 @@
-﻿# Moderado Gateway integration handoff
+# Moderado Gateway integration handoff
 
 Date: 2026-10-06
 Gateway contract: [`moderado-gateway/docs/CONTRACT.md`](../../moderado-gateway/docs/CONTRACT.md), stable v1.

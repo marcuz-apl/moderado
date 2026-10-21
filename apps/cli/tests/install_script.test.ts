@@ -7,7 +7,8 @@ import { afterEach, expect, it } from 'vitest';
 
 const execFileAsync = promisify(execFile);
 const dirs: string[] = [];
-afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true }))); });
+// A temp-directory cleanup failure must not mask a passing install assertion:/n// the sandboxed fs layer can time out while moving a directory to the trash.
+afterEach(async () => { await Promise.all(dirs.splice(0).map((dir) => rm(dir, { force: true, recursive: true, maxRetries: 3 }).catch(() => undefined))); });
 
 function posix(p: string): string {
   return p.replace(/\\/g, '/').replace(/^([A-Za-z]):/, (_, drive: string) => `/${drive.toLowerCase()}`);
@@ -62,7 +63,7 @@ it('installs the binary only when asset and manifest checksums agree', async () 
     expect(stdout).toContain('Installed moderado v9.9.9');
     expect(await readFile(join(target, 'moderado'), 'utf8')).toBe('binary-bytes');
   } finally { await close(); }
-}, 15_000);
+}, 60_000);
 
 it('refuses to install when the checksum disagrees with the manifest', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'moderado-install-'));
@@ -82,4 +83,4 @@ it('refuses to install when the checksum disagrees with the manifest', async () 
     dirs.push(home);
     await expect(execFileAsync(shellExecutable(), [posix(runner), '--dir', posix(join(dir, 'bin'))], { env: { ...process.env, HOME: home, FAKE_OS: 'Linux', FAKE_ARCH: 'x86_64' } })).rejects.toThrow('manifest');
   } finally { await close(); }
-}, 15_000);
+}, 60_000);

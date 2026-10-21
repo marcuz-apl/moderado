@@ -1,5 +1,6 @@
 import readline from 'node:readline';
 import type { GatewayStatusEvent, UsageEvent } from '@moderado/contracts';
+import { displayWidth } from './box.js';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
 import { getHelpCommandGroups } from './help_content.js';
@@ -49,9 +50,9 @@ export function stripAnsi(str: string): string {
   return str.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
 }
 
-/** Visible (ANSI-stripped) length of a line. */
+/** Visible (ANSI-stripped) display width of a line, counting wide glyphs as two cells. */
 function visibleLen(str: string): number {
-  return stripAnsi(str).length;
+  return displayWidth(str);
 }
 
 function composerInputWindow(input: string, caret: number, width: number): { text: string; caretColumn: number } {
@@ -338,25 +339,33 @@ export function wrapText(text: string, maxWidth: number): string[] {
   const out: string[] = [];
   const pushWrapped = (word: string): void => {
     // A single word longer than the column budget is split so no line overflows.
-    for (let start = 0; start < word.length; start += maxWidth) {
-      out.push(word.slice(start, start + maxWidth));
+    // Splitting by display width keeps CJK text (one unbroken run of glyphs)
+    // inside the card instead of overflowing it by a factor of two.
+    let current = '';
+    for (const char of word) {
+      if (current && displayWidth(current) + displayWidth(char) > maxWidth) {
+        out.push(current);
+        current = '';
+      }
+      current += char;
     }
+    if (current) out.push(current);
   };
   for (const rawLine of text.split('\n')) {
-    if (rawLine.length <= maxWidth) {
+    if (displayWidth(rawLine) <= maxWidth) {
       out.push(rawLine);
       continue;
     }
     let current = '';
     for (const word of rawLine.split(' ')) {
-      if (word.length > maxWidth) {
+      if (displayWidth(word) > maxWidth) {
         if (current.length > 0) { out.push(current); current = ''; }
         pushWrapped(word);
         continue;
       }
       if (current.length === 0) {
         current = word;
-      } else if (current.length + 1 + word.length <= maxWidth) {
+      } else if (displayWidth(current) + 1 + displayWidth(word) <= maxWidth) {
         current += ' ' + word;
       } else {
         out.push(current);

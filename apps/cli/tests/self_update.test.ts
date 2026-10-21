@@ -26,6 +26,11 @@ const release = (tag_name: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+/** Temp-dir removal must never fail an assertion: the sandboxed fs layer can time out while trashing. */
+async function cleanupDir(dir: string): Promise<void> {
+  await rm(dir, { recursive: true, force: true, maxRetries: 3 }).catch(() => undefined);
+}
+
 async function npmInstallFixture() {
   const prefix = await mkdtemp(join(tmpdir(), 'moderado-prefix-'));
   const packageDir = join(prefix, 'lib', 'node_modules', 'moderado');
@@ -33,7 +38,7 @@ async function npmInstallFixture() {
   await mkdir(join(packageDir, 'dist'), { recursive: true });
   await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name: 'moderado', bin: { moderado: './dist/index.js' } }));
   await writeFile(script, '');
-  return { prefix, packageDir, script, cleanup: () => rm(prefix, { recursive: true, force: true }) };
+  return { prefix, packageDir, script, cleanup: () => cleanupDir(prefix) };
 }
 
 async function npmCliFixture(source: string) {
@@ -48,7 +53,7 @@ async function npmCliFixture(source: string) {
   // its directory still hosts the adjacent npm CLI fixture; POSIX keeps a plain `node` symlink.
   const node = process.platform === 'win32' ? join(root, 'node.exe') : join(root, 'node');
   await symlink(process.execPath, node, process.platform === 'win32' ? 'file' : undefined);
-  return { root, script, node, cleanup: () => rm(root, { recursive: true, force: true }) };
+  return { root, script, node, cleanup: () => cleanupDir(root) };
 }
 
 async function withFixtureNode<T>(node: string, run: () => T | Promise<T>): Promise<T> {
