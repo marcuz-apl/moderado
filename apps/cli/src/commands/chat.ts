@@ -26,6 +26,7 @@ import { buildWorkspaceMap } from '../repo_map.js';
 import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
 import { discoverSkills, formatSkillContext, formatSkillsList, getEnabledSkillNames, selectEnabledSkills, setSkillEnabled, UserSkill } from '../skills.js';
 import { getHelpCommandLines } from '../ui/help_content.js';
+import { forceExit } from '../http_shutdown.js';
 
 export function createConnectionProvider(connection: ProviderConnection): NvidiaAdapter {
   return new NvidiaAdapter({ apiKey: connection.apiKey, baseUrl: connection.baseUrl, providerId: connection.id, providerName: connection.displayName });
@@ -1622,7 +1623,20 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (thinkingTimer) paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
       };
 
+      let generationEscapes = 0;
       const onGenerationKeypress = (str: string, key: { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean } | undefined): void => {
+        // Raw mode turns Ctrl+C into a keypress, not SIGINT, so the session-level
+        // handler never sees it. The first press aborts the turn; a second press
+        // means the abort did not take (a stalled stream or a hung tool), so
+        // leave instead of freezing with no way out.
+        const isCtrlC = (key?.ctrl && key.name === 'c') || str === '\x03';
+        if (isCtrlC) {
+          generationEscapes += 1;
+          if (generationEscapes > 1) {
+            void forceExit(130);
+            return;
+          }
+        }
         handleGenerationKeypress(str, key, commandQueue, {
           abort: () => {
             commandQueue.clear();
@@ -1638,8 +1652,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             const resume = suspendGenerationInput?.();
             stopActivity();
             const ac = new AbortController();
+            let btwEscapes = 0;
             const onBtwKey = (s: string, k: any) => {
-              if ((k && k.name === 'escape') || s === '\x1b') {
+              const isCtrlC = (k && k.ctrl && k.name === 'c') || s === '\x03';
+              if ((k && k.name === 'escape') || s === '\x1b' || isCtrlC) {
+                // Escape/Ctrl+C stops the /btw query; a second Ctrl+C means the
+                // query ignores the abort, so leave instead of freezing.
+                if (isCtrlC && ++btwEscapes > 1) {
+                  void forceExit(130);
+                  return;
+                }
                 ac.abort();
               }
             };
@@ -1670,7 +1692,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
                       const onDismiss = (s: string, k: any) => {
                         if (
                           (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
-                          s === 'q' || s === 'Q' || s === '\x1b'
+                          s === 'q' || s === 'Q' || s === '\x1b' ||
+                          (k && k.ctrl && k.name === 'c')
                         ) {
                           process.stdin.removeListener('keypress', onDismiss);
                           dismissResolve();

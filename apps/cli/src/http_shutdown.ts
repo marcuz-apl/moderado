@@ -19,3 +19,19 @@ export async function closeHttpConnections(): Promise<void> {
     // An unclosed pool only delays the natural exit; it is never fatal.
   }
 }
+
+/**
+ * Escape hatch for a session that stopped responding: a raw-mode TUI swallows
+ * the first Ctrl+C as a keypress, so a stalled provider stream or a hung tool
+ * used to trap the user with no way out. Give in-flight undici sockets a brief
+ * moment to finish closing (avoiding the libuv `UV_HANDLE_CLOSING` assertion
+ * on Node 24 when a hard exit races the async close), then exit
+ * unconditionally — an unresponsive run must never trap the user.
+ */
+export async function forceExit(code: number): Promise<never> {
+  const timeout = new Promise<void>((resolve) => {
+    setTimeout(resolve, 300).unref();
+  });
+  await Promise.race([closeHttpConnections(), timeout]);
+  process.exit(code);
+}

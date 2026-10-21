@@ -12,7 +12,7 @@ import { writeDiagnosticLog } from './diagnostic_log.js';
 import { handleSkillsCommand } from './commands/skills.js';
 import { INJECTED_VERSION } from './injected_version.js';
 import { handleSelfUpdateCommand } from './self_update.js';
-import { closeHttpConnections } from './http_shutdown.js';
+import { closeHttpConnections, forceExit } from './http_shutdown.js';
 
 /**
  * Injected at build time by `scripts/binaries.mjs` via `pkg --define`. `pkg`
@@ -65,7 +65,16 @@ async function main(): Promise<void> {
   }
 
   const abortController = new AbortController();
+  let sigintCount = 0;
   const handleSigint = () => {
+    sigintCount += 1;
+    // The first press asks the session to stop. A second press means a code path
+    // ignored the abort (a stalled provider stream, a stopped tool), so leave now.
+    if (sigintCount > 1) {
+      process.stdout.write('\n\x1b[1;33mExit requested twice; stopping Moderado now.\x1b[0m\n');
+      void forceExit(130);
+      return;
+    }
     process.stdout.write('\n\x1b[33mReceived SIGINT, aborting session gracefully...\x1b[0m\n');
     abortController.abort();
   };

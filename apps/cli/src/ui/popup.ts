@@ -275,6 +275,12 @@ export async function selectListPopup(
 
     const onKeypress = (str: string | undefined, key: Key | undefined): void => {
       const list = filteredItems();
+      // Raw mode turns Ctrl+C into a keypress instead of SIGINT, so without
+      // this branch the popup swallowed it and the user could not type or leave.
+      if (key && key.ctrl && key.name === 'c') {
+        finish(null);
+        return;
+      }
       if (key && (key.name === 'return' || key.name === 'enter')) {
         finish(list[cursor] ? list[cursor].value : null);
         return;

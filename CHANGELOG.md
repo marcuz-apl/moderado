@@ -13,6 +13,16 @@ v0.4.28 (Help organization and interrupted-chat resilience)
 
 ## Milestone Change Log Details
 
+### [Unreleased]
+**Fix: no frozen CLI — Ctrl+C always has a way out**
+- **Type**: `fix` / `patch-level`
+- **Scope**: `apps/cli` popups, chat generation input, `/btw` overlay, SIGINT handling
+- **Key Deliverables**:
+  - **Popups honor Ctrl+C**: A raw-mode TUI turns Ctrl+C into a keypress instead of SIGINT, so list and confirm popups swallowed it — the user could neither type nor leave. Popups now cancel on the first press and return to the composer.
+  - **Generation escape hatch**: During a turn the first Ctrl+C aborts the run; if a stalled provider stream or hung tool ignores the abort, a second press force-exits instead of freezing with no way out. The same escalation covers the `/btw` overlay, which previously only listened for Escape.
+  - **Safe hard exit**: `forceExit` drains undici sockets for up to 300ms before exiting, so the escape hatch never trips the Node 24 `UV_HANDLE_CLOSING` libuv assertion, and a second SIGINT outside raw mode exits with code 130 the same way.
+  - **Coverage**: `freeze_escape.test.ts` asserts the escape hatch terminates with the requested exit code, with and without an undici global dispatcher.
+
 ### [v0.4.33] — 2026-10-21
 **Fix: Restore the approval boundary in `run`, align wide-glyph layout, and harden the test harness**
 - **Type**: `fix` / `patch-level`
