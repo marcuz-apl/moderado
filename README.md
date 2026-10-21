@@ -63,7 +63,8 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.33** | Current release | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Also ships the `modr` command alias, Gateway authorization recovery with key re-entry, a live progress row, and the canonical `moderado` provider identity. |
+| **0.4.34** | Current release | Frozen-CLI fix: Ctrl+C always has a way out — popups cancel on the first press, a stalled turn escapes on the second press, and hard exits drain undici safely so Node 24 never hits the libuv `UV_HANDLE_CLOSING` assertion. |
+| **0.4.33** | Previous release | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Also ships the `modr` command alias, Gateway authorization recovery with key re-entry, a live progress row, and the canonical `moderado` provider identity. |
 | **0.4.28** | Previous release | Organized `/help` command groups, interrupted-chat resume, and consistent help and shortcut layout. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
@@ -87,7 +88,7 @@ npm install -g moderado
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.33
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.34
 
 ```
 
@@ -98,7 +99,7 @@ curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/
 brew tap marcuz-apl/moderado && brew install moderado
 
 # curl installer (arm64), same checksum verification as Linux
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.33
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.34
 
 ```
 

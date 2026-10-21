@@ -2,13 +2,14 @@
 
 Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
-Release context: `0.4.33` is the release candidate. It restores the approval
-boundary in `moderado run`, fixes `@file` mention replacement, aligns box and
-text layout for CJK/emoji, and makes the offline suite deterministic on Windows.
-It follows `0.4.32` (`modr` alias) and `0.4.31` (Gateway authorization recovery,
-live progress row, resize centering). `/connect` handles the Gateway and direct
-providers. The `moderado update` and `moderado upgrade` self-update commands
-ship in this release. `0.3.10` remains available as the
+Release context: `0.4.34` is the release candidate. It fixes the frozen CLI:
+Ctrl+C always has a way out — popups cancel on the first press instead of
+swallowing the key, and a turn that ignores the abort (a stalled provider stream
+or a hung tool) force-exits on a second press, draining undici sockets first so
+Node 24 never hits the libuv `UV_HANDLE_CLOSING` assertion. It follows `0.4.33`
+(approval boundary, mention and width fixes). `/connect` handles the Gateway and
+direct providers. The `moderado update` and `moderado upgrade` self-update
+commands ship in this release. `0.3.10` remains available as the
 earlier self-contained CLI. Windows installation uses npm and Scoop; the
 `winget` and AUR manifests are published as reviewable release attachments but
 are not submitted to those indexes.
@@ -41,7 +42,7 @@ npm run typecheck
 npm run verify:package
 ```
 
-The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.33`), and
+The release tag is derived from `cut -d+ -f1 VERSION` (for example `v0.4.34`), and
 `npm run verify:package` produces `apps/cli/moderado-<package.json version>.tgz`.
 Both must carry the same `major.minor.patch`, otherwise the GitHub Release would
 attach an artifact whose version disagrees with its tag.
@@ -58,7 +59,7 @@ attach an artifact whose version disagrees with its tag.
 ## 2. Push Release Tag (Artifact Verification Gate)
 
 When ready for release, tag the verified commit with the SemVer portion of `VERSION`
-(`cut -d+ -f1 VERSION`; for this release `v0.4.33`):
+(`cut -d+ -f1 VERSION`; for this release `v0.4.34`):
 
 ```bash
 git tag "$(cut -d+ -f1 VERSION)"
@@ -94,7 +95,7 @@ Public publication requires explicit maintainer confirmation through the manual 
 - **Trigger**: Manual `workflow_dispatch` only (never runs on push).
 - **Required Inputs**:
   - `confirm`: Must enter string `PUBLISH` (exact match required).
-  - `tag`: The verified release tag to publish (e.g. `v0.4.33`).
+  - `tag`: The verified release tag to publish (e.g. `v0.4.34`).
 - **Permissions**:
   - `id-token: write` for npm OIDC Provenance.
   - `contents: write` for GitHub Release creation.

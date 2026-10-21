@@ -94,13 +94,18 @@ npm install -g moderado
 moderado --help
 ```
 
-The 0.4.33 release candidate restores the approval boundary in `moderado run`,
-fixes `@file` mention replacement, aligns boxes and wrapped text for CJK and
-emoji, and makes the offline suite deterministic on Windows. It also ships the
-`modr` command alias, Gateway authorization recovery with key re-entry, a live
-progress row, and the canonical `moderado` provider identity. `/connect` handles
-the Gateway and direct providers; earlier releases used `/login` for the
-Gateway. The 0.3.10 release is self-contained and works without the Gateway.
+The 0.4.34 release fixes the frozen CLI: Ctrl+C always has a way out. Popups
+cancel on the first press instead of swallowing the key, and a turn that ignores
+the abort (a stalled provider stream or a hung tool) force-exits on a second
+press — draining undici sockets first so Node 24 never hits the libuv
+`UV_HANDLE_CLOSING` assertion. The 0.4.33 release restores the approval boundary
+in `moderado run`, fixes `@file` mention replacement, aligns boxes and wrapped
+text for CJK and emoji, and makes the offline suite deterministic on Windows. It
+also ships the `modr` command alias, Gateway authorization recovery with key
+re-entry, a live progress row, and the canonical `moderado` provider identity.
+`/connect` handles the Gateway and direct providers; earlier releases used
+`/login` for the Gateway. The 0.3.10 release is self-contained and works without
+the Gateway.
 
 Install the latest release with `npm install -g moderado`. To install a specific
 version, run `npm install -g moderado@<version>`. Prebuilt binaries and the curl

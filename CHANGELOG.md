@@ -9,11 +9,12 @@ v0.4.28 (Help organization and interrupted-chat resilience)
               └─► v0.4.31 (Gateway auth recovery, live progress row)
                     └─► v0.4.32 (Short `modr` command alias)
                           └─► v0.4.33 (Approval boundary and width fixes)
+                                └─► v0.4.34 (No frozen CLI — Ctrl+C always escapes)
 ```
 
 ## Milestone Change Log Details
 
-### [Unreleased]
+### [v0.4.34] — 2026-10-21
 **Fix: no frozen CLI — Ctrl+C always has a way out**
 - **Type**: `fix` / `patch-level`
 - **Scope**: `apps/cli` popups, chat generation input, `/btw` overlay, SIGINT handling
