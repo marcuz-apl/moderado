@@ -31,3 +31,6 @@ yarn-error.log*
 .pkg-cache/
 artifacts/
 .worktrees/
+
+# Local agent state (WorkBuddy memory/scratch, machine-specific)
+.workbuddy-ai/
