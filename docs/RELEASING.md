@@ -21,9 +21,11 @@ Before initiating any release, sync the publishable npm version with the connect
 version, then run the local verification suite:
 
 ```bash
-# 0. Sync apps/cli/package.json (and package-lock.json) with the SemVer portion
-#    of VERSION, so the release tag and the published artifact agree.
-#    For this release: VERSION "v0.4.33+<UTC-build>" -> "version": "0.4.33"
+# 0. Bump SemVer explicitly. This updates VERSION, apps/cli/package.json, and
+#    package-lock.json together and stages them, so the release tag and the
+#    published artifact cannot disagree. `pre-commit` only advances the UTC
+#    build counter, and `commit-msg` rejects a release subject without a bump.
+npm run version:patch        # or: npm run version:minor
 cat VERSION
 
 # 1. Ensure clean build across all workspace packages

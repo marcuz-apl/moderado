@@ -1,8 +1,55 @@
 #!/bin/sh
 set -eu
+HOOKDIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$HOOKDIR/versionlib.sh"
 
-version=$(cat VERSION)
 msgfile=$1
-tmp=$(mktemp)
+[ -f "$msgfile" ] || die "commit message file is missing"
+
+# `pre-commit` already advanced the build counter and staged VERSION; this hook
+# only stamps the subject and enforces the release rule on the message Git is
+# actually committing (the one hook that is guaranteed to see it).
+version=$(read_version)
+validate_identifier "$version"
+
+first=$(awk '!done && $0 !~ /^#/ { print; done=1 }' "$msgfile")
+stamped=0
+case "$first" in
+  v[0-9]*) stamped=1 ;;
+esac
+message=$(printf '%s\n' "$first" | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6}[0-9a-zA-Z] //')
+
+# A stamped subject means `--amend` (or a re-run): the SemVer was decided by the
+# commit being amended, so only the build counter moves.
+if [ "$stamped" -eq 0 ]; then
+  case "$message" in
+    *BREAKING\ CHANGE*|*!:\ *)
+      die "major bump requires explicit owner approval; stage the change as release(minor): or release(patch): instead." ;;
+    release\(minor\):*|release\(patch\):*)
+      # A release must move SemVer beyond the last published tag. Comparing with
+      # the latest tag (not HEAD) keeps `--amend -m` of a release commit working:
+      # HEAD already carries the new SemVer, the tag does not.
+      latest_tag=$(git describe --tags --abbrev=0 --match 'v[0-9]*' 2>/dev/null || true)
+      if [ -n "$latest_tag" ]; then
+        baseline=${latest_tag%%+*}
+      else
+        head_version=$(git show HEAD:VERSION 2>/dev/null | tr -d '\r\n\t ' || true)
+        baseline=${head_version%%+*}
+      fi
+      new_semver=${version%%+*}
+      [ "$baseline" != "$new_semver" ] || die "release subject without a SemVer change (still $new_semver). Run 'npm run version:patch' or 'npm run version:minor' first, then commit again." ;;
+  esac
+fi
+
+# The published artifact carries package.json's version, so a staged manifest that
+# disagrees with VERSION would produce a mislabelled release. Fail before that.
+staged_package=$(git show :apps/cli/package.json 2>/dev/null | sed -n 's/^  "version": "\([^"]*\)".*/\1/p' | head -n 1 || true)
+if [ -n "$staged_package" ]; then
+  expected_semver=${version%%+*}
+  expected_semver=${expected_semver#v}
+  [ "$staged_package" = "$expected_semver" ] || die "apps/cli/package.json is $staged_package but VERSION is $version. Run 'npm run version:patch' (or version:minor) to sync them."
+fi
+
+tmp=$(mktemp) || exit 1
 awk -v stamp="$version" '!done && $0 !~ /^#/ { sub(/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9][0-9][0-9][0-9][0-9][0-9][0-9a-zA-Z] /, ""); print stamp " " $0; done=1; next } { print }' "$msgfile" > "$tmp"
 mv -f -- "$tmp" "$msgfile"

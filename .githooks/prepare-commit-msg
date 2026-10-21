@@ -1,5 +1,5 @@
 #!/bin/sh
-# The pre-commit hook updates VERSION and prefixes the subject before Git
-# snapshots the index. Keeping this hook intentionally empty prevents a late
-# VERSION update that Git would leave unstaged.
+# Intentionally empty. Git writes the commit tree before this hook runs, so a
+# VERSION update here could never be part of the commit. `pre-commit` owns
+# VERSION and `commit-msg` owns the subject stamp.
 exit 0
