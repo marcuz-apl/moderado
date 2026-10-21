@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Explicit SemVer bump for Alfazen versioning.
  *
