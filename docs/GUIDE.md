@@ -3,9 +3,9 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. This guide reflects the 0.4.33 release candidate. Its `/connect`
-flow handles the Gateway and direct provider connections; releases before
-0.4.10 used `/login` for the Gateway. The earlier v0.3.10 release
+quick start. This guide reflects the current release. Its `/connect` flow handles
+the Gateway and direct provider connections; earlier releases used `/login` for
+the Gateway. The earlier v0.3.10 release
 is self-contained and does not require the Gateway. Every release from 0.4.32
 installs the `moderado` command with `modr` as a short alias.
 

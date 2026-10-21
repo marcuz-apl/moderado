@@ -1,11 +1,10 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-The release candidate is `moderado@0.4.33`; the latest published CLI remains
-`moderado@0.4.26` until the guarded publication workflow completes. Its unified `/connect` flow
+The current release is `moderado@0.4.33`. Its unified `/connect` flow
 supports the Gateway and direct provider connections; `/login` is no longer
 offered. The `0.3.10` release is self-contained and does not require the
-Gateway. Every release from 0.4.32 installs the `moderado` command with `modr`
-as a short alias. Install the current version with
+Gateway. This release installs the `moderado` command with `modr` as a short
+alias. Install the current version with
 `npm install -g moderado`; pin `moderado@0.3.10` to keep the self-contained CLI.
 
 The planned GitHub Release `v0.4.33` will include binaries, checksum sidecars, a
@@ -21,8 +20,8 @@ Homebrew and Scoop manifests from the verified release assets.
 
 ## End-user updates
 
-The `moderado update` and `moderado upgrade` commands are available starting
-with v0.4.18. All published releases from v0.4.18 onward include them; install
+The `moderado update` and `moderado upgrade` commands are available in the
+current release and in every published release that includes them. Install
 v0.4.33 or later with the original installer before using these commands.
 
 Run `moderado update` to install the latest published release within the

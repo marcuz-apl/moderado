@@ -7,8 +7,8 @@ boundary in `moderado run`, fixes `@file` mention replacement, aligns box and
 text layout for CJK/emoji, and makes the offline suite deterministic on Windows.
 It follows `0.4.32` (`modr` alias) and `0.4.31` (Gateway authorization recovery,
 live progress row, resize centering). `/connect` handles the Gateway and direct
-providers. The `0.4.18` release added the `moderado update` and
-`moderado upgrade` self-update commands. `0.3.10` remains available as the
+providers. The `moderado update` and `moderado upgrade` self-update commands
+ship in this release. `0.3.10` remains available as the
 earlier self-contained CLI. Windows installation uses npm and Scoop; the
 `winget` and AUR manifests are published as reviewable release attachments but
 are not submitted to those indexes.

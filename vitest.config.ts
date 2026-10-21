@@ -10,5 +10,8 @@ export default defineConfig({
     // default raced under full-suite parallelism and failed healthy code.
     testTimeout: 30000,
     hookTimeout: 30000,
+    // Cap workers so process-spawning suites (git, npm, node, bash+curl) do not
+    // starve each other. Unbounded parallelism made discovery time out under load.
+    maxWorkers: 8,
   },
 });

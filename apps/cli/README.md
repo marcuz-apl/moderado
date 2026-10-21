@@ -99,7 +99,7 @@ fixes `@file` mention replacement, aligns boxes and wrapped text for CJK and
 emoji, and makes the offline suite deterministic on Windows. It also ships the
 `modr` command alias, Gateway authorization recovery with key re-entry, a live
 progress row, and the canonical `moderado` provider identity. `/connect` handles
-the Gateway and direct providers; releases before 0.4.10 used `/login` for the
+the Gateway and direct providers; earlier releases used `/login` for the
 Gateway. The 0.3.10 release is self-contained and works without the Gateway.
 
 Install the latest release with `npm install -g moderado`. To install a specific
@@ -109,7 +109,7 @@ npm and Scoop. See `docs/DISTRIBUTION.md` for package-manager details.
 
 ### Update an existing installation
 
-These commands are available starting with Moderado v0.4.18.
+These commands are available in the current release.
 
 ```bash
 moderado update   # latest release within the installed major version
@@ -159,7 +159,7 @@ routing, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
 The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama,
-LM Studio, and custom OpenAI-compatible providers. Releases before 0.4.10 used
+LM Studio, and custom OpenAI-compatible providers. Earlier releases used
 `/login` for the Gateway.
 
 Moderado OAuth credentials last 30 days and have no refresh token; authorize again

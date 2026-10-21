@@ -63,11 +63,8 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.33** | Release candidate | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Also ships the `modr` command alias, Gateway authorization recovery with key re-entry, a live progress row, and the canonical `moderado` provider identity. |
+| **0.4.33** | Current release | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Also ships the `modr` command alias, Gateway authorization recovery with key re-entry, a live progress row, and the canonical `moderado` provider identity. |
 | **0.4.28** | Previous release | Organized `/help` command groups, interrupted-chat resume, and consistent help and shortcut layout. |
-| **0.4.26** | Previous release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_ENV` overrides (the legacy `MODERADO_CLOUD_ENV` name remains supported). |
-| **0.4.18** | Previous release | Gateway-integrated CLI. `moderado update` and `moderado upgrade` self-update commands were introduced in this release. |
-| **0.4.10** | Previous release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
 This release installs both the `moderado` command and the short `modr` alias.
@@ -172,8 +169,8 @@ route, while selecting a route pins requests to it. Existing BYOK and local
 provider profiles remain independent.
 
 The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama
-Local, LM Studio, and custom OpenAI-compatible providers. Releases before
-0.4.10 used `/login` for the Gateway; `/connect` replaced it.
+Local, LM Studio, and custom OpenAI-compatible providers. Earlier releases used
+`/login` for the Gateway; `/connect` replaced it.
 
 Moderado OAuth credentials last 30 days and have no refresh token; authorize again
 after expiry. On Windows, credentials are stored in Windows Credential Manager.
