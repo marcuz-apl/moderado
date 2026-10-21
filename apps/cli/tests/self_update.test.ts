@@ -16,6 +16,7 @@ import {
   runNpmUpdate,
   updateStandalone,
   handleSelfUpdateCommand,
+  assertNpmPrefixWritable,
 } from '../src/self_update.js';
 
 const release = (tag_name: string, extra: Record<string, unknown> = {}) => ({
@@ -139,6 +140,11 @@ describe('install channel', () => {
 });
 
 describe('npm update', () => {
+  it('explains a root-owned global prefix instead of surfacing npm EACCES', () => {
+    expect(() => assertNpmPrefixWritable(join(tmpdir(), 'moderado-missing-prefix-dir'))).toThrow(/not writable by the current user/);
+    expect(() => assertNpmPrefixWritable(join(tmpdir(), 'moderado-missing-prefix-dir'), 'upgrade')).toThrow(/sudo moderado upgrade/);
+  });
+
   it('rejects a forged npm package outside the running Node installation without executing it', async () => {
     const marker = join(tmpdir(), `moderado-forged-npm-${process.pid}`);
     const fixture = await npmCliFixture(`require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'executed');`);

@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import { createHash, randomUUID } from 'node:crypto';
-import { readFileSync, realpathSync, statSync } from 'node:fs';
+import { accessSync, constants, readFileSync, realpathSync, statSync } from 'node:fs';
 import { chmod, open, rename, unlink } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
@@ -436,6 +436,23 @@ export async function updateStandalone(options: StandaloneUpdateOptions): Promis
   }
 }
 
+/**
+ * A system-wide npm prefix (`/usr/lib`, `/usr/local/lib`) belongs to root, so
+ * npm's own failure is a raw EACCES rename trace. Fail first with the command
+ * that actually works on that machine.
+ */
+export function assertNpmPrefixWritable(prefix: string, command: 'update' | 'upgrade' = 'update'): void {
+  try {
+    accessSync(prefix, constants.W_OK);
+  } catch {
+    throw new SelfUpdateError(
+      `Cannot update: the npm global prefix '${prefix}' is not writable by the current user. ` +
+      `Re-run with sudo (sudo moderado ${command}), or install Moderado into a user-owned prefix ` +
+      `(npm config set prefix ~/.npm-global, then npm install -g moderado).`,
+    );
+  }
+}
+
 export async function handleSelfUpdateCommand(
   mode: 'update' | 'upgrade', installedVersion: string, signal: AbortSignal,
 ): Promise<number> {
@@ -469,6 +486,7 @@ export async function handleSelfUpdateCommand(
     }
     if (signal.aborted) throw new SelfUpdateError('Update cancelled. Run the command again when ready.');
     if (channel.channel === 'npm') {
+      assertNpmPrefixWritable(channel.prefix, mode);
       await runNpmUpdate(release.tag_name, process.platform, process.env.npm_execpath, channel.prefix, signal);
     } else {
       await updateStandalone({
