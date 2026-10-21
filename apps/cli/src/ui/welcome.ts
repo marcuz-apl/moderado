@@ -1,6 +1,8 @@
+import fs from 'node:fs';
 import readline from 'node:readline';
 import type { GatewayStatusEvent, UsageEvent } from '@moderado/contracts';
 import { displayWidth } from './box.js';
+import { closeHttpConnections } from '../http_shutdown.js';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
 import { getHelpCommandGroups } from './help_content.js';
@@ -609,21 +611,31 @@ export function renderExitMessage(message: string): string {
  * screen buffer, disable raw mode, fully clear the OS terminal, print the
  * farewell message, and terminate the process.
  */
-export function exitCleanly(message: string): never {
+/**
+ * Exit Moderado cleanly: restore cursor visibility & style, leave the alternate
+ * screen buffer, disable raw mode, fully clear the OS terminal, print the
+ * farewell message, and let the process end.
+ *
+ * A hard `process.exit()` here would race the Windows console handle and, with
+ * an open undici pool, abort inside libuv (`win/async.c:94`). The farewell is
+ * written synchronously, connections are closed, and the returned promise never
+ * settles so callers stop while the event loop drains.
+ */
+export async function exitCleanly(message: string): Promise<never> {
   notifyCleanExit();
   const stdout = process.stdout;
-  if (stdout.isTTY) {
-    stdout.write(
-      MOUSE_REPORT_OFF + '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + renderExitMessage(message)
-    );
-  } else {
-    stdout.write(renderExitMessage(message));
-  }
+  const payload = stdout.isTTY
+    ? MOUSE_REPORT_OFF + '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + renderExitMessage(message)
+    : renderExitMessage(message);
+  try { fs.writeSync(1, payload); } catch { stdout.write(payload); }
   const stdin = process.stdin;
   if (stdin.isTTY) {
     try { stdin.setRawMode(false); } catch { /* ignore */ }
   }
-  process.exit(0);
+  process.exitCode = 0;
+  await closeHttpConnections();
+  setTimeout(() => process.exit(0), 2000).unref();
+  return new Promise<never>(() => {});
 }
 
 export interface InteractiveTurnResult {
@@ -904,7 +916,7 @@ export async function promptInteractiveTurn(
         // ── Ctrl+C ────────────────────────────────────────────────────────────
         if (key && key.ctrl && key.name === 'c') {
           cleanup();
-          exitCleanly('\x1b[33mSession cancelled.\x1b[0m');
+          return await exitCleanly('\x1b[33mSession cancelled.\x1b[0m');
         }
 
         // ── /help overlay popup ───────────────────────────────────────────────
@@ -1172,7 +1184,7 @@ export async function promptInteractiveTurn(
             (input.trim() === '/exit' || input.trim() === '/quit')) {
           cleanup();
           if (options.signal) options.signal.removeEventListener('abort', onAbort);
-          exitCleanly(options.onExit?.() ?? '\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
+          return await exitCleanly(options.onExit?.() ?? '\x1b[32mGoodbye! Stay Tuned with Moderado!\x1b[0m');
         }
 
         // ── Normal keys ───────────────────────────────────────────────────────

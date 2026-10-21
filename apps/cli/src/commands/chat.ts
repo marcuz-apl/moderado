@@ -1387,7 +1387,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     }
 
     if (trimmed === '/exit' || trimmed === '/quit') {
-      exitCleanly(exitMessage());
+      return await exitCleanly(exitMessage());
     }
 
     if (trimmed === '/help') {

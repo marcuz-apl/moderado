@@ -12,6 +12,7 @@ import { writeDiagnosticLog } from './diagnostic_log.js';
 import { handleSkillsCommand } from './commands/skills.js';
 import { INJECTED_VERSION } from './injected_version.js';
 import { handleSelfUpdateCommand } from './self_update.js';
+import { closeHttpConnections } from './http_shutdown.js';
 
 /**
  * Injected at build time by `scripts/binaries.mjs` via `pkg --define`. `pkg`
@@ -96,7 +97,12 @@ async function main(): Promise<void> {
   }
 
   process.exitCode = exitCode;
-  process.exit(exitCode);
+  // Never call process.exit() here: on Windows/Node 24 a hard exit while
+  // undici is closing its async handle aborts inside libuv (win/async.c:94).
+  // Close pooled connections and let the loop drain; the unref'd timer below
+  // only fires if some unrelated handle would otherwise keep the CLI alive.
+  await closeHttpConnections();
+  setTimeout(() => process.exit(exitCode), 2000).unref();
 }
 
 main().catch((err) => {
