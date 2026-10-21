@@ -96,11 +96,11 @@ moderado --help
 
 The 0.4.33 release candidate restores the approval boundary in `moderado run`,
 fixes `@file` mention replacement, aligns boxes and wrapped text for CJK and
-emoji, and makes the offline suite deterministic on Windows. It builds on
-0.4.32 (`modr` alias) and 0.4.31 (Gateway authorization recovery, live progress
-row). `/connect` handles the Gateway and direct providers; releases before
-0.4.10 used `/login` for the Gateway. The 0.3.10 release is self-contained and
-works without the Gateway.
+emoji, and makes the offline suite deterministic on Windows. It also ships the
+`modr` command alias, Gateway authorization recovery with key re-entry, a live
+progress row, and the canonical `moderado` provider identity. `/connect` handles
+the Gateway and direct providers; releases before 0.4.10 used `/login` for the
+Gateway. The 0.3.10 release is self-contained and works without the Gateway.
 
 Install the latest release with `npm install -g moderado`. To install a specific
 version, run `npm install -g moderado@<version>`. Prebuilt binaries and the curl

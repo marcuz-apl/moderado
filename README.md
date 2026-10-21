@@ -63,19 +63,16 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.33** | Release candidate | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Includes the `modr` alias and the Gateway authorization recovery from 0.4.31/0.4.32. |
-| **0.4.32** | Previous release | Publishes `modr` as a short command alias for `moderado`. |
-| **0.4.31** | Previous release | Gateway authorization failures offer key re-entry instead of ending the session, the status row keeps a live progress indicator, and the chat view re-centers after a terminal resize. |
-| **0.4.30** | Previous release | Canonical `moderado` provider identity, an updated production Gateway endpoint, and migration of legacy `moderado-cloud` configuration. |
+| **0.4.33** | Release candidate | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Also ships the `modr` command alias, Gateway authorization recovery with key re-entry, a live progress row, and the canonical `moderado` provider identity. |
 | **0.4.28** | Previous release | Organized `/help` command groups, interrupted-chat resume, and consistent help and shortcut layout. |
 | **0.4.26** | Previous release | Unified `/connect` flow for the Gateway and other providers. Base URL selection is controlled by `MODERADO_ENV` overrides (the legacy `MODERADO_CLOUD_ENV` name remains supported). |
 | **0.4.18** | Previous release | Gateway-integrated CLI. `moderado update` and `moderado upgrade` self-update commands were introduced in this release. |
 | **0.4.10** | Previous release | Gateway-integrated CLI. `/login` uses the Moderado Gateway for its route catalog and inference. `/connect` remains available for direct provider connections. |
 | **0.3.10** | Previous release | Self-contained CLI. It can connect directly to providers and does not require the Moderado Gateway. |
 
-Every release from 0.4.32 installs both the `moderado` command and the short
-`modr` alias. Install the latest release with `npm install -g moderado`. To keep
-using the self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
+This release installs both the `moderado` command and the short `modr` alias.
+Install the latest release with `npm install -g moderado`. To keep using the
+self-contained 0.3.10 CLI, pin it with `npm install -g moderado@0.3.10`.
 
 Chocolatey is deliberately out of scope; the full channel runbook lives in
 [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
