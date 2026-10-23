@@ -1,6 +1,6 @@
 # Changelog
 
-### [Unreleased] — 2026-10-23 (inline chart color gradients)
+### [v0.4.46] — 2026-10-23 (inline chart color gradients)
 **Feature: inline bar and line charts use a blue-to-red color transition**
 
 - **Type**: `feat` / `patch-level`
@@ -20,7 +20,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                     └─► v0.4.32 (Short `modr` command alias)
                           └─► v0.4.33 (Approval boundary and width fixes)
                                 └─► v0.4.34 (No frozen CLI — Ctrl+C always escapes)
-                                       └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect,
+                                       └─► v0.4.46 (Turn summary, bounded answer area, one-step Moderado connect,
                                                        jail canonicalization, chat/UI module split,
                                                        live reasoning in the status row,
                                                        multi-row activity log, summary panel,
@@ -34,7 +34,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
 
 ## Milestone Change Log Details
 
-### [Unreleased] — 2026-10-23 (`/model` lists the local-provider catalog; popups survive a resize)
+### [v0.4.46] — 2026-10-23 (`/model` lists the local-provider catalog; popups survive a resize)
 
 **Fix: `/model` offered no models at all for Ollama and LM Studio**
 
@@ -48,7 +48,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Popups repaint on terminal resize.** `selectListPopup` had no resize listener: dragging the window corner left the box at its old width and centring, and the composer's own resize repaint cleared it off screen entirely until the next keypress — the popup looked like it had vanished. It now re-renders at the new geometry and detaches the listener on exit. The `/help` overlay and the manual model-ID prompt do the same.
   - **Coverage**: `model_selector_cloud.test.ts` gains four regression tests (Ollama lists every discovered model with no `auto`/free-browse row; LM Studio likewise; the exact selected id is returned; a hosted all-unfree catalog still lists directly) and the two local-provider diagnostic tests no longer hang on stdin. Full suite green.
 
-### [Unreleased] — 2026-10-23 (the turn transcript is one scrollable list)
+### [v0.4.46] — 2026-10-23 (the turn transcript is one scrollable list)
 **Feature: the activity log no longer disappears when the answer starts streaming**
 
 - **Type**: `feat` / `patch-level`
@@ -62,7 +62,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Dead code removed:** `renderChatActivityBlock`, `clearChatActivityBlock`, `getChatActivityRows`, `ACTIVITY_BLOCK_MAX_ROWS`, `renderChatAnswerWindow` and `windowChatAnswer` are gone, along with the tests that pinned the old block's geometry. Their replacements cover the merged transcript.
   - **Coverage**: `welcome.test.ts` (log survives the answer; log and answer scroll as one list with a truthful status row; every width 20–200 × height 12–40 clamped to the card and never reaching the composer), full suite **71 files / 702 tests** green.
 
-### [Unreleased] — 2026-10-23 (the run log is multi-line and scrollable)
+### [v0.4.46] — 2026-10-23 (the run log is multi-line and scrollable)
 **Feature: `moderado run` prints a readable log instead of one clipped row per event**
 
 - **Type**: `feat` / `patch-level`
@@ -75,7 +75,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Reasoning stays hidden** (existing contract), and every committed row ends with a newline, so the terminal's own scrollback — mouse wheel, slider, PgUp — reaches the whole turn.
   - **Coverage**: `renderer.test.ts` (+4: five wrapped rows plus footer, commit-on-phase-change, every entry newline-terminated, empty output), full suite **71 files / 701 tests** green.
 
-### [Unreleased] — 2026-10-23 (approval dialog contained, auto-approve honoured)
+### [v0.4.46] — 2026-10-23 (approval dialog contained, auto-approve honoured)
 **Fix: the permission dialog no longer overflows, and the toggle actually covers `run_command`**
 
 - **Type**: `fix` / `patch-level`
@@ -87,7 +87,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Auto-approve covers `run_command`.** `decideApproval` exempted commands that reach the network, so `curl`, `wget` and any command containing a URL raised a prompt while the composer said "Auto-approve enabled". The toggle is a session-wide opt-in and now applies to every local tool; MCP tools stay gated because they are third-party code. `isNetworkCommand` remains as the tested definition of "this leaves the machine", no longer as a gate. `docs/SECURITY.md` says so.
   - **Coverage**: `box.test.ts` (U+FE0F width, emoji-titled dialog rows all equal), `terminal_approval.test.ts` (layer compositing, narrow-terminal key row, height-budgeted preview), `chat.test.ts` and `run_approval.test.ts` (auto-approve approves a network command; prompts when it is off).
 
-### [Unreleased] — 2026-10-23 (readable reports: panel, scrollback, transcript)
+### [v0.4.46] — 2026-10-23 (readable reports: panel, scrollback, transcript)
 **Feature: the turn summary gets its own panel, the answer scrolls, and the session can be read back**
 
 - **Type**: `feat` / `patch-level`
@@ -100,7 +100,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Help column realigned**: `/transcript` is the longest command, so the dash column moved from 11 to 13.
   - **Coverage**: `welcome.test.ts` (band colour and width, continuation markers, scroll clamping and the position row), `transcript.test.ts` (turn numbering, fence removal, tool-only turns, filename), `turn_summary.test.ts` (fence contract), `help_content.test.ts` (realigned column).
 
-### [Unreleased] — 2026-10-23 (live activity block)
+### [v0.4.46] — 2026-10-23 (live activity block)
 **Feature: the processing log gets rows of its own, Cline-style, and cannot overflow**
 
 - **Type**: `feat` / `patch-level`
@@ -115,7 +115,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Clock before message**: `⠋ Thinking · 12s · checking whether…`. The timer belongs to the phase, so the trailing text is what gets cut.
   - **The settled row lands where the live one was.** A wrapped question pushes the status row down; the turn-end repaint used to write to the default row 13 regardless. It now passes `layout.statusRow`, and a tool-only turn clears the block before settling instead of leaving six stale log rows under it.
 
-### [Unreleased] — 2026-10-23 (three field fixes)
+### [v0.4.46] — 2026-10-23 (three field fixes)
 **Fix: wide text, oversized approval prompts, and approvals denied by Enter**
 
 - **Type**: `fix` / `patch-level`
@@ -128,7 +128,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Fails closed on a closed stream.** A stream that ends without a newline resolves like a bare Enter, so `prompt` reports it distinctly and the handler aborts rather than auto-approving an unattended session.
   - **Coverage**: `box.test.ts` (cell-based clamping, `maxWidth` at 40/50/60/80, aligned borders), `terminal_approval.test.ts` (Enter approves, EOF aborts, typo re-asks, box fits a 50-column terminal with a 40-line diff), `welcome.test.ts` (CJK reasoning stays inside the card at three widths).
 
-### [Unreleased] — 2026-10-23 (live status row)
+### [v0.4.46] — 2026-10-23 (live status row)
 **Feature: the status row shows what the agent is doing, not its step counter**
 
 - **Type**: `feat` / `patch-level`
@@ -144,7 +144,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Coverage**: `welcome.test.ts` pins the phase map, the tool-target map, elapsed formatting, middle elision and card-width clipping; `renderer.test.ts` pins that the headless renderer shows the phase and no counter.
   - **Coverage**: `welcome.test.ts` pins the phase mapping, the de-duplicated step counter, the left-truncating tail and that the painted row stays inside the card.
 
-### [Unreleased] — 2026-10-23 (repeat-question fix)
+### [v0.4.46] — 2026-10-23 (repeat-question fix)
 **Fix: a stopped task was replayed as if it were an answer**
 
 - **Type**: `fix` / `patch-level`
@@ -155,7 +155,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Fix**: `lastAnswerReplayable` tracks whether `lastAnswer` is a genuine answer. It is set only when a turn completes, or when a failed turn still produced usable web-search evidence, and cleared at turn start, on cancellation, on failure, on a budget stop, and when restoring an interrupted session. The cache now requires it, so a stopped task is re-asked rather than replayed. A successful repeated question is still replayed instantly — the cache itself is unchanged.
   - **Coverage**: `chat_replay.test.ts` asserts the provider is called again after a failed turn and after resuming an interrupted session, and that a genuinely answered repeated question is still served from the cache. All three fail without the flag except the last, which pins the existing behaviour.
 
-### [Unreleased] — 2026-10-23 (structure pass)
+### [v0.4.46] — 2026-10-23 (structure pass)
 **Refactor: split the two oversized modules; stop re-canonicalizing the jail root**
 
 - **Type**: `refactor` + `perf` / `patch-level`
@@ -166,7 +166,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **`ui/welcome.ts` 1477 → 772 lines**: the interactive composer loop moved to `ui/composer.ts` (731 lines), sliced byte-exactly rather than retyped. `MOUSE_REPORT_*` stay in `welcome.ts` because `exitCleanly` writes `MOUSE_REPORT_OFF`; keeping them in the composer would have made the pair circular.
   - **Test wiring**: a spy on a re-export does not change the original binding, so the three composer tests now import and spy `ui/composer.js`, which is also where `commands/chat.ts` imports `promptInteractiveTurn`. Their teardowns also swallow a refused `rmSync`, so a sandbox that blocks temp deletes reports assertions instead of teardown failures.
 
-### [Unreleased] — 2026-10-23 (hardening pass)
+### [v0.4.46] — 2026-10-23 (hardening pass)
 **Fix: the `@` completion list, protected-path precision, and evidence for failed turns**
 
 - **Type**: `fix` / `patch-level`
@@ -177,7 +177,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **Failed turns leave evidence**: a turn that fails without throwing — the loop reports a status plus an `error` event — reached neither the diagnostic log nor any support report. `chat` and `run` now append a redacted record to `~/.moderado/logs/moderado.jsonl`; a cancelled turn is user intent and is not logged.
   - **Measured, not assumed**: `resolveInJail` re-canonicalizes the jail root on every call (13.7 µs per call, 6.5 µs of it canonicalization). Call sites are one or two per tool invocation and directory walks do not call it per entry, so the saving is noise — a cache on the security boundary was deliberately not added. (The cost was later removed structurally instead; see the structure pass above.)
 
-### [Unreleased] — 2026-10-23
+### [v0.4.46] — 2026-10-23
 **Fix: end-of-turn report, contained answer area, and a Moderado connect flow that stops interrogating**
 
 - **Type**: `fix` / `patch-level`
