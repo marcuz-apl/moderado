@@ -25,16 +25,45 @@ function isWideCodePoint(code: number): boolean {
 }
 
 /**
+ * One terminal cluster: a code point plus any trailing variation selectors or
+ * combining marks, with the cells it occupies.
+ *
+ * The variation selector matters more than it looks: `⚠` is a narrow glyph, but
+ * `⚠️` (U+26A0 U+FE0F) asks for emoji presentation and terminals draw it two
+ * cells wide. Counting it as one made every approval-box border one cell short
+ * of its own top row — the box appeared to spill out of the frame.
+ */
+function nextCluster(text: string, index: number): { text: string; cells: number } {
+  const code = text.codePointAt(index) ?? 0;
+  let cluster = String.fromCodePoint(code);
+  let cursor = index + cluster.length;
+  let emojiPresentation = false;
+  while (cursor < text.length) {
+    const next = text.codePointAt(cursor) ?? 0;
+    const isVariationSelector = next >= 0xfe00 && next <= 0xfe0f;
+    const isCombining = next >= 0x0300 && next <= 0x036f;
+    if (!isVariationSelector && !isCombining) break;
+    if (next === 0xfe0f) emojiPresentation = true;
+    const piece = String.fromCodePoint(next);
+    cluster += piece;
+    cursor += piece.length;
+  }
+  const cells = code === 0x200b ? 0 : emojiPresentation || isWideCodePoint(code) ? 2 : 1;
+  return { text: cluster, cells };
+}
+
+/**
  * Terminal cells occupied by a string. Wide (CJK, emoji) glyphs count as two
  * columns and combining marks as zero, so box borders stay aligned when the
  * workspace path or the task text is not ASCII.
  */
 export function displayWidth(text: string): number {
+  const plain = stripAnsi(text);
   let width = 0;
-  for (const char of stripAnsi(text)) {
-    const code = char.codePointAt(0) ?? 0;
-    if (code === 0x200b || (code >= 0x0300 && code <= 0x036f) || (code >= 0xfe00 && code <= 0xfe0f)) continue;
-    width += isWideCodePoint(code) ? 2 : 1;
+  for (let index = 0; index < plain.length;) {
+    const cluster = nextCluster(plain, index);
+    width += cluster.cells;
+    index += cluster.text.length;
   }
   return width;
 }
@@ -67,12 +96,11 @@ export function sliceToWidth(text: string, max: number): string {
         continue;
       }
     }
-    const char = String.fromCodePoint(text.codePointAt(i) ?? 0);
-    const cells = displayWidth(char);
-    if (width + cells > max) break;
-    width += cells;
-    out += char;
-    i += char.length;
+    const cluster = nextCluster(text, i);
+    if (width + cluster.cells > max) break;
+    width += cluster.cells;
+    out += cluster.text;
+    i += cluster.text.length;
   }
   return out;
 }
@@ -80,14 +108,19 @@ export function sliceToWidth(text: string, max: number): string {
 /** Keep the last `max` terminal cells of `text`. */
 export function sliceTailToWidth(text: string, max: number): string {
   if (max <= 0) return '';
+  const plain = stripAnsi(text);
+  const clusters: Array<{ text: string; cells: number }> = [];
+  for (let index = 0; index < plain.length;) {
+    const cluster = nextCluster(plain, index);
+    clusters.push(cluster);
+    index += cluster.text.length;
+  }
   let width = 0;
   let out = '';
-  const chars = [...stripAnsi(text)];
-  for (let i = chars.length - 1; i >= 0; i -= 1) {
-    const cells = displayWidth(chars[i]);
-    if (width + cells > max) break;
-    width += cells;
-    out = chars[i] + out;
+  for (let index = clusters.length - 1; index >= 0; index -= 1) {
+    if (width + clusters[index].cells > max) break;
+    width += clusters[index].cells;
+    out = clusters[index].text + out;
   }
   return out;
 }

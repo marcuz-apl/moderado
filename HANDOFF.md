@@ -7,6 +7,42 @@ Status: everything through the three field fixes is committed (`2a6b001`,
 the multi-row activity log + wait notice, and the summary panel + scrollback +
 `/transcript`. Build clean, affected suites green.
 
+## Session 2026-10-23 — the approval dialog, contained
+
+Two reports from the same weather-app run: the dialog overflowed the workspace,
+and it appeared at all while auto-approve was on.
+
+### It was one cell wider than itself
+
+`displayWidth('⚠️')` returned 1. U+26A0 is a narrow glyph, but U+FE0F asks for
+emoji presentation and terminals draw the pair two cells wide — so every border
+row of `⚠️ Permission Required: run_command` was a cell short and the box looked
+like it spilled out of the frame. The existing `maxWidth` test passed because it
+measured with the same wrong function: self-consistent, wrong on screen.
+
+`box.ts` now measures **clusters**: a code point plus trailing variation
+selectors and combining marks, with U+FE0F forcing two cells. `sliceToWidth` and
+`sliceTailToWidth` walk the same clusters.
+
+### It was appended below the frame
+
+The box was written at the cursor, which sits on the composer row, so a 20-row
+dialog scrolled the workspace off the top. `TerminalApprovalHandler.renderLayer`
+now composites the dialog over the dimmed frame via `renderWelcomePopupLayer`;
+`chat.ts` sets it for the length of the turn and clears it in a `finally`. The
+prompt is anchored to the last row. Without a layer the old inline path stays.
+
+Height is budgeted: preview lines are `min(10, rows - 13)`; the key row falls
+back to `[Y] Approve  [a] Always  [n] Deny  [q] Quit` when the full one does not
+fit (truncation used to eat `[q]`).
+
+### Why it appeared with auto-approve on
+
+`decideApproval` ran `if (isNetworkCommand(request)) return prompt(...)` **before**
+the auto-approve check. Any command containing a URL or `curl`/`wget` therefore
+prompted while the composer said "Auto-approve enabled". The gate is gone: the
+toggle covers every local tool; MCP stays gated. `docs/SECURITY.md` §4 updated.
+
 ## Session 2026-10-23 — readable reports (panel, scrollback, transcript)
 
 Follow-up to two questions: the turn summary ran past one page with no way back,

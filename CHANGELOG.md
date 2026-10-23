@@ -14,10 +14,23 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                                                       jail canonicalization, chat/UI module split,
                                                       live reasoning in the status row,
                                                       multi-row activity log, summary panel,
-                                                      answer scrollback, /transcript)
+                                                      answer scrollback, /transcript,
+                                                      contained approval dialog)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23 (approval dialog contained, auto-approve honoured)
+**Fix: the permission dialog no longer overflows, and the toggle actually covers `run_command`**
+
+- **Type**: `fix` / `patch-level`
+- **Scope**: `apps/cli` approval dialog, width math, approval policy
+- **Key Deliverables**:
+  - **The dialog was one cell wider than its own frame.** `⚠` is a narrow glyph, but `⚠️` (U+26A0 U+FE0F) asks for emoji presentation and terminals draw it two cells wide; `displayWidth` counted one. Every border row of `⚠️ Permission Required: run_command` was therefore a cell short, and the box appeared to spill out of the workspace. Width math is now cluster-based: a base code point plus its variation selectors, with U+FE0F forcing two cells. `sliceToWidth` / `sliceTailToWidth` use the same clusters, so truncation cannot split a pair either.
+  - **The dialog was appended below the frame.** It is written at the cursor, which sits on the composer row, so a 20-row dialog scrolled the whole workspace up and out. `TerminalApprovalHandler` now takes a `renderLayer` and composites the dialog over the dimmed chat frame (`renderWelcomePopupLayer`), with the prompt anchored to the bottom row; `chat.ts` supplies the layer for the length of the turn. Without a layer (tests, headless) the inline path is unchanged.
+  - **Height is budgeted, not fixed.** The diff preview is `min(10, rows - 13)` lines, so a 20-row terminal shows seven and a short one shows only the `+N -M` counts. The key row falls back to `[Y] Approve  [a] Always  [n] Deny  [q] Quit` when the full row does not fit — truncation used to eat `[q]`, the one key a stuck user needs.
+  - **Auto-approve covers `run_command`.** `decideApproval` exempted commands that reach the network, so `curl`, `wget` and any command containing a URL raised a prompt while the composer said "Auto-approve enabled". The toggle is a session-wide opt-in and now applies to every local tool; MCP tools stay gated because they are third-party code. `isNetworkCommand` remains as the tested definition of "this leaves the machine", no longer as a gate. `docs/SECURITY.md` says so.
+  - **Coverage**: `box.test.ts` (U+FE0F width, emoji-titled dialog rows all equal), `terminal_approval.test.ts` (layer compositing, narrow-terminal key row, height-budgeted preview), `chat.test.ts` and `run_approval.test.ts` (auto-approve approves a network command; prompts when it is off).
 
 ### [Unreleased] — 2026-10-23 (readable reports: panel, scrollback, transcript)
 **Feature: the turn summary gets its own panel, the answer scrolls, and the session can be read back**

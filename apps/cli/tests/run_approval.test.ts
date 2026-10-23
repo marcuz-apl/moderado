@@ -33,9 +33,22 @@ describe('moderado run approval policy', () => {
     expect(interactive).not.toHaveBeenCalled();
   });
 
-  it('still prompts for a network command under --auto-approve', async () => {
+  it('approves a network command under --auto-approve too', async () => {
+    // `--auto-approve` is an explicit opt-in for the whole run; exempting
+    // commands that touch the network meant a `curl` step stopped a batch job
+    // that was told not to stop.
     const interactive = vi.fn(async (): Promise<ApprovalDecision> => ({ requestId: 'req_test', status: 'approved' }));
     const handler = createRunApprovalHandler({ autoApprove: true, requestInteractiveApproval: interactive });
+
+    const decision = await handler.requestApproval(request('run_command', ['curl', 'https://example.com']));
+
+    expect(decision.status).toBe('approved');
+    expect(interactive).not.toHaveBeenCalled();
+  });
+
+  it('prompts for a network command when --auto-approve is absent', async () => {
+    const interactive = vi.fn(async (): Promise<ApprovalDecision> => ({ requestId: 'req_test', status: 'approved' }));
+    const handler = createRunApprovalHandler({ autoApprove: false, requestInteractiveApproval: interactive });
 
     await handler.requestApproval(request('run_command', ['curl', 'https://example.com']));
 

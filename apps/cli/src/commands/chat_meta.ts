@@ -1,13 +1,22 @@
 /**
  * Local meta queries: questions about the session itself (model, provider,
  * identity, tokens, version, workspace) answered from CLI state without a model
- * round trip, plus the network-command predicate the approval policy needs.
+ * round trip, plus the network-command predicate.
  *
  * Split out of `chat.ts`, which had grown to carry command routing, turn
  * execution, usage accounting and rendering at once.
  */
 import type { ApprovalRequest } from '@moderado/contracts';
 
+/**
+ * Does this command reach the network?
+ *
+ * No longer an approval gate: auto-approve is a session-wide opt-in and it
+ * covers `run_command` too, network or not. It stays because "this command
+ * leaves the machine" is the one property worth surfacing in a future warning
+ * or audit line, and because the predicate is the tested definition of that
+ * property.
+ */
 export function isNetworkCommand(request: Pick<ApprovalRequest, 'toolName' | 'exactPayload'>): boolean {
   const command = (request.exactPayload as { command?: unknown }).command;
   const text = Array.isArray(command) ? command.join(' ').toLowerCase() : '';

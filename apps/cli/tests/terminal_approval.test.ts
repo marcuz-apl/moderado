@@ -77,6 +77,62 @@ describe('TerminalApprovalHandler', () => {
     expect(output).toContain('Please answer y, a, n, or q.');
   });
 
+  it('composites the dialog over the frame instead of appending it below', async () => {
+    // Appending pushed the composer off screen, which is what "the dialog
+    // overflows the workspace" looked like.
+    let output = '';
+    const stdout = new Writable({ write(chunk, _encoding, callback) { output += chunk.toString(); callback(); } });
+    Object.assign(stdout, { columns: 100, rows: 30 });
+    const layers: string[][] = [];
+
+    const handler = new TerminalApprovalHandler({
+      stdin: Readable.from(['n\n']),
+      stdout,
+      renderLayer: (popupLines) => { layers.push(popupLines); return '\x1b[10;1HFRAME'; },
+    });
+    const decision = await handler.requestApproval({ ...sampleRequest, toolName: 'run_command', exactPayload: { command: ['npx', 'tailwindcss', 'init', '-p'] } });
+
+    expect(decision.status).toBe('denied');
+    expect(layers).toHaveLength(1);
+    // The box is handed to the layer as lines, not written inline.
+    expect(layers[0][0]).toContain('Permission Required: run_command');
+    expect(output).toContain('FRAME');
+    // The screen is cleared first and the prompt lands on the last row.
+    expect(output).toContain('\x1b[H\x1b[J');
+    expect(output).toContain('\x1b[30;1H');
+    // Nothing is appended with a bare newline any more.
+    expect(output).not.toMatch(/^\n/);
+  });
+
+  it('keeps every key visible on a narrow terminal', async () => {
+    // Truncating the full key row dropped `[q] Quit session`, the one key a
+    // stuck user needs to find.
+    let output = '';
+    const stdout = new Writable({ write(chunk, _encoding, callback) { output += chunk.toString(); callback(); } });
+    Object.assign(stdout, { columns: 60, rows: 20 });
+
+    const handler = new TerminalApprovalHandler({ stdin: Readable.from(['n\n']), stdout });
+    await handler.requestApproval({ ...sampleRequest, toolName: 'run_command', exactPayload: { command: ['npx', 'tailwindcss', 'init', '-p'] } });
+
+    const plain = output.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+    expect(plain).toContain('[q] Quit');
+    expect(plain.split('\n').filter((line) => line.trim().length > 0).every((line) => displayWidth(line) <= 60)).toBe(true);
+  });
+
+  it('shrinks the diff preview to the terminal height', async () => {
+    let output = '';
+    const stdout = new Writable({ write(chunk, _encoding, callback) { output += chunk.toString(); callback(); } });
+    Object.assign(stdout, { columns: 100, rows: 20 });
+    const diffPreview = Array.from({ length: 24 }, (_, index) => `+const value${index} = compute(${index});`).join('\n');
+
+    const handler = new TerminalApprovalHandler({ stdin: Readable.from(['n\n']), stdout });
+    await handler.requestApproval({ ...sampleRequest, toolName: 'apply_patch', exactPayload: { targetFile: 'src/App.tsx', diffPreview } });
+
+    // A fixed ten-line preview made the dialog taller than a 20-row terminal.
+    const plain = output.replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '');
+    expect(plain).toContain('… 17 more lines not shown');
+  });
+
   it('keeps the permission box inside the terminal and summarises a long diff', async () => {
     let output = '';
     const stdout = new Writable({ write(chunk, _encoding, callback) { output += chunk.toString(); callback(); } });

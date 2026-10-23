@@ -68,6 +68,25 @@ describe('Box UI Utility', () => {
     expect(displayWidth(truncateToWidth('\x1b[32mabcdef\x1b[0m', 4))).toBe(4);
   });
 
+  it('counts an emoji presentation selector as two cells', () => {
+    // `⚠` is a narrow glyph, but `⚠️` (U+26A0 U+FE0F) asks for emoji
+    // presentation and terminals draw it two cells wide. Counting it as one made
+    // the approval box's title row one cell short of its own body — the box
+    // looked like it had spilled out of the frame.
+    expect(displayWidth('⚠')).toBe(1);
+    expect(displayWidth('⚠️')).toBe(2);
+    expect(displayWidth('⚠️ Permission')).toBe(13);
+    // Truncation must not split the pair, and must not exceed the budget.
+    expect(displayWidth(truncateToWidth('⚠️ Permission Required', 5))).toBeLessThanOrEqual(5);
+    expect(truncateToWidth('⚠️ Permission Required', 5)).toContain('⚠️');
+  });
+
+  it('keeps every row of an emoji-titled dialog the same width', () => {
+    const box = renderBox(['Command   npx tailwindcss init -p'], { title: '⚠️ Permission Required: run_command', minWidth: 58, maxWidth: 98 });
+    const widths = stripAnsi(box).split('\n').filter(Boolean).map((line) => displayWidth(line));
+    expect(new Set(widths).size).toBe(1);
+  });
+
   it('never renders wider than maxWidth, whatever the content', () => {
     const longLine = `+${'const value = compute(); '.repeat(20)}`;
     for (const maxWidth of [40, 50, 60, 80]) {

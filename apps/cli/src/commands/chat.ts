@@ -38,7 +38,7 @@ import { forceExit } from '../http_shutdown.js';
 // live in their own modules. Re-exported so `commands/chat.js` stays the one
 // import surface for callers and tests.
 import { findSlashCommandAdvice } from './chat_slash.js';
-import { isNetworkCommand, resolveLocalMetaQuery } from './chat_meta.js';
+import { resolveLocalMetaQuery } from './chat_meta.js';
 import { buildSearchAnswerTask, formatDirectWebSearchAnswer, replaceEvidenceTurn, resolveWebSearchOptions, shouldFastRouteWebSearch } from './chat_search.js';
 import { isBareExitCommand, isGenerationCancelKey, resolveSessionSharePath, resolveTurnAssistantAnswer, saveFailedTurnPrompt, turnFailedAuthentication } from './chat_outcome.js';
 
@@ -263,7 +263,11 @@ export async function decideApproval(
   options: ApprovalPolicyOptions,
   signal?: AbortSignal
 ): Promise<ApprovalDecision> {
-  if (isNetworkCommand(request)) return options.requestInteractiveApproval(request, signal);
+  // Auto-approve is an explicit, session-wide opt-in and it covers every local
+  // tool — `run_command` included. It used to exempt commands that reach the
+  // network, which is why `npx …` and `curl …` still raised a prompt while the
+  // status bar said "Auto-approve enabled". MCP tools stay gated: they are
+  // third-party code the user never reviewed.
   if (options.autoApprove && !request.toolName.startsWith('mcp.')) {
     return { requestId: request.requestId, status: 'approved' };
   }
@@ -1295,19 +1299,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
         }, 200);
       };
+      /** The frame as it is painted right now — also the approval backdrop. */
+      const currentFrameOptions = () => chatFrameOptions({
+        tokens: Math.round(sessionTokens + (usageRecorded ? 0 : turnUsage?.usage.totalTokens ?? 0)),
+        chatQuestion: trimmed,
+        chatAnswer: streamedAnswer || lastAnswer,
+        chatThoughtTime: Math.max(0.001, (Date.now() - startedAt) / 1000),
+        chatTaskDone: lastTurnDone,
+        outputTokenRate,
+        tokenUsage: turnUsage,
+        budgetStatus: budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined,
+      });
       const redrawChatFrame = (): void => {
-        const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
-        const displayAnswer = streamedAnswer || lastAnswer;
-        const options = chatFrameOptions({
-          tokens: Math.round(sessionTokens + (usageRecorded ? 0 : turnUsage?.usage.totalTokens ?? 0)),
-          chatQuestion: trimmed,
-          chatAnswer: displayAnswer,
-          chatThoughtTime: thoughtTime,
-          chatTaskDone: lastTurnDone,
-          outputTokenRate,
-          tokenUsage: turnUsage,
-          budgetStatus: budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined,
-        });
+        const options = currentFrameOptions();
         layout = layoutFor(options);
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen(options, process.stdout.rows));
@@ -1558,6 +1562,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         return secured;
       };
       let result;
+      // While the turn runs, an approval dialog is composited over the chat
+      // frame instead of being appended below it: appending pushed the composer
+      // off screen and made the dialog look like it had overflowed the
+      // workspace. Outside a turn the handler keeps its inline behaviour.
+      terminalApproval.renderLayer = (popupLines) => renderWelcomePopupLayer(
+        currentFrameOptions(),
+        popupLines,
+        process.stdout.columns,
+        process.stdout.rows,
+      );
       try {
         checkpointInterruptedTurn();
         result = await runAgent();
@@ -1573,6 +1587,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (!activeConnection || !isAuthenticationFailure(error)) throw error;
         if (!(await recoverAuthenticationFailure())) throw error;
         result = await runAgent();
+      } finally {
+        terminalApproval.renderLayer = undefined;
       }
       // The turn is over: replace the spinner with the settled state while
       // usage accounting and catalog refresh finish.

@@ -419,7 +419,10 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(decision).toEqual({ requestId: 'mcp-approval', status: 'denied' });
   });
 
-  it('prompts for a network command even when auto-approve is enabled', async () => {
+  it('auto-approves a network command when the toggle is on', async () => {
+    // The toggle is a session-wide opt-in: it covers run_command, including the
+    // commands that reach the network. It used to exempt them, so a `curl` or a
+    // `npx …` step raised a prompt while the status bar said auto-approve was on.
     let prompted = false;
     const decision = await decideApproval(
       { requestId: 'network-approval', toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as ApprovalRequest,
@@ -429,8 +432,22 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       }
     );
 
-    expect(prompted).toBe(true);
+    expect(prompted).toBe(false);
     expect(decision).toEqual({ requestId: 'network-approval', status: 'approved' });
+  });
+
+  it('still prompts for a network command when auto-approve is off', async () => {
+    let prompted = false;
+    const decision = await decideApproval(
+      { requestId: 'network-approval-off', toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as ApprovalRequest,
+      {
+        autoApprove: false,
+        requestInteractiveApproval: async () => { prompted = true; return { requestId: 'network-approval-off', status: 'approved' }; },
+      }
+    );
+
+    expect(prompted).toBe(true);
+    expect(decision.status).toBe('approved');
   });
   it('prompts for workspace file writes and terminal commands after auto-approve is disabled', async () => {
     const tools = ['write_file', 'edit_file', 'apply_patch', 'run_command', 'run_diagnostics'];
