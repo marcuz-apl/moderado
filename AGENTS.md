@@ -122,13 +122,15 @@ Moderado strictly adheres to **Alfazen Versioning (`versioning-alfazen`)**:
   `v<m.n.p>+<yymmddc>` (e.g., `v0.1.0+2609161`).
 - Every commit subject must be prefixed with the connected identifier:
   `v0.1.0+2609161 feat(core): implement step bounding and cancellation`
-- `pre-commit` only advances the UTC build counter. A SemVer change is explicit:
-  run `npm run version:patch` (or `version:minor`) before the release commit; it
-  updates `VERSION`, `apps/cli/package.json`, and `package-lock.json` together and
-  stages them. `commit-msg` rejects a `release(patch|minor):` subject whose SemVer
-  did not move beyond the latest `v*` tag.
-- Never infer the bump from the commit message inside `pre-commit`: Git creates
-  the message file after that hook runs, so it would classify the previous commit.
+- `pre-commit` advances the UTC build counter. `post-commit` amends the same
+  commit to bump `p` for every `feat:` and updates `VERSION`,
+  `apps/cli/package.json`, and `package-lock.json` together. Minor releases
+  remain explicit through `npm run version:minor`; `commit-msg` rejects a
+  `release(patch|minor):` subject whose SemVer did not move beyond the latest
+  `v*` tag.
+- `prepare-commit-msg` runs after Git captures the commit tree, so it cannot
+  update the version in that commit. `post-commit` applies feature bumps by
+  amending that same commit.
 
 ### 6.2 Mandatory Advisory Gate for Major (`m`) Increments
 Automatic bumping of the Major version (`m`) is **strictly prohibited**.

@@ -22,6 +22,9 @@ message=$(printf '%s\n' "$first" | sed -E 's/^v[0-9]+\.[0-9]+\.[0-9]+[+-][0-9]{6
 # A stamped subject means `--amend` (or a re-run): the SemVer was decided by the
 # commit being amended, so only the build counter moves.
 if [ "$stamped" -eq 0 ]; then
+  head_version=$(git show HEAD:VERSION 2>/dev/null | tr -d '\r\n\t ' || true)
+  head_semver=${head_version%%+*}
+  new_semver=${version%%+*}
   case "$message" in
     *BREAKING\ CHANGE*|*!:\ *)
       die "major bump requires explicit owner approval; stage the change as release(minor): or release(patch): instead." ;;
@@ -33,11 +36,12 @@ if [ "$stamped" -eq 0 ]; then
       if [ -n "$latest_tag" ]; then
         baseline=${latest_tag%%+*}
       else
-        head_version=$(git show HEAD:VERSION 2>/dev/null | tr -d '\r\n\t ' || true)
-        baseline=${head_version%%+*}
+        baseline=$head_semver
       fi
       new_semver=${version%%+*}
       [ "$baseline" != "$new_semver" ] || die "release subject without a SemVer change (still $new_semver). Run 'npm run version:patch' or 'npm run version:minor' first, then commit again." ;;
+    *)
+      [ "$head_semver" = "$new_semver" ] || die "SemVer changed for a non-feat commit. Restore the intended release bump or keep this commit's SemVer at $head_semver." ;;
   esac
 fi
 

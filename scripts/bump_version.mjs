@@ -1,11 +1,8 @@
 /**
  * Explicit SemVer bump for Alfazen versioning.
  *
- * `pre-commit` cannot read the commit message: Git creates `COMMIT_EDITMSG`
- * only after that hook has run, and the commit tree is already written before
- * `prepare-commit-msg`. So the SemVer decision is made here, on purpose, and
- * arrives staged. `pre-commit` then only advances the UTC build counter, and
- * `commit-msg` rejects a `release(...)` subject whose SemVer did not change.
+ * Used for explicit patch/minor releases. Feature commits bump the patch
+ * automatically in post-commit, which amends the same commit with the bump.
  */
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';

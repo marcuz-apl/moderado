@@ -1,5 +1,4 @@
 #!/bin/sh
-# Intentionally empty. Git writes the commit tree before this hook runs, so a
-# VERSION update here could never be part of the commit. `pre-commit` owns
-# VERSION and `commit-msg` owns the subject stamp.
+# Git has already captured the index for this commit. Feature version changes
+# are applied by post-commit, which amends this same commit with the new tree.
 exit 0
