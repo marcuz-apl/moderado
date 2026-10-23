@@ -99,6 +99,80 @@ export function getChatAnswerArea(width?: number): { indent: number; cardWidth: 
   return { indent, cardWidth, textWidth, startColumn: indent + 1, wrapWidth: indent + textWidth };
 }
 
+/** Rows the logo header occupies: leading blank, five logo lines, blank, hint. */
+export const CHAT_HEADER_ROWS = MODERADO_ASCII_LOGO.length + 3;
+/** Rows the composer card occupies: blank surface, input, blank surface, mode, workspace. */
+export const CHAT_COMPOSER_ROWS = 5;
+
+export interface ChatLayout {
+  area: ReturnType<typeof getChatAnswerArea>;
+  questionTop: number;
+  questionRows: number;
+  statusRow: number;
+  answerTop: number;
+  answerRows: number;
+  composerTop: number;
+}
+
+/**
+ * Fixed row geometry for the chat window. The answer area is bounded by the
+ * composer: a long answer is windowed instead of pushing the input card, the
+ * mode row, and the workspace row off screen (or painting over them).
+ */
+export function getChatLayout(width?: number, height?: number, question = '', composerRows = CHAT_COMPOSER_ROWS): ChatLayout {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  // Honor the real viewport: a hard floor here would emit a frame taller than a
+  // short terminal and scroll the composer away. A very short terminal simply
+  // shows fewer sections (the composer always wins — see renderChatScreen).
+  const terminalHeight = Math.max(2, height ?? (process.stdout.rows || 24));
+  const area = getChatAnswerArea(terminalWidth);
+  const wrappedQuestion = wrapText(question, area.textWidth - 2).length;
+  const questionTop = CHAT_HEADER_ROWS + 2;
+  // Rows above the answer: header, blank, question rows, status, blank.
+  const answerTopOffset = CHAT_HEADER_ROWS + 4;
+  // The frame has to end on the second-to-last row: a trailing newline written
+  // on the bottom row scrolls the viewport and drags the composer out of place.
+  // So the composer is pinned to the viewport bottom and keeps every row it
+  // needs — a queued-commands box makes it taller, and the answer area gives up
+  // those rows instead of pushing the card off screen.
+  const composerTop = Math.max(2, terminalHeight - Math.max(CHAT_COMPOSER_ROWS, composerRows));
+  // A pathological question must never starve the answer or the composer; when
+  // a tall composer leaves no room at all the question is dropped, not the card.
+  const questionRows = Math.max(0, Math.min(wrappedQuestion, composerTop - answerTopOffset - 2));
+  const statusRow = questionTop + questionRows;
+  const answerTop = statusRow + 2;
+  return {
+    area,
+    questionTop,
+    questionRows,
+    statusRow,
+    answerTop,
+    answerRows: Math.max(0, composerTop - 1 - answerTop),
+    composerTop,
+  };
+}
+
+/** Rows the composer card occupies for a given layout, including any queued-commands box. */
+export function getChatComposerRows(options: WelcomeLayoutOptions): number {
+  return renderWelcomeCard(options).split('\n').length;
+}
+
+/**
+ * Wrap an answer to the card and keep only the rows that fit. Older rows are
+ * dropped (the newest output is what the user is reading) and reported as a
+ * count so nothing is silently lost.
+ */
+export function windowChatAnswer(text: string, maxRows: number, textWidth: number): { lines: string[]; hidden: number } {
+  const wrapped = wrapText(text.trimEnd(), textWidth);
+  if (wrapped.length <= maxRows) return { lines: wrapped, hidden: 0 };
+  const visible = Math.max(1, maxRows - 1);
+  return { lines: wrapped.slice(-visible), hidden: wrapped.length - visible };
+}
+
+export function chatAnswerOverflowNote(hidden: number): string {
+  return `… +${hidden} earlier line${hidden === 1 ? '' : 's'} hidden (full answer: /session export)`;
+}
+
 export function renderQueuedCommandsBox(commands: readonly string[], width: number): string[] {
   if (!commands || commands.length === 0) return [];
   const title = `Queued Commands (${commands.length})`;
@@ -387,15 +461,26 @@ export function wrapText(text: string, maxWidth: number): string[] {
 export function renderChatScreen(options: WelcomeLayoutOptions, height?: number): string {
   const terminalWidth = options.width ?? (process.stdout.columns || 80);
   const terminalHeight = height ?? process.stdout.rows ?? 24;
-  const area = getChatAnswerArea(terminalWidth);
+  const question = options.chatQuestion ?? '';
+  // The composer is measured before the layout: a queued-commands box or a
+  // mention box makes the card taller, and the answer area must give up those
+  // rows instead of pushing the card past the bottom of the viewport.
+  const composer = renderWelcomeCard(options).split('\n');
+  const layout = getChatLayout(terminalWidth, terminalHeight, question, composer.length);
+  const area = layout.area;
   const indent = ' '.repeat(area.indent);
   const lines: string[] = [];
   lines.push(...renderModeradoHeader(terminalWidth).split('\n'));
   lines.push('');
   // Row 1: the user's question, wrapped onto the same columns as the composer card.
   const questionMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
-  for (const [index, questionLine] of wrapText(options.chatQuestion ?? '', area.textWidth - 2).entries()) {
-    const questionText = `${index === 0 ? questionMarker : '  '} ${questionLine}`;
+  const questionLines = wrapText(question, area.textWidth - 2);
+  const visibleQuestion = questionLines.slice(0, layout.questionRows);
+  for (const [index, questionLine] of visibleQuestion.entries()) {
+    const clipped = index === layout.questionRows - 1 && questionLines.length > layout.questionRows
+      ? `${questionLine.slice(0, Math.max(0, area.textWidth - 3))}…`
+      : questionLine;
+    const questionText = `${index === 0 ? questionMarker : '  '} ${clipped}`;
     lines.push(indent + String.fromCharCode(27) + '[48;5;236m' + questionText + ' '.repeat(Math.max(0, area.cardWidth - visibleLen(questionText))) + String.fromCharCode(27) + '[0m');
   }
   const thoughtTime = options.chatThoughtTime ?? 0;
@@ -408,27 +493,39 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
     ? ''
     : `Thought for ${thoughtTimeLabel}`;
   lines.push(chatStatus ? indent + `\x1b[38;5;244m${chatStatus.slice(0, Math.max(0, area.cardWidth - 1))}\x1b[0m` : '');
-  // Answer section: multi-line model answer
-  if (options.chatAnswer && options.chatAnswer.trim().length > 0) {
+  // Answer section: multi-line model answer, windowed to the rows the composer leaves free.
+  if (options.chatAnswer && options.chatAnswer.trim().length > 0 && layout.answerRows > 0) {
     lines.push('');
-    for (const answerLine of wrapText(options.chatAnswer.trim(), area.textWidth)) {
+    const { lines: answerLines, hidden } = windowChatAnswer(options.chatAnswer, layout.answerRows, area.textWidth);
+    if (hidden > 0) lines.push(indent + `\x1b[38;5;244m${chatAnswerOverflowNote(hidden)}\x1b[0m`);
+    for (const answerLine of answerLines) {
       const heading = answerLine.match(/^\s*(?:#{1,6}\s+([^#]+?)|\*\*(.+?)\*\*)\s*$/);
       lines.push(indent + (heading
         ? `\x1b[1;38;5;25m${(heading[1] ?? heading[2]).trim()}\x1b[0m`
         : `\x1b[38;5;253m${answerLine}\x1b[0m`));
     }
   }
-  const composer = renderWelcomeCard(options).split('\n');
-  lines.push(...Array(Math.max(1, terminalHeight - lines.length - composer.length - 1)).fill(''));
+  // Hard guarantee: the composer starts at `composerTop` and the frame ends one
+  // row above the viewport bottom, whatever the content did. This holds for any
+  // composer the viewport can hold (rows >= card height + 2); a terminal too
+  // short to show the card at all cannot be contained by layout arithmetic.
+  while (lines.length < layout.composerTop - 1) lines.push('');
+  if (lines.length > layout.composerTop - 1) lines.length = layout.composerTop - 1;
   lines.push(...composer);
   return lines.join('\n') + '\n';
 }
 
-/** Place the terminal cursor on the first row of the bottom composer. */
-export function renderChatComposerCursor(options: Pick<WelcomeLayoutOptions, 'width'>, inputLength: number): string {
+/**
+ * Place the terminal cursor on the input row. Passing the layout's
+ * `composerTop` addresses the row absolutely, which stays correct when a
+ * queued-commands box grows the card; the relative form is the legacy path.
+ */
+export function renderChatComposerCursor(options: Pick<WelcomeLayoutOptions, 'width'>, inputLength: number, composerTop?: number): string {
   const width = getWelcomeCardWidth(options.width);
-  const column = getWelcomeIndent(width, options.width) + 2 + Math.min(inputLength, width - 3);
-  return `\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${column}C`;
+  const indent = getWelcomeIndent(width, options.width);
+  const caretColumn = indent + 3 + Math.min(inputLength, width - 3);
+  if (composerTop !== undefined) return `\x1b[1 q\x1b[?25h\x1b[${composerTop + 1};${caretColumn}H`;
+  return `\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${indent + 2 + Math.min(inputLength, width - 3)}C`;
 }
 
 export function navigateQuestionHistory(history: string[], direction: -1 | 1, index: number, draft: string): { input: string; index: number; draft: string } {
@@ -453,6 +550,7 @@ export function renderChatThoughtTimeUpdate(
   taskStep?: { step: number; maxSteps: number },
   width?: number,
   activity?: ChatActivity,
+  row = 13,
 ): string {
   const area = getChatAnswerArea(width);
   const label = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
@@ -462,40 +560,28 @@ export function renderChatThoughtTimeUpdate(
   const status = (activity
     ? [`${activity.glyph} ${activity.label}`, stepText, label].filter(Boolean).join(' · ')
     : stepText ? `Processing task… ${stepText} · ${label}` : `Thought for ${label}`).slice(0, area.cardWidth);
-  return `\x1b7\x1b[13;${area.startColumn}H\x1b[K\x1b[38;5;244m${status}\x1b[0m\x1b8`;
+  return `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${status}\x1b[0m\x1b8`;
 }
 
-export interface ChatAnswerPosition { row: number; column: number; }
-
 /**
- * Write one streamed fragment into the answer area without repainting the chat
- * frame. Wrapped lines return to `startColumn` so the answer keeps the same
- * columns as the composer card instead of stretching across the terminal.
+ * Repaint the answer area in place: exactly the rows the layout reserves,
+ * between the status row and the composer. The window scrolls (oldest rows
+ * leave first) instead of writing over the composer, so a large model output
+ * can never damage the bottom rows. The cursor is saved and restored, so the
+ * caller keeps its position on the input line.
  */
-export function renderChatAnswerDelta(
-  delta: string,
-  start: ChatAnswerPosition,
-  width: number,
-  startColumn = 1
-): ChatAnswerPosition & { sequence: string } {
-  let row = start.row;
-  let column = start.column;
-  let writeColumn = start.column;
-  let sequence = '';
-  let line = '';
-  const flush = (): void => {
-    if (line.length === 0) return;
-    sequence += `\x1b[${row};${writeColumn}H\x1b[38;5;253m${line}\x1b[0m`;
-    line = '';
-  };
-  for (const character of delta) {
-    if (character === '\n') { flush(); row++; column = startColumn; writeColumn = startColumn; continue; }
-    line += character;
-    column++;
-    if (column > width) { flush(); row++; column = startColumn; writeColumn = startColumn; }
+export function renderChatAnswerWindow(text: string, layout: ChatLayout): string {
+  const { area } = layout;
+  const { lines, hidden } = windowChatAnswer(text, layout.answerRows, area.textWidth);
+  const visible = hidden > 0
+    ? [`\x1b[38;5;244m${chatAnswerOverflowNote(hidden)}\x1b[0m`, ...lines.map((line) => `\x1b[38;5;253m${line}\x1b[0m`)]
+    : lines.map((line) => `\x1b[38;5;253m${line}\x1b[0m`);
+  let sequence = '\x1b7';
+  for (let index = 0; index < layout.answerRows; index++) {
+    const row = layout.answerTop + index;
+    sequence += `\x1b[${row};${area.startColumn}H\x1b[2K${visible[index] ?? ''}`;
   }
-  flush();
-  return { sequence, row, column };
+  return sequence + '\x1b8';
 }
 
 export function renderFullWelcomeScreen(options: WelcomeLayoutOptions, height?: number): string {
@@ -807,10 +893,18 @@ export async function promptInteractiveTurn(
   const getComposerOffset = (): number => getWelcomeBottomPadding(getOptions(), getRows()) + 4 + getExtraLines();
 
   /** Screen row and 1-based column of the composer's first text cell. */
-  const getComposerAnchor = (): { row: number; column: number } => ({
-    row: getRows() - getComposerOffset(),
-    column: getWelcomeIndent(getWelcomeCardWidth()) + 3,
-  });
+  const getComposerAnchor = (): { row: number; column: number } => {
+    const options = getOptions();
+    const column = getWelcomeIndent(getWelcomeCardWidth()) + 3;
+    if (options.chatQuestion !== undefined) {
+      // Chat frames place the composer at a computed row. Measure the card that
+      // is actually painted — a queued-commands or mention box makes it taller —
+      // so the caret never lands on the mode row or inside the box.
+      const layout = getChatLayout(stdout.columns, getRows(), options.chatQuestion, getChatComposerRows(options));
+      return { row: layout.composerTop + 1, column };
+    }
+    return { row: getRows() - getComposerOffset(), column };
+  };
 
 
   /**

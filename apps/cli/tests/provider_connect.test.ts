@@ -282,8 +282,8 @@ describe('browser sign-in wait', () => {
   });
 });
 
-describe('repeat Moderado login', () => {
-  it('offers the saved key and shows the active provider without exposing the key', async () => {
+describe('Moderado login asks only what it cannot know', () => {
+  it('reuses the saved key without asking for a key or a base URL', async () => {
     let authorization: string | undefined;
     const server = createServer((request, response) => {
       authorization = request.headers.authorization;
@@ -294,12 +294,9 @@ describe('repeat Moderado login', () => {
     const address = server.address();
     if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
     const saved = { ...buildModeradoConnection('mrd_saved-secret'), baseUrl: `http://127.0.0.1:${address.port}/v1` };
-    const frames: string[][] = [];
-    let modeSelected = false;
-    let urlSelected = false;
-    let keyConfirmed = false;
+    const frames: string[] = [];
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1_000);
+    const timeout = setTimeout(() => controller.abort(), 5_000);
     try {
       const result = await loginModeradoCloudInteractive({
         signal: controller.signal,
@@ -307,29 +304,15 @@ describe('repeat Moderado login', () => {
         savedConnections: { 'moderado-cloud': { ...saved, apiKey: undefined } },
         resolveSavedConnection: async () => saved,
         drawFrame: (lines) => {
-          frames.push(lines);
-          const frame = lines.map(stripAnsi).join('\n');
-          if (frame.includes('Moderado Gateway Mode') && !modeSelected) {
-            modeSelected = true;
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Gateway Base URL') && !urlSelected) {
-            urlSelected = true;
-            setImmediate(() => {
-              process.stdin.emit('keypress', undefined, { ctrl: true, name: 'a' });
-              for (const character of saved.baseUrl) process.stdin.emit('keypress', character, { name: character });
-              process.stdin.emit('keypress', '\r', { name: 'return' });
-            });
-          } else if (frame.includes('Moderado Gateway API key') && !keyConfirmed) {
-            keyConfirmed = true;
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          }
-          else if (frame.includes('Moderado Models')) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+          const frame = stripAnsi(lines.join('\n'));
+          frames.push(frame);
+          if (frame.includes('Moderado Models')) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
         },
       });
       expect(result).toEqual(saved);
-      const visible = frames.flat().map(stripAnsi).join('\n');
-      expect(visible).toContain('Moderado Gateway API key');
-      expect(visible).toContain('*'.repeat(saved.apiKey!.length));
+      const visible = frames.join('\n');
+      expect(visible).not.toContain('Moderado Gateway Base URL');
+      expect(visible).not.toContain('API key');
       expect(visible).not.toContain('mrd_saved-secret');
       expect(authorization).toBe('Bearer mrd_saved-secret');
     } finally {
@@ -338,139 +321,117 @@ describe('repeat Moderado login', () => {
     }
   });
 
-  it('shows the Gateway Base URL as an editable value inside the popup border', async () => {
-    const frames: string[][] = [];
-    let modeSelected = false;
-    let urlSelected = false;
-    let keyFrame = '';
-    await loginModeradoCloudInteractive({
+  it('reuses the active Gateway URL and offers sign-in instead of asking for a URL', async () => {
+    const frames: string[] = [];
+    let signInFrame = '';
+    const result = await loginModeradoInteractive({
       activeConnection: buildModeradoConnection(),
       drawFrame: (lines) => {
-        frames.push(lines);
-        const frame = lines.map(stripAnsi).join('\n');
-        if (frame.includes('Moderado Gateway Mode') && !modeSelected) {
-          modeSelected = true;
-          setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-        } else if (frame.includes('Moderado Gateway Base URL') && !urlSelected) {
-          urlSelected = true;
-          setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-        } else if (frame.includes('Moderado Gateway API key')) {
-          keyFrame = frame;
+        const frame = stripAnsi(lines.join('\n'));
+        frames.push(frame);
+        if (frame.includes('Moderado Sign-in')) {
+          signInFrame = frame;
           setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
         }
       },
     });
-    const lines = frames.find((frame) => frame.some((line) => stripAnsi(line).includes('Moderado Gateway Base URL')))!.map(stripAnsi);
-    expect(lines.join('\n')).toContain('https://modr.alfazen.org/v1');
-    expect(lines.join('\n')).toContain('Ctrl+A clear to edit');
-    expect(lines.every((line) => line.length <= lines[0].length)).toBe(true);
-    expect(keyFrame).toContain('Moderado Gateway API key');
+    expect(result).toBeUndefined();
+    expect(frames.join('\n')).not.toContain('Base URL');
+    expect(frames.join('\n')).not.toContain('Gateway Mode');
+    expect(signInFrame).toContain('Sign in with browser');
+    expect(signInFrame).toContain('Paste an API key');
   });
 });
 
 describe('unified provider connection', () => {
-  it('shows a saved Gateway key masked and reuses it when confirmed', async () => {
+  it('reuses a saved Gateway key without prompting for it again', async () => {
+    const server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ data: [] }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
     const saved = {
       id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible' as const,
-      baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_hidden-secret', defaultModel: 'auto',
+      baseUrl: `http://127.0.0.1:${address.port}/v1`, apiKey: 'mrd_hidden-secret', defaultModel: 'auto',
     };
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1_500);
-    let selectedMode = false;
-    let confirmedUrl = false;
-    let confirmedKey = false;
-    let keyFrame = '';
-    let showedMethodMenu = false;
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    let sawSignIn = false;
+    let sawKeyPrompt = false;
     try {
       const result = await loginModeradoInteractive({
         signal: controller.signal,
         savedConnections: { moderado: saved },
         resolveSavedConnection: async (connection) => connection,
         drawFrame: (lines) => {
-          const frame = lines.map(stripAnsi).join('\n');
-          if (frame.includes('Moderado Gateway Mode') && !selectedMode) {
-            selectedMode = true;
+          const frame = stripAnsi(lines.join('\n'));
+          if (frame.includes('Moderado Sign-in')) sawSignIn = true;
+          if (frame.includes('API key')) sawKeyPrompt = true;
+          if (frame.includes('Moderado Models')) setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+        },
+      });
+      expect(sawSignIn).toBe(false);
+      expect(sawKeyPrompt).toBe(false);
+      expect(result).toMatchObject({ apiKey: saved.apiKey, baseUrl: saved.baseUrl });
+    } finally {
+      clearTimeout(timeout);
+      await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    }
+  });
+
+  it('asks for the deployment once when no Gateway URL is known, then connects with a key', async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5_000);
+    const previousMode = process.env.MODERADO_ENV;
+    const previousUrl = process.env.MODERADO_BASE_URL;
+    delete process.env.MODERADO_ENV;
+    delete process.env.MODERADO_BASE_URL;
+    const frames: string[] = [];
+    let step = 'mode';
+    try {
+      const result = await loginModeradoInteractive({
+        signal: controller.signal,
+        drawFrame: (lines) => {
+          const frame = stripAnsi(lines.join('\n'));
+          frames.push(frame);
+          if (frame.includes('Moderado Gateway Mode') && step === 'mode') {
+            step = 'signin';
             setImmediate(() => {
               process.stdin.emit('keypress', undefined, { name: 'down' });
               process.stdin.emit('keypress', '\r', { name: 'return' });
             });
-          } else if (frame.includes('Moderado Gateway Base URL') && !confirmedUrl) {
-            confirmedUrl = true;
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Gateway API key') && !confirmedKey) {
-            confirmedKey = true;
-            keyFrame = frame;
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Login · Active:')) {
-            showedMethodMenu = true;
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Models')) {
+          } else if (frame.includes('Moderado Sign-in') && step === 'signin') {
+            step = 'key';
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          } else if (frame.includes('Moderado API key') && step === 'key') {
+            step = 'models';
+            setImmediate(() => {
+              for (const character of 'mrd_dev-key') process.stdin.emit('keypress', character, { name: character });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          } else if (frame.includes('Moderado Models') && step === 'models') {
+            step = 'done';
             setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
           }
         },
       });
-      expect(keyFrame).toContain('*'.repeat(saved.apiKey.length));
-      expect(keyFrame).not.toContain(saved.apiKey);
-      expect(showedMethodMenu).toBe(false);
-      expect(result).toMatchObject({ apiKey: saved.apiKey, baseUrl: 'http://127.0.0.1:4788/v1' });
-    } finally {
-      clearTimeout(timeout);
-    }
-  });
-
-  it('lets the user select Dev Mode for the Gateway and shows both /v1 URLs', async () => {
-    const saved = {
-      id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible' as const,
-      baseUrl: 'https://modr.alfazen.org/v1', apiKey: 'mrd_saved-key', defaultModel: 'auto',
-    };
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1_000);
-    let selectedMode = false;
-    let selectedUrl = false;
-    let confirmedKey = false;
-    let productionModeFrame = '';
-    let developmentModeFrame = '';
-    let urlFrame = '';
-    const previousMode = process.env.MODERADO_ENV;
-    delete process.env.MODERADO_ENV;
-    try {
-      const result = await loginModeradoInteractive({
-        signal: controller.signal,
-        gatewayUrl: saved.baseUrl,
-        savedConnections: { moderado: saved },
-        resolveSavedConnection: async (connection) => connection,
-        drawFrame: (lines) => {
-          const frame = lines.map(stripAnsi).join('\n');
-          if (frame.includes('Moderado Gateway Mode')) {
-            if (!frame.includes('http://127.0.0.1:4788/v1')) productionModeFrame = frame;
-            else developmentModeFrame = frame;
-            if (!selectedMode) {
-              selectedMode = true;
-              setImmediate(() => {
-                process.stdin.emit('keypress', undefined, { name: 'down' });
-                process.stdin.emit('keypress', '\r', { name: 'return' });
-              });
-            }
-          } else if (frame.includes('Moderado Gateway Base URL') && !selectedUrl) {
-            selectedUrl = true;
-            urlFrame = frame;
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Gateway API key') && !confirmedKey) {
-            confirmedKey = true;
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Models')) {
-            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
-          }
-        },
-      });
-      expect(productionModeFrame).toContain('https://modr.alfazen.org/v1');
-      expect(developmentModeFrame).toContain('http://127.0.0.1:4788/v1');
-      expect(urlFrame).toContain('http://127.0.0.1:4788/v1');
+      const visible = frames.join('\n');
+      expect(visible).toContain('https://modr.alfazen.org/v1');
+      expect(visible).toContain('http://127.0.0.1:4788/v1');
+      expect(visible).not.toContain('Base URL');
       expect(result?.baseUrl).toBe('http://127.0.0.1:4788/v1');
+      expect(result?.apiKey).toBe('mrd_dev-key');
     } finally {
       clearTimeout(timeout);
       if (previousMode === undefined) delete process.env.MODERADO_ENV;
       else process.env.MODERADO_ENV = previousMode;
+      if (previousUrl === undefined) delete process.env.MODERADO_BASE_URL;
+      else process.env.MODERADO_BASE_URL = previousUrl;
     }
   });
 
@@ -488,29 +449,29 @@ describe('unified provider connection', () => {
     delete process.env.MODERADO_ENV;
     delete process.env.MODERADO_BASE_URL;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 1_000);
+    const timeout = setTimeout(() => controller.abort(), 5_000);
     const seen = new Set<string>();
     try {
       const result = await connectProviderInteractive({
         signal: controller.signal,
+        gatewayUrl,
         drawFrame: (lines) => {
-          const frame = lines.map(stripAnsi).join('\n');
+          const frame = stripAnsi(lines.join('\n'));
           if (frame.includes('Connect Provider') && !seen.has('provider')) {
             seen.add('provider');
             setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Gateway Mode') && !seen.has('mode')) {
-            seen.add('mode');
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
-          } else if (frame.includes('Moderado Gateway Base URL') && !seen.has('url')) {
-            seen.add('url');
+          } else if (frame.includes('Moderado Sign-in') && !seen.has('signin')) {
+            seen.add('signin');
             setImmediate(() => {
-              process.stdin.emit('keypress', undefined, { ctrl: true, name: 'a' });
-              for (const character of gatewayUrl) process.stdin.emit('keypress', character, { name: character });
+              process.stdin.emit('keypress', undefined, { name: 'down' });
               process.stdin.emit('keypress', '\r', { name: 'return' });
             });
-          } else if (frame.includes('Moderado Gateway API key') && !seen.has('key')) {
+          } else if (frame.includes('Moderado API key') && !seen.has('key')) {
             seen.add('key');
-            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+            setImmediate(() => {
+              for (const character of 'mrd_route-key') process.stdin.emit('keypress', character, { name: character });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
           } else if (frame.includes('Moderado Models') && !seen.has('model')) {
             seen.add('model');
             setImmediate(() => {
@@ -521,7 +482,8 @@ describe('unified provider connection', () => {
         },
       });
       expect(result).toMatchObject({ id: 'moderado', displayName: 'Moderado', defaultModel: 'vendor/route-one' });
-      expect([...seen]).toEqual(['provider', 'mode', 'url', 'key', 'model']);
+      // No deployment picker and no Base URL prompt: the configured Gateway is reused.
+      expect([...seen]).toEqual(['provider', 'signin', 'key', 'model']);
     } finally {
       clearTimeout(timeout);
       if (previousEnvironment === undefined) delete process.env.MODERADO_ENV;

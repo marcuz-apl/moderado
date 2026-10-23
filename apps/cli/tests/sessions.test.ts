@@ -112,13 +112,14 @@ describe('SessionStore', () => {
     const session = createSession('C:/repo');
     session.messages = [
       { role: 'user', content: 'first request nvapi-secret' },
-      { role: 'assistant', content: 'first answer' },
+      { role: 'assistant', content: 'first answer with mrd_gateway-secret' },
       { role: 'user', content: 'second request' },
       { role: 'assistant', content: 'second answer' },
       { role: 'user', content: 'latest request' },
       { role: 'assistant', content: 'latest answer' },
     ];
     expect(exportSessionMarkdown(session)).not.toContain('nvapi-secret');
+    expect(exportSessionMarkdown(session)).not.toContain('mrd_gateway-secret');
     const compacted = compactSessionMessages(session.messages);
     expect(compacted[0]).toMatchObject({ role: 'system' });
     expect(compacted.length).toBeLessThan(session.messages.length);

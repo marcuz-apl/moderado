@@ -8,7 +8,7 @@ import {
   renderCenteredWelcomeScreen,
   renderChatScreen,
   renderChatComposerCursor,
-  renderChatAnswerDelta,
+  renderChatAnswerWindow,
   renderChatThoughtTimeUpdate,
   navigateQuestionHistory,
   renderWelcomePopupLayer,
@@ -30,6 +30,8 @@ import {
   getWelcomeCardWidth,
   getWelcomeIndent,
   getChatAnswerArea,
+  getChatLayout,
+  getChatComposerRows,
   renderChatUsageUpdate,
 } from '../src/ui/welcome.js';
 import { handleMcpCommand } from '../src/commands/chat.js';
@@ -410,6 +412,79 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(composerRows[0].length).toBe(indent + cardWidth);
   });
 
+  it('windows a long answer inside the answer area instead of overwriting the composer', () => {
+    const width = 100;
+    const height = 24;
+    const cardWidth = getWelcomeCardWidth(width);
+    const indent = getWelcomeIndent(cardWidth, width);
+    const question = 'Build a landing page for the new product';
+    const layout = getChatLayout(width, height, question);
+    const answer = Array.from({ length: 80 }, (_, index) => `answer line ${index + 1}`).join('\n');
+    const frame = stripAnsi(renderChatScreen({
+      model: 'z-ai/glm-5.3-flash', tokens: 900, cost: '$0.01', workspace: '/repo',
+      mode: 'Execute', autoApprove: false, chatQuestion: question, chatAnswer: answer,
+      chatThoughtTime: 9, width,
+    }, height));
+    const lines = frame.split('\n');
+
+    // A frame taller than the viewport scrolls and drags the composer with it.
+    expect(lines).toHaveLength(height);
+    const composerRow = lines.findIndex((line) => line.includes('Ask anything'));
+    expect(composerRow).toBeGreaterThan(layout.answerTop);
+    expect(lines[composerRow + 2]).toContain('Plan / [Execute] (Tab)');
+    expect(lines[composerRow + 3]).toContain('Auto-approve off (Shift+Tab)');
+    expect(composerRow + 4).toBe(height - 1);
+
+    // Newest output stays visible, older rows are reported instead of dropped silently.
+    expect(frame).toContain('answer line 80');
+    expect(frame).toContain('earlier lines hidden');
+    expect(frame).not.toContain('answer line 1\n');
+    // Nothing paints past the card columns on the rows that hold the bottom card.
+    for (const line of lines.slice(composerRow)) expect(line.length).toBeLessThanOrEqual(indent + cardWidth);
+  });
+
+  it('keeps a long question from starving the answer area or the composer', () => {
+    const width = 80;
+    const height = 20;
+    const layout = getChatLayout(width, height, 'Q '.repeat(400));
+    const lines = stripAnsi(renderChatScreen({
+      model: 'm', tokens: 0, cost: '$0', workspace: '.', mode: 'Execute', autoApprove: true,
+      chatQuestion: 'Q '.repeat(400), chatAnswer: 'Short answer.', chatThoughtTime: 2, width,
+    }, height)).split('\n');
+
+    expect(lines).toHaveLength(height);
+    expect(layout.answerRows).toBeGreaterThanOrEqual(1);
+    expect(lines.findIndex((line) => line.includes('Ask anything'))).toBeGreaterThan(layout.answerTop);
+    expect(stripAnsi(lines.join('\n'))).toContain('Short answer.');
+  });
+
+  it('keeps a queued-commands box inside the viewport instead of overflowing the frame', () => {
+    const width = 80;
+    const height = 24;
+    const base = {
+      model: 'm', tokens: 0, cost: '$0', workspace: '.', mode: 'Execute' as const, autoApprove: true,
+      chatQuestion: 'Refactor the parser', chatAnswer: 'Done — see the summary.', chatThoughtTime: 2, width,
+    };
+    const options = { ...base, queuedCommands: ['/map', '/review'] };
+    // The taller card is measured, not assumed: five card rows plus the box.
+    const composerRows = getChatComposerRows(options);
+    expect(composerRows).toBeGreaterThan(5);
+    const layout = getChatLayout(width, height, options.chatQuestion, composerRows);
+    const lines = stripAnsi(renderChatScreen(options, height)).split('\n');
+
+    // The frame ends one row above the viewport bottom, so the trailing newline
+    // cannot scroll the card out from under the user.
+    expect(lines).toHaveLength(height);
+    expect(layout.composerTop + composerRows).toBe(height);
+    // The queued box starts exactly where the layout says the composer starts.
+    expect(lines.findIndex((line) => line.includes('Queued Commands'))).toBe(layout.composerTop - 1);
+    // The input, mode, and workspace rows survive at the bottom.
+    expect(lines.join('\n')).toContain('Ask anything');
+    expect(lines.join('\n')).toContain('Plan / [Execute] (Tab)');
+    // And the answer area is not starved by the taller card.
+    expect(layout.answerRows).toBeGreaterThanOrEqual(1);
+  });
+
   it('shows a sub-second response time without reporting a misleading zero seconds', () => {
     const rendered = renderChatScreen({
       model: 'z-ai/glm-5.3-flash',
@@ -458,7 +533,14 @@ describe('OpenCode-style Welcome TUI', () => {
       .toContain('⠹ Working · 14s');
     expect(renderChatThoughtTimeUpdate(14.2, undefined, 100, { glyph: '✔', label: 'Done' }))
       .toContain('✔ Done · 14s');
-    expect(renderChatAnswerDelta('Hi', { row: 15, column: 1 }, 100)).toMatchObject({ row: 15, column: 3 });
+    const answerLayout = getChatLayout(100, 30, 'Who are you?');
+    const answerWindow = renderChatAnswerWindow('Hi', answerLayout);
+    expect(answerWindow.startsWith('\x1b7')).toBe(true);
+    expect(answerWindow.endsWith('\x1b8')).toBe(true);
+    expect(answerWindow).toContain(`\x1b[${answerLayout.answerTop};${getChatAnswerArea(100).startColumn}H`);
+    // Only the rows the layout reserves are repainted: the composer is untouched.
+    expect(answerWindow).not.toContain(`\x1b[${answerLayout.composerTop};`);
+    expect(answerWindow.match(/\x1b\[2K/g)).toHaveLength(answerLayout.answerRows);
   });
 
   it('keeps temporary status rows inside the chat card columns while the turn runs', () => {

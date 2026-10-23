@@ -78,7 +78,11 @@ export function formatSessionCost(usage: StoredSession['usage']): string {
   if (usage.costUsd === 0) return '$0.00';
   return `$${usage.costUsd < 0.01 ? usage.costUsd.toFixed(6) : usage.costUsd.toFixed(4)}`;
 }
-function redact(text: string): string { return text.replace(/(?:nvapi-|sk-)[A-Za-z0-9_-]+/g, '[redacted]'); }
+function redact(text: string): string {
+  return text
+    .replace(/\b(?:nvapi-|sk-|mrd_)[A-Za-z0-9_-]+/g, '[redacted]')
+    .replace(/\bBearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]');
+}
 export function exportSessionMarkdown(session: StoredSession): string {
   const lines = ['# Moderado session', '', 'Updated: ' + session.updatedAt, ''];
   for (const message of session.messages) { if (message.role !== 'tool') lines.push('## ' + message.role, '', redact(message.content ?? ''), ''); }

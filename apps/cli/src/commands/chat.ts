@@ -16,7 +16,9 @@ import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthCon
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, promptInteractiveTurn, renderChatAnswerDelta, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatAnswerArea } from '../ui/welcome.js';
+import { exitCleanly, promptInteractiveTurn, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows } from '../ui/welcome.js';
+import type { WelcomeLayoutOptions } from '../ui/welcome.js';
+import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
 import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
@@ -964,6 +966,43 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   const commandQueue = new TurnCommandQueue();
   const btwHistory: Array<{ question: string; answer: string; timestamp: number }> = [];
 
+  /**
+   * One source of truth for the frame: the answer window, the caret row, and
+   * the composer card are all measured from these options, so a queued-commands
+   * box (or a mention box) that makes the card taller is accounted for
+   * everywhere instead of only where the card is painted.
+   */
+  const chatFrameOptions = (overrides: Partial<WelcomeLayoutOptions> = {}): WelcomeLayoutOptions => ({
+    provider: getProviderStatusName(activeConnection),
+    model: currentModel ?? 'No model connected — use /connect',
+    tokens: Math.round(sessionTokens),
+    cost: costLabel(),
+    usageAvailable: activeSession.usage.available,
+    usageEstimated: activeSession.usage.estimated,
+    workspace: canonicalWorkspace,
+    mode: activeMode,
+    autoApprove: activeAutoApprove,
+    chatQuestion: lastQuestion,
+    chatAnswer: lastAnswer,
+    chatThoughtTime: lastThoughtTime,
+    input: commandQueue.currentDraft,
+    queuedCommands: commandQueue.items,
+    ...overrides,
+  });
+
+  /** Row geometry for a frame, with the real composer height (queued box included). */
+  const layoutFor = (options: WelcomeLayoutOptions) =>
+    getChatLayout(process.stdout.columns, process.stdout.rows, options.chatQuestion ?? '', getChatComposerRows(options));
+
+  /** Repaint a settled frame and park the caret on the composer's input row. */
+  const paintStaticChatFrame = (overrides: Partial<WelcomeLayoutOptions> = {}): void => {
+    const options = chatFrameOptions(overrides);
+    const layout = layoutFor(options);
+    process.stdout.write('\x1b[H\x1b[J');
+    process.stdout.write(renderFullWelcomeScreen(options, process.stdout.rows));
+    process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, (options.input ?? '').length, layout.composerTop));
+  };
+
   while (!signal?.aborted) {
     let trimmed = '';
 
@@ -1269,14 +1308,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = budget.message;
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
     if (trimmed === '/map') {
@@ -1284,14 +1316,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = await buildWorkspaceMap(canonicalWorkspace);
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
     if (trimmed.startsWith('/queue')) {
@@ -1315,15 +1340,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           lastAnswer = 'Usage: `/queue <command>` or `/queue list` or `/queue clear`.';
         }
       }
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime,
-        queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
     if (trimmed === '/clear') {
@@ -1348,15 +1365,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = slashAdvice.advice!;
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime,
-        queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
 
@@ -1381,9 +1390,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastQuestion = trimmed;
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({ provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode, autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer, chatThoughtTime: lastThoughtTime, queuedCommands: commandQueue.items }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
 
@@ -1396,15 +1403,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = 'Available slash commands:\n' + getHelpCommandLines().map((line) => line.includes(' - ') ? line : `\n${line}`).join('\n');
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime,
-        queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
     const expandedTurn = await expandMentions(trimmed, createWorkspaceFileSource(canonicalWorkspace));
@@ -1428,15 +1427,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: localMetaAnswer }];
       activeSession.messages = conversationHistory;
       sessionStore.save(activeSession);
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime,
-        queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
 
@@ -1448,15 +1439,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       conversationHistory = [...conversationHistory, { role: 'user', content: trimmed }, { role: 'assistant', content: lastAnswer }];
       activeSession.messages = conversationHistory;
       sessionStore.save(activeSession);
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime,
-        queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame();
       continue;
     }
 
@@ -1473,13 +1456,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = 'Searching the web...';
       lastThoughtTime = 0;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-        autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame({ model: currentModel ?? 'Web search' });
 
       const searchResult = await liveSearchTool.execute(
         { query: trimmed, maxResults: 5 },
@@ -1498,14 +1475,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         activeSession.modelId = currentModel;
         activeSession.mode = activeMode;
         sessionStore.save(activeSession);
-        process.stdout.write('\x1b[H\x1b[J');
-        process.stdout.write(renderFullWelcomeScreen({
-          provider: getProviderStatusName(activeConnection), model: currentModel ?? 'Web search', tokens: Math.round(sessionTokens), cost: costLabel(),
-          usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, workspace: canonicalWorkspace, mode: activeMode,
-          autoApprove: activeAutoApprove, chatQuestion: lastQuestion, chatAnswer: lastAnswer,
-          chatThoughtTime: lastThoughtTime,
-        }, process.stdout.rows));
-        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+        paintStaticChatFrame({ model: currentModel ?? 'Web search' });
         continue;
       }
     }
@@ -1550,6 +1520,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       usageRecorded = true;
     };
     let streamedAnswer = '';
+    const recorder = new TurnRecorder(canonicalWorkspace);
     try {
       const requestAbort = new AbortController();
       const requestSignal = signal ? AbortSignal.any([signal, requestAbort.signal]) : requestAbort.signal;
@@ -1574,7 +1545,21 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       let budgetStopped = false;
       let lastUsagePaint = 0;
       const usedModels = new Set<string>();
-      let answerPosition = { row: 15, column: getChatAnswerArea(process.stdout.columns).startColumn };
+      // Row geometry for this turn: fixed between the status row and the
+      // composer, so streamed output is windowed instead of overwriting the
+      // input card and its mode/workspace rows. The composer height is measured
+      // from the live card, so a queued-commands box cannot hide the tail of the
+      // answer or push the frame past the bottom of the viewport.
+      const turnLayout = () => layoutFor(chatFrameOptions({ chatQuestion: trimmed }));
+      let layout = turnLayout();
+      let lastAnswerPaint = 0;
+      const paintAnswer = (force = false): void => {
+        const now = Date.now();
+        if (!force && now - lastAnswerPaint < 40) return;
+        lastAnswerPaint = now;
+        if (!streamedAnswer) return;
+        process.stdout.write(renderChatAnswerWindow(streamedAnswer, layout));
+      };
       let lastErrorEvent: { code?: string; message: string } | undefined;
       // Keep a live spinner on the status row for the whole turn: streaming
       // text and silent tool execution both leave the screen looking settled.
@@ -1582,7 +1567,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
       };
       const paintActivity = (glyph: string, label: string): void => {
-        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns, { glyph, label }));
+        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns, { glyph, label }, layout.statusRow));
       };
       const startActivity = (): void => {
         stopActivity();
@@ -1595,15 +1580,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       const redrawChatFrame = (): void => {
         const thoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
         const displayAnswer = streamedAnswer || lastAnswer;
-        process.stdout.write('\x1b[H\x1b[J');
-        process.stdout.write(renderFullWelcomeScreen({
-          provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect',
+        const options = chatFrameOptions({
           tokens: Math.round(sessionTokens + (usageRecorded ? 0 : turnUsage?.usage.totalTokens ?? 0)),
-          cost: costLabel(),
-          usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
-          workspace: canonicalWorkspace,
-          mode: activeMode,
-          autoApprove: activeAutoApprove,
           chatQuestion: trimmed,
           chatAnswer: displayAnswer,
           chatThoughtTime: thoughtTime,
@@ -1611,14 +1589,11 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           outputTokenRate,
           tokenUsage: turnUsage,
           budgetStatus: budgetStopped ? 'Budget reached' : budgetWarningIssued ? 'Budget ≥80%' : undefined,
-          input: commandQueue.currentDraft,
-          queuedCommands: commandQueue.items,
-        }, process.stdout.rows));
-        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));
-        if (displayAnswer) {
-          const area = getChatAnswerArea(process.stdout.columns);
-          answerPosition = renderChatAnswerDelta(displayAnswer, { row: 15, column: area.startColumn }, area.wrapWidth, area.startColumn);
-        }
+        });
+        layout = layoutFor(options);
+        process.stdout.write('\x1b[H\x1b[J');
+        process.stdout.write(renderFullWelcomeScreen(options, process.stdout.rows));
+        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length, layout.composerTop));
         // The frame paints a static status; keep the live row authoritative while the turn runs.
         if (thinkingTimer) paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
       };
@@ -1750,6 +1725,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         skillContext: skillContext(effectivePrompt), skills,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
+          recorder.record(event);
           if (event.type === 'model_change') usedModels.add(event.newModelId);
           if (event.type === 'progress') {
             taskStep = { step: event.step, maxSteps: event.maxSteps ?? 0 };
@@ -1786,11 +1762,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           if (event.type === 'assistant_delta') {
             streamedAnswer += event.delta;
             if (Date.now() - lastSessionCheckpointAt >= 1_000) checkpointInterruptedTurn();
-            const area = getChatAnswerArea(process.stdout.columns);
-            const renderedDelta = renderChatAnswerDelta(event.delta, answerPosition, area.wrapWidth, area.startColumn);
-            answerPosition = renderedDelta;
-            process.stdout.write(renderedDelta.sequence);
-            process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length));
+            paintAnswer();
           }
           if (event.type === 'error') {
             lastErrorEvent = { code: event.code, message: event.message };
@@ -1818,7 +1790,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           ? '\nModerado rejected this browser login. Sign in again to retry once.\n'
           : `\nThe saved ${connection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
         const replacement = moderadoOAuth || moderadoWithoutKey
-          ? await loginModeradoInteractive({ signal, gatewayUrl: connection.baseUrl })
+          ? await loginModeradoInteractive({ signal, gatewayUrl: connection.baseUrl, forceReauthenticate: true })
           : await replaceProviderKeyInteractive(connection, { signal });
         if (!replacement) return undefined;
         recordTurnUsage();
@@ -1930,6 +1902,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         sessionStore.save(activeSession);
       }
       if (activeMode === 'Plan') activePlan = lastAnswer;
+      // Coding turns end with a deterministic report (what changed, what was
+      // verified, what is outstanding, how to run the app) built from the
+      // event stream rather than from model prose. It is appended after the
+      // plan is captured so a plan never contains its own summary.
+      if (recorder.hasWork()) {
+        lastAnswer = [lastAnswer, formatTurnSummary(recorder.build(result.status, result.totalSteps), 'chat')]
+          .filter((part) => part && part.trim().length > 0)
+          .join('\n\n');
+      }
       lastTurnDone = result.status === 'completed' && !budgetStopped && !resolution.isError;
       lastQuestion = trimmed;
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
@@ -1960,24 +1941,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         .replace(/^(?:NVIDIA NIM|OpenAI|OpenRouter|[a-zA-Z0-9_-]+)\s*(?:request failed|rate limit exceeded|service or model unavailable)?\s*(?:\([^)]*\))?\s*(?:during\s*streamChat)?:\s*/i, '')
         .trim();
       lastAnswer = `⚠️ **Error:** ${cleanErr || rawErr}\n\n👉 **Suggestion:** Switch models with \`/model\` or choose a provider with \`/connect\`${altSuggestion}.`;
+      if (recorder.hasWork()) {
+        lastAnswer = `${lastAnswer}\n\n${formatTurnSummary(recorder.build('failed', 0), 'chat')}`;
+      }
       lastThoughtTime = Math.max(0.001, (Date.now() - startedAt) / 1000);
       lastOutputTokenRate = undefined;
-      process.stdout.write('\x1b[H\x1b[J');
-      process.stdout.write(renderFullWelcomeScreen({
-        provider: getProviderStatusName(activeConnection), model: currentModel ?? 'No model connected — use /connect',
-        tokens: Math.round(sessionTokens),
-        cost: costLabel(),
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated,
-        workspace: canonicalWorkspace,
-        mode: activeMode,
-        autoApprove: activeAutoApprove,
-        chatQuestion: lastQuestion,
-        chatAnswer: lastAnswer,
-        chatThoughtTime: lastThoughtTime,
-        tokenUsage: turnUsage,
-        queuedCommands: commandQueue.items,
-      }, process.stdout.rows));
-      process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, 0));
+      paintStaticChatFrame({ tokenUsage: turnUsage });
     }
   }
   return 0;

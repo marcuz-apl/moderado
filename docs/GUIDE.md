@@ -99,6 +99,34 @@ Ask Moderado to run diagnostics, typecheck, lint, or tests in a TypeScript or Ja
 
 Install `typescript-language-server` yourself, then set `typescriptLanguageServer` in `~/.moderado/config.json` to its executable path. Moderado can then use read-only definition and reference lookup for TypeScript/JavaScript files. When the executable is unavailable, it reports how to configure it and leaves normal tools available.
 
+### Turn summary
+
+Every turn that changed files or ran commands ends with a report built from
+the agent's own event stream, not from model prose:
+
+- **Done** lists the files the turn added and updated, plus the commands it ran.
+- **Checked** lists the verification commands (test, typecheck, lint, build) and their result.
+- **Left over** lists denied actions, failed commands, and edits that no verification command followed.
+- **Run it** appears when the change belongs to a web app: the exact start command and the URL to open. Moderado does not hold a server in the foreground, so it prints the command instead of leaving a dev server attached to your terminal. When the agent already started one, the live URL is reported.
+
+The same report is printed by `moderado run` and shown in the chat answer, so
+a finished coding task always states what changed and what is still open.
+
+### Chat answer area
+
+The chat window reserves a fixed answer area between the status row and the
+composer. A long answer scrolls inside that area — the newest lines stay
+visible, older lines are replaced by a `… +N earlier lines hidden` marker — so
+a large model output never paints over the input card, the mode row, or the
+workspace row. The full text is always available through `/session export`.
+
+The composer is measured before the frame is laid out, so anything that makes
+the card taller — a queued-commands box from `/queue`, an `@` mention list, the
+slash-command suggestions — takes its rows from the answer area instead of
+pushing the card off the bottom of the terminal. The frame always ends one row
+above the viewport bottom, which is what keeps the input, mode, and workspace
+rows stable while a turn streams.
+
 ### Provider presets and custom providers
 
 `/connect` offers built-in provider presets. Omit `connectProviders` in
@@ -123,6 +151,21 @@ credits. Custom providers are validated: `id` must be unique and must not
 collide with a built-in preset, and `baseUrl` must be HTTPS (or loopback) with
 no embedded credentials. Invalid entries are dropped rather than failing the
 whole config.
+
+### Connecting to Moderado
+
+`/connect` → **Moderado** asks only what it cannot already know:
+
+1. **Deployment** — only when no Gateway URL is configured. `MODERADO_BASE_URL`
+   (or a saved connection) is reused as-is, so the Prod/Dev choice appears once.
+2. **Credential** — a saved `mrd_…` key is reused silently. Otherwise choose
+   **Sign in with browser** (loopback OAuth, returns automatically) or
+   **Paste an API key** for headless machines.
+3. **Model** — the live Gateway catalog.
+
+The base URL is never typed by hand: it comes from the environment, the saved
+connection, or the one-time deployment choice. Set `MODERADO_ENV=development`
+to target the local Gateway without any prompt.
 
 ### Coding skills
 

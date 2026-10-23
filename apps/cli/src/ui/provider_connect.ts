@@ -26,6 +26,8 @@ export interface PopupConnectionOptions {
   resolveSavedConnection?: (connection: ProviderConnection) => Promise<ProviderConnection>;
   connectProviders?: ConnectProvidersConfig;
   gatewayUrl?: string;
+  /** The stored credential was rejected, so it must not be offered again. */
+  forceReauthenticate?: boolean;
 }
 
 export type ProviderPresetValue = ConnectProviderPresetId | `custom:${string}`;
@@ -322,45 +324,104 @@ async function chooseModeradoModel(connection: ProviderConnection, options: Popu
   return modelId ? { ...connection, defaultModel: modelId } : connection;
 }
 
-export async function loginModeradoInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+/**
+ * The Gateway URL is a property of the deployment, not a question for the user:
+ * reuse the environment override, the configured Gateway, the saved profile, or
+ * the active connection before asking for a Prod/Dev choice at all.
+ */
+function knownModeradoGatewayUrl(options: PopupConnectionOptions): string | undefined {
+  const active = options.activeConnection;
+  const activeUrl = active && (active.id === 'moderado' || active.id === 'moderado-cloud') ? active.baseUrl : undefined;
+  const candidates = [
+    process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL,
+    options.gatewayUrl,
+    options.savedConnections?.moderado?.baseUrl,
+    options.savedConnections?.['moderado-cloud']?.baseUrl,
+    activeUrl,
+  ];
+  return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim();
+}
+
+async function resolveModeradoGatewayUrl(options: PopupConnectionOptions): Promise<string | undefined> {
+  const known = knownModeradoGatewayUrl(options);
+  if (known) {
+    try {
+      return validateProviderBaseUrl(known);
+    } catch {
+      // A malformed saved URL must not trap the user: fall through to the picker.
+    }
+  }
   const modes = [
     { label: 'Prod Mode', value: 'production', description: 'https://modr.alfazen.org/v1' },
     { label: 'Dev Mode', value: 'development', description: 'http://127.0.0.1:4788/v1' },
   ];
   if ((process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV) === 'development') modes.reverse();
-  const defaultMode = 0;
   const selectedMode = options.drawFrame
     ? await selectListPopup('Moderado Gateway Mode', modes, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
-    : (await askSelect('Moderado Gateway Mode', modes, defaultMode, { signal: options.signal })).value;
+    : (await askSelect('Moderado Gateway Mode', modes, 0, { signal: options.signal })).value;
   if (!selectedMode || options.signal?.aborted) return undefined;
-  const baseUrl = resolveModeradoBaseUrl(selectedMode, process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL);
-  const enteredBaseUrl = await askProviderBaseUrl('Moderado Gateway Base URL', baseUrl, options);
-  if (!enteredBaseUrl) return undefined;
-  let savedConnection: ProviderConnection | undefined;
+  return resolveModeradoBaseUrl(selectedMode, undefined);
+}
+
+async function resolveSavedModeradoConnection(options: PopupConnectionOptions): Promise<ProviderConnection | undefined> {
+  if (options.forceReauthenticate) return undefined;
   const saved = options.savedConnections?.moderado ?? options.savedConnections?.['moderado-cloud'];
-  if (saved) {
-    try {
-      const resolved = options.resolveSavedConnection ? await options.resolveSavedConnection(saved) : saved;
-      if (resolved.apiKey?.trim()) savedConnection = resolved;
-    } catch {
-      // Keep direct key entry available when credential storage cannot be read.
-    }
+  if (!saved) return undefined;
+  try {
+    const resolved = options.resolveSavedConnection ? await options.resolveSavedConnection(saved) : saved;
+    return resolved.apiKey?.trim() ? resolved : undefined;
+  } catch {
+    // Keep sign-in available when credential storage cannot be read.
+    return undefined;
   }
-  let prompt = 'Moderado Gateway API key (mrd_…, optional for paid routes)';
-  let initialKey = savedConnection?.apiKey ?? '';
+}
+
+async function askModeradoApiKey(baseUrl: string, options: PopupConnectionOptions): Promise<ProviderConnection | undefined> {
+  let prompt = 'Moderado API key (mrd_…, optional for paid routes)';
   while (!options.signal?.aborted) {
-    const apiKey = await askPopupText(prompt, options, true, initialKey);
+    const apiKey = await askPopupText(prompt, options, true);
     if (apiKey === undefined) return undefined;
     try {
-      const credentialExpiresAt = apiKey === savedConnection?.apiKey ? savedConnection.credentialExpiresAt : undefined;
-      const connection = buildModeradoConnection(apiKey || undefined, credentialExpiresAt, enteredBaseUrl);
-      return chooseModeradoModel(connection, options);
+      return chooseModeradoModel(buildModeradoConnection(apiKey || undefined, undefined, baseUrl), options);
     } catch (error) {
       prompt = `Invalid key: ${error instanceof Error ? error.message : String(error)} Try again`;
-      initialKey = '';
     }
   }
   return undefined;
+}
+
+/**
+ * Connect to the Moderado Gateway. The flow asks only what it cannot know:
+ * the deployment (once, when nothing is configured), the credential (reused
+ * when saved, otherwise browser sign-in with a manual key as the fallback),
+ * and the model. The base URL is never typed by hand.
+ */
+export async function loginModeradoInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
+  if (options.signal?.aborted) return undefined;
+  const baseUrl = await resolveModeradoGatewayUrl(options);
+  if (!baseUrl || options.signal?.aborted) return undefined;
+
+  const saved = await resolveSavedModeradoConnection(options);
+  if (saved?.apiKey) {
+    return chooseModeradoModel(buildModeradoConnection(saved.apiKey, saved.credentialExpiresAt, baseUrl), options);
+  }
+
+  // No reusable credential: sign in once instead of interrogating for a key.
+  const method = options.drawFrame
+    ? await selectListPopup('Moderado Sign-in', [
+        { label: 'Sign in with browser', value: 'browser', description: 'Opens mod.alfazen.org and returns here automatically' },
+        { label: 'Paste an API key', value: 'key', description: 'Use an mrd_… key from your Moderado account' },
+      ], { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
+    : 'key';
+  if (!method) return undefined;
+
+  if (method === 'browser') {
+    const auth = await authorizeModeradoInBrowser(options.signal, { drawFrame: options.drawFrame });
+    if (auth) return chooseModeradoModel(buildModeradoConnection(auth.accessToken, auth.expiresAt, baseUrl), options);
+    if (options.signal?.aborted) return undefined;
+    // Cancelled or unavailable browser flow: keep the manual key as a fallback.
+  }
+  return askModeradoApiKey(baseUrl, options);
 }
 
 /** @deprecated Use loginModeradoInteractive. */

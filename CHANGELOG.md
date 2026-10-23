@@ -10,9 +10,23 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                     └─► v0.4.32 (Short `modr` command alias)
                           └─► v0.4.33 (Approval boundary and width fixes)
                                 └─► v0.4.34 (No frozen CLI — Ctrl+C always escapes)
+                                      └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23
+**Fix: end-of-turn report, contained answer area, and a Moderado connect flow that stops interrogating**
+
+- **Type**: `fix` / `patch-level`
+- **Scope**: `apps/cli` chat layout, turn reporting, Moderado login, session redaction, docs
+- **Key Deliverables**:
+  - **Turn summary**: A turn that changed files or ran commands now ends with a report built from the event stream: what was added/updated/run, what verification passed, what is left over (denials, failures, unverified edits, step-limit), and — for a web app — the exact start command and URL. Shown in chat and by `moderado run`. `apps/cli/src/turn_summary.ts`.
+  - **Contained answer area**: The chat frame now derives one fixed geometry (`getChatLayout`) shared by the frame, the streamed-answer painter, and the status rows. Long output is windowed to the rows between the status row and the composer, with a `+N earlier lines hidden` marker, so it can no longer overwrite the input card, mode row, or workspace row, and the frame never exceeds the viewport. The old streamed writer (absolute rows, character-counted wrapping, 2-row offset from the settled frame) is replaced by `renderChatAnswerWindow`.
+  - **Composer-aware geometry**: The composer is measured before the layout (`getChatComposerRows`), so a queued-commands box or mention box that grows the card takes its rows from the answer area instead of pushing the frame past the viewport. Every settled frame goes through one `paintStaticChatFrame` helper in `chat.ts` (previously ~10 copies of the same options object, each positioning the caret with a relative `4A` that was wrong for a taller card), and `promptInteractiveTurn` anchors the caret on the composer's real input row in chat mode. `renderChatScreen` also clamps the frame as a hard guarantee, so no content can ever reach the bottom row.
+  - **Moderado connect**: `/connect` → Moderado no longer asks for a provider name, base URL, or API key it can derive. The Gateway URL comes from `MODERADO_BASE_URL`, the configured Gateway, the saved profile, or a one-time Prod/Dev choice; a saved `mrd_…` key is reused silently; otherwise the user picks browser sign-in (the existing loopback OAuth flow, previously never called) or a pasted key. A rejected credential is not offered again (`forceReauthenticate`).
+  - **Secret redaction**: Session exports and diagnostic logs now redact `mrd_…` Gateway keys and `Bearer` tokens, not just NVIDIA/OpenAI keys.
+  - **Docs**: `docs/GUIDE.md` documents the turn summary, the bounded answer area, and the new connect flow.
 
 ### [v0.4.34] — 2026-10-21
 **Fix: no frozen CLI — Ctrl+C always has a way out**

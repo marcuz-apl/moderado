@@ -1,8 +1,68 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-21 (v0.4.33 release preparation)
+Updated: 2026-10-23 (post-v0.4.34 fixes — turn summary, bounded answer area, one-step Moderado connect)
 Branch: master (tracking origin/master)
-Status: v0.4.33 is prepared — code fixes, docs, and package metadata are aligned; tag and publication remain intentionally pending.
+Status: v0.4.34 plus the Unreleased fixes are in the working tree; the last
+`getChatLayout` tweak was not re-verified with a build/test run (see below).
+
+## Session 2026-10-23 — three reported glitches fixed
+
+### Summary
+
+Three user-reported defects, fixed against the code rather than `HANDOFF.md`:
+
+1. **No end-of-turn report** — a finished coding task ended silently.
+2. **Runaway output damaged the layout** — long answers painted over the input
+   card and pushed the bottom rows off screen.
+3. **`/connect` → Moderado interrogated the user** — it asked for a provider,
+   base URL, and API key it already had.
+
+### Completed
+
+- **Turn summary (`apps/cli/src/turn_summary.ts`, new)**: `TurnRecorder` turns
+  the agent event stream into a deterministic report — files created/modified,
+  commands run with exit codes, checks that passed, denials, failures, and a
+  "no verification followed these edits" note. `detectWebApp` walks the changed
+  paths for a framework (`next`, `nuxt`, `remix`, `astro`, `vite`, `sveltekit`,
+  CRA, parcel, angular, or a bare `index.html`) and reports the start command
+  and URL. Moderado never holds a dev server in the foreground, so the report
+  prints the command; when `run_command` already started one, its `serverUrl` is
+  reused. Rendered in `commands/chat.ts` (markdown, inside the answer area) and
+  `commands/run.ts` (ANSI bullets).
+- **Bounded answer area (`ui/welcome.ts`, `commands/chat.ts`)**: one geometry
+  (`getChatLayout`) now drives the settled frame, the streamed painter
+  (`renderChatAnswerWindow`), the status row, and the caret. `getChatComposerRows`
+  measures the real composer — queued-commands box, mention box, suggestions box
+  — before the layout, so a taller card takes rows from the answer area instead
+  of pushing the frame past the viewport; `renderChatScreen` pads/truncates to
+  `composerTop - 1` as a final guarantee. Long answers window to the newest
+  lines with a `… +N earlier lines hidden` marker. `renderChatAnswerDelta` and
+  `ChatAnswerPosition` are gone. `chat.ts` lost ~10 duplicated
+  `renderFullWelcomeScreen({...})` blocks in favour of `chatFrameOptions` /
+  `layoutFor` / `paintStaticChatFrame`, and `promptInteractiveTurn` anchors the
+  caret on the composer's real input row.
+- **One-step Moderado connect (`ui/provider_connect.ts`)**: the Gateway URL is
+  derived (`MODERADO_BASE_URL` → option → saved profile → active connection →
+  one-time Prod/Dev choice), a saved `mrd_…` key is reused silently, and the
+  loopback browser OAuth that already existed is finally offered. No provider
+  name, base URL, or mode prompt; a rejected credential is not offered twice
+  (`forceReauthenticate`).
+- **Secret redaction (`sessions.ts`, `diagnostic_log.ts`)**: `mrd_…` keys and
+  `Bearer …` tokens are redacted in session exports and diagnostic logs.
+- **Docs**: `docs/GUIDE.md` documents the turn summary, the composer-aware answer
+  area, and the new connect flow; `CHANGELOG.md` carries the Unreleased entry.
+
+### Verification
+
+`npm run build` (tsc -b --force) and the full Vitest suite were green after the
+first two fixes. The shell sandbox then failed session-wide
+(`sandbox-exec: data object length 66215 exceeds maximum (65535)`), so the final
+`getChatLayout` floor change and the new queued-commands test were reviewed
+statically only. **Re-run `npm run build && npm test` before tagging.**
+
+### Next action
+
+Run the build and full suite, then tag the next patch (`cut -d+ -f1 VERSION`).
 
 ## Session 2026-10-21 — v0.4.33 release preparation
 

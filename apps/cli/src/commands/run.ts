@@ -13,6 +13,7 @@ import { selectModelInteractive } from '../ui/model_selector.js';
 import { discoverSkills, formatSkillContext, getEnabledSkillNames, selectEnabledSkills } from '../skills.js';
 import { resolveVersion } from '../index.js';
 import { decideApproval } from './chat.js';
+import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
 
 /**
  * `moderado run` is non-interactive by default, so a mutation may only proceed
@@ -130,6 +131,7 @@ export async function handleRunCommand(
   });
   const router = new Router();
   const loop = new AgentLoop();
+  const recorder = new TurnRecorder(canonicalWorkspace);
   const skills = selectEnabledSkills(discoverSkills(), getEnabledSkillNames());
 
   process.stdout.write(`\x1b[1mModerado ${resolveVersion()}\x1b[0m | Workspace: \x1b[36m${canonicalWorkspace}\x1b[0m\n`);
@@ -152,9 +154,18 @@ export async function handleRunCommand(
         allowUnknown,
         isLocalProfile: args.profile.includes('local'),
       },
-      eventListener: (event) => renderer.handleEvent(event),
+      eventListener: (event) => {
+        recorder.record(event);
+        renderer.handleEvent(event);
+      },
       signal,
     });
+
+    // Report what the turn actually did. Built from the event stream, so it
+    // cannot claim work the agent never performed.
+    if (recorder.hasWork()) {
+      process.stdout.write(`\n${formatTurnSummary(recorder.build(result.status, result.totalSteps), 'terminal')}\n`);
+    }
 
     if (result.status === 'completed') {
       return 0;

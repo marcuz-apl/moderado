@@ -6,6 +6,7 @@ function redact(value: string): string {
   return value
     .replace(/\bnvapi-[A-Za-z0-9_-]+/g, '[redacted NVIDIA key]')
     .replace(/\bsk-[A-Za-z0-9_-]+/g, '[redacted API key]')
+    .replace(/\bmrd_[A-Za-z0-9_-]+/g, '[redacted Moderado key]')
     .replace(/\bBearer\s+[A-Za-z0-9._-]+/gi, 'Bearer [redacted]');
 }
 
