@@ -188,5 +188,9 @@ export async function handleRunCommand(
     writeDiagnosticLog('run.turn', err);
     process.stderr.write(`\n\x1b[1;31mExecution Fatal Error:\x1b[0m ${err.message}\n`);
     return 1;
+  } finally {
+    // The renderer keeps a one-second timer for the live status row; it is
+    // unref'd, but a bounded run should not leave it behind either.
+    renderer.dispose();
   }
 }

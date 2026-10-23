@@ -10,15 +10,29 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                     └─► v0.4.32 (Short `modr` command alias)
                           └─► v0.4.33 (Approval boundary and width fixes)
                                 └─► v0.4.34 (No frozen CLI — Ctrl+C always escapes)
-                                      └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect,
-                                                      jail canonicalization, chat/UI module split,
-                                                      live reasoning in the status row,
-                                                      multi-row activity log, summary panel,
-                                                      answer scrollback, /transcript,
-                                                      contained approval dialog)
+                                       └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect,
+                                                       jail canonicalization, chat/UI module split,
+                                                       live reasoning in the status row,
+                                                       multi-row activity log, summary panel,
+                                                       answer scrollback, /transcript,
+                                                       contained approval dialog,
+                                                       multi-line run log)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23 (the run log is multi-line and scrollable)
+**Feature: `moderado run` prints a readable log instead of one clipped row per event**
+
+- **Type**: `feat` / `patch-level`
+- **Scope**: `apps/cli` `TerminalRenderer`, `run` command
+- **Key Deliverables**:
+  - **The log used to erase itself.** `paintTaskStatus` repainted one row with `\r\x1b[K` and `clearTransientProgress` wiped it, so a phase was gone the instant the next one began — the reader lost the sentence they were halfway through, and there was nothing above it to scroll back to. The live row is now *committed*: when the engine reports a new phase the old row is settled in place (`✔ Thinking · 12s`) and a newline pushes it into the scrollback. Exactly one row is ever rewritten, and it is always the last row on screen, so nothing above it can be damaged.
+  - **Tool output was one clipped line.** `lines[0].slice(0, 75)` hid an entire payload behind `… (+37 lines)`, and the first line of a payload is rarely the interesting one. Output is now wrapped to the terminal width and given up to five rows, continuation rows aligned under the text, followed by a footer naming exactly how much was left out. An empty result prints `(no output)` instead of a bare glyph.
+  - **The clock used to freeze.** A single inference can run for minutes with no event of any kind, and a row stuck at `· 0s` reads as a hang. A one-second, unref'd timer now ticks the live row's elapsed time while a phase is open and stops the moment it is committed; `run.ts` releases it in a `finally`.
+  - **Two phases that share a label are still two rows.** The commit is keyed on the raw engine status, not the short display label, so `Inferring…` and `Inferring next action…` both appear rather than collapsing into one spinner.
+  - **Reasoning stays hidden** (existing contract), and every committed row ends with a newline, so the terminal's own scrollback — mouse wheel, slider, PgUp — reaches the whole turn.
+  - **Coverage**: `renderer.test.ts` (+4: five wrapped rows plus footer, commit-on-phase-change, every entry newline-terminated, empty output), full suite **71 files / 701 tests** green.
 
 ### [Unreleased] — 2026-10-23 (approval dialog contained, auto-approve honoured)
 **Fix: the permission dialog no longer overflows, and the toggle actually covers `run_command`**

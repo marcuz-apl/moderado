@@ -255,3 +255,72 @@ it('updates the transient reasoning line without revealing reasoning', () => {
   expect(captured).not.toContain('hidden reasoning');
   expect(captured).not.toContain('\x1b[1B');
 });
+
+describe('the run log is multi-line and scrollable', () => {
+  const longOutput = Array.from({ length: 12 }, (_, index) => `line ${index}: ${'x'.repeat(60)}`).join('\n');
+
+  const capture = (columns = 80) => {
+    let captured = '';
+    const stdout = new Writable({ write(chunk, _encoding, callback) { captured += chunk.toString('utf8'); callback(); } });
+    Object.assign(stdout, { isTTY: true, columns });
+    const renderer = new TerminalRenderer({ stdout });
+    return { renderer, read: () => captured };
+  };
+
+  it('shows five wrapped rows of a tool result instead of one clipped line', () => {
+    const { renderer, read } = capture();
+    renderer.handleEvent({
+      type: 'tool_result',
+      toolCallId: 'call_1',
+      result: { toolName: 'read_file', status: 'success', output: longOutput },
+      timestamp: 0,
+    });
+
+    const body = read();
+    // The old behaviour was `lines[0].slice(0, 75)` plus "… (+11 lines)".
+    expect(body).not.toContain('(+11 lines)');
+    // Wrapped, not clipped: the first row keeps its full sentence.
+    expect(body).toContain('line 0: ' + 'x'.repeat(60));
+    expect(body).toContain('line 1: ' + 'x'.repeat(60));
+    // Five body rows, then a footer that names what was left out.
+    expect(body).toContain('… +7 more lines');
+    const shown = body.split('\n').filter((line) => /line \d+:/.test(line));
+    expect(shown.length).toBe(5);
+  });
+
+  it('commits a phase instead of erasing it when the next one starts', () => {
+    const { renderer, read } = capture();
+    renderer.handleEvent({ type: 'progress', step: 1, maxSteps: 5, status: 'Inferring...', timestamp: 0 });
+    renderer.handleEvent({ type: 'progress', step: 2, maxSteps: 5, status: 'Inferring next action...', timestamp: 0 });
+
+    const body = read();
+    // Phase one is settled and pushed into the scrollback rather than erased.
+    expect(body).toContain('✔ Thinking · <1s');
+    // Two phases produced two live rows: the log grows, it is not overwritten.
+    expect(body.split('⠋ Thinking').length - 1).toBe(2);
+    // The newest live row is still open at the bottom of the screen.
+    expect(body.endsWith('\n')).toBe(false);
+  });
+
+  it('leaves every entry in the scrollback with a trailing newline', () => {
+    const { renderer, read } = capture();
+    renderer.handleEvent({ type: 'progress', step: 1, maxSteps: 5, status: 'Inferring...', timestamp: 0 });
+    renderer.handleEvent({ type: 'tool_call_initiated', toolCallId: 'c', toolName: 'list_files', parameters: {}, timestamp: 0 });
+    renderer.handleEvent({ type: 'tool_result', toolCallId: 'c', result: { toolName: 'list_files', status: 'success', output: 'a\nb' }, timestamp: 0 });
+    renderer.handleEvent({ type: 'completion', status: 'completed', totalSteps: 1, timestamp: 0 });
+
+    const body = read();
+    // Every committed row ends a line, so the terminal's own scrollback (wheel,
+    // slider, PgUp) can reach all of it.
+    for (const marker of ['✔ Thinking', 'list_files', '✔ Done (1 step)', 'Session Finished']) {
+      expect(body, marker).toContain(marker);
+    }
+    expect(body.endsWith('\n')).toBe(true);
+  });
+
+  it('reports no output without printing a bare status glyph', () => {
+    const { renderer, read } = capture();
+    renderer.handleEvent({ type: 'tool_result', toolCallId: 'c', result: { toolName: 'list_files', status: 'success', output: '   ' }, timestamp: 0 });
+    expect(read()).toContain('(no output)');
+  });
+});
