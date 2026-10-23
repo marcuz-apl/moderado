@@ -16,11 +16,13 @@ import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthCon
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity, describeToolActivity } from '../ui/welcome.js';
+import { exitCleanly, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity, describeToolActivity, describeWait, renderChatActivityBlock, clearChatActivityBlock, getChatActivityRows } from '../ui/welcome.js';
+import type { ActivityEntry } from '../ui/welcome.js';
 import type { WelcomeLayoutOptions } from '../ui/welcome.js';
 import { promptInteractiveTurn } from '../ui/composer.js';
 import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
 import { writeDiagnosticLog } from '../diagnostic_log.js';
+import { writeTranscript } from '../transcript.js';
 import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
@@ -681,6 +683,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           return CONTINUE_INTERRUPTED_TASK_PROMPT;
         },
         onExit: exitMessage,
+        onTranscript: async () => (conversationHistory.length === 0 ? undefined : writeTranscript({
+          messages: conversationHistory,
+          workspace: canonicalWorkspace,
+          model: currentModel ?? 'unknown',
+          sessionId: activeSession.id,
+        })),
         questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
@@ -1227,6 +1235,12 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       /** Tail of the model's reasoning, shown as one dim line while it thinks. */
       let reasoningTail = '';
       let lastReasoningPaint = 0;
+      /** Silence clock shown while the model has produced nothing. */
+      let waitElapsedLabel: string | undefined;
+      /** Tool log for the live activity block: oldest first, bounded. */
+      const activityHistory: ActivityEntry[] = [];
+      /** Whether the multi-row block currently owns the answer area. */
+      let activityBlockPainted = false;
       // Keep a live spinner on the status row for the whole turn: streaming
       // text and silent tool execution both leave the screen looking settled.
       const stopActivity = (): void => {
@@ -1236,7 +1250,32 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         // The reasoning tail belongs to the thinking phases, including the long
         // wait that follows them — that is when it is most useful.
         const thinking = label === 'Thinking' || label === 'Waiting on the model';
-        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, process.stdout.columns, { glyph, label, reasoning: thinking ? reasoningTail : undefined }, layout.statusRow));
+        const elapsedLabel = label === 'Waiting on the model' ? waitElapsedLabel : undefined;
+        const thoughtTime = (Date.now() - startedAt) / 1000;
+        // Until the first token arrives the answer area is empty, so the turn
+        // borrows it for a live log instead of squeezing everything into one
+        // clipped row. The moment text streams, the block hands the rows back.
+        if (!streamedAnswer && getChatActivityRows(layout) >= 3) {
+          process.stdout.write(renderChatActivityBlock({
+            glyph,
+            label,
+            reasoning: thinking ? reasoningTail : undefined,
+            elapsedLabel,
+            history: activityHistory,
+          }, layout, thoughtTime));
+          activityBlockPainted = true;
+          return;
+        }
+        if (activityBlockPainted) {
+          process.stdout.write(clearChatActivityBlock(layout));
+          activityBlockPainted = false;
+        }
+        process.stdout.write(renderChatThoughtTimeUpdate(thoughtTime, process.stdout.columns, {
+          glyph,
+          label,
+          reasoning: thinking ? reasoningTail : undefined,
+          elapsedLabel,
+        }, layout.statusRow));
       };
       const startActivity = (): void => {
         stopActivity();
@@ -1244,8 +1283,15 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         activityLabel = undefined;
         thinkingTimer = setInterval(() => {
           // A single inference can run for minutes with no event of any kind.
-          // Saying so is honest and reassures more than a frozen `Thinking`.
-          if (activityLabel === 'Thinking' && Date.now() - lastEventAt >= 20_000) activityLabel = 'Waiting on the model';
+          // After ten silent seconds the row says it is waiting, and refreshes
+          // every twenty seconds so the wait never looks like a hang.
+          if (activityLabel === 'Thinking' || activityLabel === 'Waiting on the model') {
+            const notice = describeWait(Date.now() - lastEventAt);
+            if (notice) {
+              activityLabel = notice.label;
+              waitElapsedLabel = notice.elapsedLabel;
+            }
+          }
           paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
         }, 200);
       };
@@ -1399,6 +1445,8 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         eventListener: (event) => {
           recorder.record(event);
           lastEventAt = Date.now();
+          // A real event ends the silent wait, so its clock goes away.
+          waitElapsedLabel = undefined;
           if (event.type === 'model_change') usedModels.add(event.newModelId);
           if (event.type === 'progress') {
             activityLabel = describeActivity(event.status);
@@ -1408,9 +1456,21 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             // Name the target, not the tool: `Reading src/ui/welcome.ts` tells the
             // person what is happening, `Running read_file` does not.
             activityLabel = describeToolActivity(event.toolName, event.parameters);
+            activityHistory.push({ glyph: '⠼', label: activityLabel, tone: 'active' });
+            // Bounded: a long turn can call dozens of tools, and only the tail is
+            // ever on screen.
+            if (activityHistory.length > 20) activityHistory.splice(0, activityHistory.length - 20);
             paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel);
           }
           if (event.type === 'tool_result') {
+            // Settle the entry that is still running, so the log reads as a
+            // record of what happened rather than a list of intentions.
+            const settled = [...activityHistory].reverse().find((entry) => entry.tone === 'active');
+            if (settled) {
+              const status = event.result.status;
+              settled.tone = status === 'success' ? 'done' : 'failed';
+              settled.glyph = status === 'success' ? '✔' : status === 'denied' ? '⊘' : '✖';
+            }
             if (!thinkingTimer) startActivity();
             // `startActivity` clears the label; a result means the agent is about
             // to read it and decide the next move.
@@ -1518,6 +1578,13 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       // usage accounting and catalog refresh finish.
       turnActive = false;
       stopActivity();
+      // A tool-only turn never streams text, so the block is still on screen.
+      // Erase it before the settled row goes in, or six stale log rows sit under
+      // it until the final repaint — which can be seconds of model discovery.
+      if (activityBlockPainted) {
+        process.stdout.write(clearChatActivityBlock(layout));
+        activityBlockPainted = false;
+      }
       process.stdout.write(renderChatThoughtTimeUpdate(
         (Date.now() - startedAt) / 1000,
         process.stdout.columns,
@@ -1525,6 +1592,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           glyph: result.status === 'completed' ? '✔' : '✖',
           label: result.status === 'completed' ? 'Done' : result.status === 'cancelled' ? 'Stopped' : 'Failed',
         },
+        // Same row the live status used: the settled state replaces it in place
+        // instead of landing on row 13 when a wrapped question pushed it down.
+        layout.statusRow,
       ));
       if (turnUsage) {
         let pricing: Record<string, string> | undefined;

@@ -12,10 +12,40 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                                 └─► v0.4.34 (No frozen CLI — Ctrl+C always escapes)
                                       └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect,
                                                       jail canonicalization, chat/UI module split,
-                                                      live reasoning in the status row)
+                                                      live reasoning in the status row,
+                                                      multi-row activity log, summary panel,
+                                                      answer scrollback, /transcript)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23 (readable reports: panel, scrollback, transcript)
+**Feature: the turn summary gets its own panel, the answer scrolls, and the session can be read back**
+
+- **Type**: `feat` / `patch-level`
+- **Scope**: `apps/cli` answer rendering, composer, turn summary, help
+- **Key Deliverables**:
+  - **The report looked like more prose.** It was `**Turn summary**` followed by three bold headings, appended to the answer with nothing to separate it from the model's own words. It is now a fenced block (` ```summary `) that the answer renderer paints as a panel: an accent rail `▍`, a tinted background reaching the right edge of the card, warm bold headings and `·` bullets. `#`/`##`/`-` keep it valid markdown outside the CLI.
+  - **The fence is resolved before wrapping.** `wrapAnswerLines` walks the source lines, strips the markers, wraps summary prose two cells early (the rail costs two), and prefixes every wrapped line with an invisible mark. A long bullet therefore keeps its band across continuations, and a block whose top scrolled away stays styled — the two failure modes of styling after wrapping.
+  - **The answer scrolls.** PgUp/PgDn move the window a page at a time and the mouse wheel moves it three rows a notch; the status row becomes `↑ 8 above · ↓ 6 below · PgUp/PgDn`, and the overflow note reads `… +18 earlier lines hidden · PgUp`. `windowChatAnswerAt` clamps the offset to the real scroll range, so holding PgUp cannot scroll into empty space, and every new turn starts at the tail.
+  - **Past turns are readable.** `/transcript` writes the whole conversation — every question, every answer, the summary unfenced into a `### Turn summary` heading — to `~/.moderado/transcripts/<workspace>-<stamp>.md` and opens it in `$PAGER` (or `less -R`), restoring raw mode, mouse reporting and the frame on exit. With no pager it prints the path instead of pretending it showed something.
+  - **Help column realigned**: `/transcript` is the longest command, so the dash column moved from 11 to 13.
+  - **Coverage**: `welcome.test.ts` (band colour and width, continuation markers, scroll clamping and the position row), `transcript.test.ts` (turn numbering, fence removal, tool-only turns, filename), `turn_summary.test.ts` (fence contract), `help_content.test.ts` (realigned column).
+
+### [Unreleased] — 2026-10-23 (live activity block)
+**Feature: the processing log gets rows of its own, Cline-style, and cannot overflow**
+
+- **Type**: `feat` / `patch-level`
+- **Scope**: `apps/cli` status row, answer area, turn loop
+- **Key Deliverables**:
+  - **Symptom**: everything a running turn had to say was squeezed into one clipped row — `⠋ Thinking · 12s · …checking whether the cache key` — because the status row was the only surface available. A thought long enough to matter became a single `…` tail, and the tool log did not exist at all.
+  - **The answer area is empty while the agent works.** `renderChatActivityBlock` borrows it: a phase header on the status row, then the tool log and the newest reasoning, wrapped over up to six rows. The block starts where the one-line status starts, so the eye does not jump when the two swap, and it hands every row back the moment the first token streams.
+  - **A real log, not a spinner.** `tool_call_initiated` pushes `⠼ Reading src/ui/welcome.ts`; `tool_result` settles it to `✔` (success), `⊘` (denied), or `✖` (error). The tail is kept — twenty entries, bottom-aligned — so the newest work is always the row nearest the phase.
+  - **Reasoning is wrapped, not clipped.** Two columns of indent mark it as subordinate to the phase; the newest words survive when it does not fit.
+  - **No overflow, by construction and by test.** Every row is cleared with `\x1b[2K` before it is written and clamped to `min(cardWidth, terminalWidth - startColumn + 1)` in terminal cells — the card has a 70-column floor, the screen does not. The block can never reach the composer row. `welcome.test.ts` asserts both bounds at 9 widths (20–200) × 4 heights (12–40) with a 20-entry log and CJK reasoning.
+  - **Ten quiet seconds, then every twenty**: `describeWait` keeps `Thinking` for the first ten seconds of silence — that is normal inference — then switches the phase to `Waiting on the model` and re-announces with `no output for 30s`, `no output for 50s`. The bucket is quantised to the repeat cadence so the row changes every twenty seconds instead of every repaint. Any real event ends it.
+  - **Clock before message**: `⠋ Thinking · 12s · checking whether…`. The timer belongs to the phase, so the trailing text is what gets cut.
+  - **The settled row lands where the live one was.** A wrapped question pushes the status row down; the turn-end repaint used to write to the default row 13 regardless. It now passes `layout.statusRow`, and a tool-only turn clears the block before settling instead of leaving six stale log rows under it.
 
 ### [Unreleased] — 2026-10-23 (three field fixes)
 **Fix: wide text, oversized approval prompts, and approvals denied by Enter**

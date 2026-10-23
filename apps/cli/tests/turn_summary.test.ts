@@ -144,17 +144,24 @@ describe('turn summary formatting', () => {
     webApp: { directory: 'web', command: 'cd web && npm run dev', url: 'http://localhost:5173', live: false },
   };
 
-  it('renders markdown sections for the chat answer', () => {
+  it('renders a fenced markdown panel for the chat answer', () => {
     const rendered = formatTurnSummary(summary, 'chat');
-    expect(rendered).toContain('**Turn summary**');
-    expect(rendered).toContain('**Done**');
+    // The fence is the contract with the answer renderer: everything between the
+    // markers is painted as a tinted panel, so the report reads as an afterword
+    // instead of three more paragraphs of prose.
+    expect(rendered.startsWith('```summary\n')).toBe(true);
+    expect(rendered.endsWith('\n```')).toBe(true);
+    expect(rendered).toContain('# Turn summary');
+    expect(rendered).toContain('## Done');
     expect(rendered).toContain('- Added `src/new.ts`');
     expect(rendered).toContain('- Updated `src/app.ts`');
     expect(rendered).toContain('- Ran `npm test`');
-    expect(rendered).toContain('**Checked**');
-    expect(rendered).toContain('**Left over**');
-    expect(rendered).toContain('**Run it**');
+    expect(rendered).toContain('## Checked');
+    expect(rendered).toContain('## Left over');
+    expect(rendered).toContain('## Run it');
     expect(rendered).toContain('`cd web && npm run dev` → `http://localhost:5173`');
+    // No bold markers inside the panel: the renderer styles the headings itself.
+    expect(rendered).not.toContain('**');
   });
 
   it('renders plain terminal bullets for moderado run', () => {

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import type { GatewayStatusEvent, UsageEvent } from '@moderado/contracts';
 import { displayWidth, sliceTailToWidth, sliceToWidth, truncateToWidth } from './box.js';
+import { SUMMARY_FENCE } from '../turn_summary.js';
 import { closeHttpConnections } from '../http_shutdown.js';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { getHelpCommandGroups } from './help_content.js';
@@ -21,6 +22,8 @@ export interface WelcomeLayoutOptions {
   /** When set, render the full chat window (question row 1 + answer) instead of the logo header. */
   chatQuestion?: string;
   chatAnswer?: string;
+  /** Rows the answer is scrolled up from its tail; 0 is the live view. */
+  chatAnswerOffset?: number;
   chatThoughtTime?: number;
   /** Settled turn completed successfully — render the "✔ Done" status marker. */
   chatTaskDone?: boolean;
@@ -122,6 +125,8 @@ export interface ChatLayout {
   answerTop: number;
   answerRows: number;
   composerTop: number;
+  /** Real viewport width; the card has a floor, the terminal does not. */
+  terminalWidth: number;
 }
 
 /**
@@ -159,6 +164,7 @@ export function getChatLayout(width?: number, height?: number, question = '', co
     answerTop,
     answerRows: Math.max(0, composerTop - 1 - answerTop),
     composerTop,
+    terminalWidth,
   };
 }
 
@@ -167,20 +173,94 @@ export function getChatComposerRows(options: WelcomeLayoutOptions): number {
   return renderWelcomeCard(options).split('\n').length;
 }
 
+/** Invisible prefix that marks a rendered line as part of the turn summary. */
+const SUMMARY_MARK = '\u0001';
+
+/**
+ * Wrap an answer for the card, marking the turn summary as it goes.
+ *
+ * The fence has to be resolved *before* wrapping, not after: a summary line that
+ * wraps would lose its marker on the continuation, and a block whose opening
+ * marker scrolled off the top would stop being styled exactly when it is
+ * longest. Every wrapped line inside the fence carries `SUMMARY_MARK`, so the
+ * renderer can tint any row on its own.
+ */
+export function wrapAnswerLines(text: string, textWidth: number): string[] {
+  const lines: string[] = [];
+  let inSummary = false;
+  for (const rawLine of text.split('\n')) {
+    const trimmed = rawLine.trim();
+    if (!inSummary && trimmed === SUMMARY_FENCE) { inSummary = true; continue; }
+    if (inSummary && trimmed === '```') { inSummary = false; continue; }
+    if (!inSummary) { lines.push(...wrapText(rawLine, textWidth)); continue; }
+    // The rail and its gap cost two cells, so summary prose wraps two cells early.
+    for (const wrapped of wrapText(rawLine, Math.max(8, textWidth - 2))) lines.push(SUMMARY_MARK + wrapped);
+  }
+  return lines;
+}
+
+/**
+ * Window the answer around an offset, measured in rows scrolled up from the
+ * tail. `offset = 0` is the live view (newest rows). One row is reserved for the
+ * "earlier lines hidden" note whenever anything is above the window.
+ */
+export function windowChatAnswerAt(
+  text: string,
+  maxRows: number,
+  textWidth: number,
+  offsetFromBottom = 0,
+): { lines: string[]; hiddenAbove: number; hiddenBelow: number } {
+  const wrapped = wrapAnswerLines(text.trimEnd(), textWidth);
+  if (wrapped.length <= maxRows) return { lines: wrapped, hiddenAbove: 0, hiddenBelow: 0 };
+  // The note costs a row, so the content capacity is one row smaller — and the
+  // maximum offset follows from that capacity, not from the raw row count.
+  const capacity = Math.max(1, maxRows - 1);
+  const maxOffset = Math.max(0, wrapped.length - capacity);
+  const offset = Math.max(0, Math.min(Math.round(offsetFromBottom), maxOffset));
+  const end = wrapped.length - offset;
+  const start = Math.max(0, end - capacity);
+  return { lines: wrapped.slice(start, end), hiddenAbove: start, hiddenBelow: wrapped.length - end };
+}
+
 /**
  * Wrap an answer to the card and keep only the rows that fit. Older rows are
  * dropped (the newest output is what the user is reading) and reported as a
  * count so nothing is silently lost.
  */
 export function windowChatAnswer(text: string, maxRows: number, textWidth: number): { lines: string[]; hidden: number } {
-  const wrapped = wrapText(text.trimEnd(), textWidth);
-  if (wrapped.length <= maxRows) return { lines: wrapped, hidden: 0 };
-  const visible = Math.max(1, maxRows - 1);
-  return { lines: wrapped.slice(-visible), hidden: wrapped.length - visible };
+  const { lines, hiddenAbove } = windowChatAnswerAt(text, maxRows, textWidth, 0);
+  return { lines, hidden: hiddenAbove };
+}
+
+/**
+ * Style one answer row.
+ *
+ * Inside the turn-summary fence every row becomes a band: a rail in the accent
+ * colour, a tinted background that reaches the right edge of the card, and
+ * headings in warm bold. This is what makes the report read as a different kind
+ * of thing from the prose above it, rather than three more paragraphs.
+ */
+export function renderAnswerLine(line: string, textWidth: number): string {
+  if (!line.startsWith(SUMMARY_MARK)) {
+    const heading = line.match(/^\s*(?:#{1,6}\s+([^#]+?)|\*\*(.+?)\*\*)\s*$/);
+    return heading
+      ? `\x1b[1;38;5;25m${(heading[1] ?? heading[2]).trim()}\x1b[0m`
+      : `\x1b[38;5;253m${line}\x1b[0m`;
+  }
+  const body = line.slice(SUMMARY_MARK.length);
+  const heading = body.match(/^#{1,6}\s+(.+)$/);
+  const bullet = body.match(/^[-*]\s+(.+)$/);
+  const text = heading ? heading[1].trim() : bullet ? `· ${bullet[1].trim()}` : body;
+  const tone = heading ? '1;38;5;222' : '38;5;253';
+  // Pad to the card so the tint is a solid band instead of a ragged highlight.
+  const padded = `${text}${' '.repeat(Math.max(0, textWidth - 2 - displayWidth(text)))}`;
+  return `\x1b[48;5;236m\x1b[38;5;75m▍\x1b[0;48;5;236m\x1b[${tone}m ${padded}\x1b[0m`;
 }
 
 export function chatAnswerOverflowNote(hidden: number): string {
-  return `… +${hidden} earlier line${hidden === 1 ? '' : 's'} hidden (full answer: /session export)`;
+  // Short on purpose: the status row carries the scroll position, and this row
+  // has to fit a 70-column card without wrapping.
+  return `… +${hidden} earlier line${hidden === 1 ? '' : 's'} hidden · PgUp`;
 }
 
 export function renderQueuedCommandsBox(commands: readonly string[], width: number): string[] {
@@ -495,24 +575,37 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   }
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  const chatStatus = !options.chatAnswer?.trim()
+  const answerText = options.chatAnswer ?? '';
+  const answerOffset = options.chatAnswerOffset ?? 0;
+  // While the reader is scrolled up, the status row belongs to the scroll
+  // position: the turn clock is not what they are looking for.
+  const scrollWindow = answerText.trim().length > 0 && layout.answerRows > 0 && answerOffset > 0
+    ? windowChatAnswerAt(answerText, layout.answerRows, area.textWidth, answerOffset)
+    : undefined;
+  const chatStatus = scrollWindow
+    ? `${scrollWindow.hiddenAbove === 0 ? 'Top of the answer' : `↑ ${scrollWindow.hiddenAbove} above`} · ↓ ${scrollWindow.hiddenBelow} below · PgUp/PgDn`
+    : !answerText.trim()
     ? ''
     : options.chatTaskDone
     ? `✔ Done · Thought for ${thoughtTimeLabel}`
     : options.tokenUsage
     ? ''
     : `Thought for ${thoughtTimeLabel}`;
-  lines.push(chatStatus ? indent + `\x1b[38;5;244m${chatStatus.slice(0, Math.max(0, area.cardWidth - 1))}\x1b[0m` : '');
+  lines.push(chatStatus
+    ? indent + `\x1b[38;5;244m${truncateToWidth(chatStatus, area.cardWidth)}\x1b[0m`
+    : '');
   // Answer section: multi-line model answer, windowed to the rows the composer leaves free.
-  if (options.chatAnswer && options.chatAnswer.trim().length > 0 && layout.answerRows > 0) {
+  if (answerText.trim().length > 0 && layout.answerRows > 0) {
     lines.push('');
-    const { lines: answerLines, hidden } = windowChatAnswer(options.chatAnswer, layout.answerRows, area.textWidth);
-    if (hidden > 0) lines.push(indent + `\x1b[38;5;244m${chatAnswerOverflowNote(hidden)}\x1b[0m`);
+    const { lines: answerLines, hiddenAbove } = windowChatAnswerAt(
+      answerText,
+      layout.answerRows,
+      area.textWidth,
+      answerOffset,
+    );
+    if (hiddenAbove > 0) lines.push(indent + `\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), area.cardWidth)}\x1b[0m`);
     for (const answerLine of answerLines) {
-      const heading = answerLine.match(/^\s*(?:#{1,6}\s+([^#]+?)|\*\*(.+?)\*\*)\s*$/);
-      lines.push(indent + (heading
-        ? `\x1b[1;38;5;25m${(heading[1] ?? heading[2]).trim()}\x1b[0m`
-        : `\x1b[38;5;253m${answerLine}\x1b[0m`));
+      lines.push(indent + renderAnswerLine(answerLine, area.textWidth));
     }
   }
   // Hard guarantee: the composer starts at `composerTop` and the frame ends one
@@ -554,6 +647,40 @@ export interface ChatActivity {
    * turning the status row into a transcript.
    */
   reasoning?: string;
+  /**
+   * Replaces the turn clock on the row. Used while waiting on the model, where
+   * "no output for 30s" says more than the total turn time.
+   */
+  elapsedLabel?: string;
+}
+
+/** Silence before the row admits it is waiting on the model. */
+export const WAIT_NOTICE_AFTER_MS = 10_000;
+
+/** How often that notice is refreshed while the wait continues. */
+export const WAIT_NOTICE_REPEAT_MS = 20_000;
+
+export interface WaitNotice {
+  /** Phase label for the row. */
+  label: string;
+  /** Clock replacement; only set once the wait has been re-announced. */
+  elapsedLabel?: string;
+}
+
+/**
+ * What to say while the model has produced nothing.
+ *
+ * Silent for the first ten seconds — that is normal inference. After that the
+ * row says it is waiting, and re-announces every twenty seconds with the length
+ * of the silence, so a long wait never looks like a hung process. The bucket is
+ * quantised so the line changes on that cadence instead of every second.
+ */
+export function describeWait(silentForMs: number): WaitNotice | undefined {
+  if (!Number.isFinite(silentForMs) || silentForMs < WAIT_NOTICE_AFTER_MS) return undefined;
+  const repeats = Math.floor((silentForMs - WAIT_NOTICE_AFTER_MS) / WAIT_NOTICE_REPEAT_MS);
+  if (repeats === 0) return { label: 'Waiting on the model' };
+  const announcedAt = (WAIT_NOTICE_AFTER_MS + repeats * WAIT_NOTICE_REPEAT_MS) / 1000;
+  return { label: 'Waiting on the model', elapsedLabel: `no output for ${announcedAt}s` };
 }
 
 /**
@@ -678,7 +805,9 @@ export function renderChatThoughtTimeUpdate(
   row = 13,
 ): string {
   const area = getChatAnswerArea(width);
-  const elapsed = formatElapsed(thoughtTime);
+  // A wait phase reports silence, not the turn clock; two timers side by side
+  // would be ambiguous.
+  const elapsed = activity?.elapsedLabel ?? formatElapsed(thoughtTime);
   const paint = (status: string): string =>
     `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${truncateToWidth(status, area.cardWidth)}\x1b[0m\x1b8`;
   if (!activity) return paint(`Thought for ${elapsed}`);
@@ -699,7 +828,130 @@ export function renderChatThoughtTimeUpdate(
   const excerpt = reasoning && room > 8
     ? (displayWidth(reasoning) > room ? `…${sliceTailToWidth(reasoning, room - 1)}` : reasoning)
     : '';
-  return paint(excerpt ? `${label} · ${excerpt}${timer}` : `${label}${timer}`);
+  // Clock first, then the message: the timer belongs to the phase, so the
+  // trailing text can be cut without taking the time with it.
+  return paint(excerpt ? `${label}${timer} · ${excerpt}` : `${label}${timer}`);
+}
+
+/** One tool call in the live activity log. */
+export interface ActivityEntry {
+  /** `⠼` while running, `✔` done, `✖` failed, `⊘` denied. */
+  glyph: string;
+  /** Already humanised: `Reading src/ui/welcome.ts`, not `read_file`. */
+  label: string;
+  tone: 'active' | 'done' | 'failed';
+}
+
+/** Everything the live activity block needs for one frame. */
+export interface ChatActivityBlock {
+  glyph: string;
+  label: string;
+  /** Newest reasoning tail, wrapped over as many rows as it can fill. */
+  reasoning?: string;
+  /** Replaces the turn clock while waiting on the model. */
+  elapsedLabel?: string;
+  /** Oldest first; the newest entry sits closest to the current phase. */
+  history?: ActivityEntry[];
+}
+
+/**
+ * Rows the activity block may claim.
+ *
+ * It lives in the answer area, which is empty until the first token arrives, so
+ * it costs nothing: it borrows rows the answer would otherwise leave blank and
+ * hands them back the moment text starts streaming. Six is the point where a
+ * glance reads the whole turn without the block becoming a transcript.
+ */
+export const ACTIVITY_BLOCK_MAX_ROWS = 6;
+
+/** Rows available to the block for this layout; 0 when the viewport is tiny. */
+export function getChatActivityRows(layout: ChatLayout): number {
+  // The block starts on the status row and stops one row short of the composer,
+  // so the header lands exactly where the single status line would be and the
+  // eye does not jump when the two swap.
+  const available = Math.max(0, layout.composerTop - 1 - layout.statusRow);
+  return Math.min(available, ACTIVITY_BLOCK_MAX_ROWS);
+}
+
+const ACTIVITY_TONES: Record<ActivityEntry['tone'], number> = { active: 250, done: 244, failed: 203 };
+
+/**
+ * Clamp one body line to the card in terminal cells.
+ *
+ * `indent + truncateToWidth(..., cardWidth - indent)` is exactly `cardWidth`
+ * wide at most: the indent is spent first, so a wide CJK glyph can never push
+ * the row past the right border of the frame.
+ */
+function activityBodyLine(text: string, cells: number, indent: number): string {
+  return ' '.repeat(indent) + truncateToWidth(text, Math.max(0, cells - indent));
+}
+
+/**
+ * Paint the live activity block: one phase header on the status row, then the
+ * tool log and the newest reasoning, bottom-aligned in the space above the
+ * composer.
+ *
+ * This is the answer to "the processing message is squeezed into one line": the
+ * single status row clipped a whole thought into `⠋ Thinking · 12s · …`, which
+ * told the reader nothing. Here the header keeps the phase and the clock, and
+ * the rows underneath carry what the agent is actually doing.
+ *
+ * Every row is cleared before it is written and clamped to the card, and the
+ * block never reaches past the last answer row, so it cannot overflow the frame
+ * or paint over the composer.
+ */
+export function renderChatActivityBlock(
+  activity: ChatActivityBlock,
+  layout: ChatLayout,
+  thoughtTime: number,
+): string {
+  const { area } = layout;
+  const rows = getChatActivityRows(layout);
+  if (rows === 0) return '';
+  // The card has a 70-column floor, the terminal does not: on a very narrow
+  // window the block still has to stop at the screen edge, not at the card's.
+  const cells = Math.min(area.cardWidth, Math.max(8, layout.terminalWidth - area.startColumn + 1));
+  const elapsed = activity.elapsedLabel ?? formatElapsed(thoughtTime);
+  const header = `\x1b[38;5;250m${truncateToWidth(`${activity.glyph} ${activity.label} · ${elapsed}`, cells)}\x1b[0m`;
+  const body: string[] = [];
+  // The log first, the current thought last: a log is read from the bottom, and
+  // the bottom row is where the agent is right now.
+  for (const entry of activity.history ?? []) {
+    body.push(`\x1b[38;5;${ACTIVITY_TONES[entry.tone]}m${activityBodyLine(`${entry.glyph} ${entry.label}`, cells, 0)}\x1b[0m`);
+  }
+  const reasoning = activity.reasoning?.replace(/\s+/g, ' ').trim();
+  if (reasoning) {
+    // Two columns of indent mark the thought as subordinate to the phase, and
+    // wrapping (not truncating) is what turns one clipped line into prose.
+    const wrapped = wrapText(reasoning, Math.max(8, cells - 2));
+    for (const line of wrapped.slice(-ACTIVITY_BLOCK_MAX_ROWS)) {
+      body.push(`\x1b[38;5;244m${activityBodyLine(line, cells, 2)}\x1b[0m`);
+    }
+  }
+  // The header owns row 0; the body gets whatever is left, keeping its tail.
+  // (`slice(-0)` would return everything, so the one-row case is explicit.)
+  const visible = rows > 1 ? body.slice(-(rows - 1)) : [];
+  let sequence = '\x1b7';
+  for (let index = 0; index < rows; index++) {
+    const row = layout.statusRow + index;
+    // Rows past the content are cleared, not skipped: the block shrinks as the
+    // phase changes and must not leave stale text behind.
+    const text = index === 0 ? header : visible[index - 1] ?? '';
+    sequence += `\x1b[${row};${area.startColumn}H\x1b[2K${text}`;
+  }
+  return sequence + '\x1b8';
+}
+
+/** Erase the block without repainting the frame (used when the turn settles). */
+export function clearChatActivityBlock(layout: ChatLayout): string {
+  const rows = getChatActivityRows(layout);
+  if (rows === 0) return '';
+  const { area } = layout;
+  let sequence = '\x1b7';
+  for (let index = 0; index < rows; index++) {
+    sequence += `\x1b[${layout.statusRow + index};${area.startColumn}H\x1b[2K`;
+  }
+  return sequence + '\x1b8';
 }
 
 /**
@@ -709,12 +961,12 @@ export function renderChatThoughtTimeUpdate(
  * can never damage the bottom rows. The cursor is saved and restored, so the
  * caller keeps its position on the input line.
  */
-export function renderChatAnswerWindow(text: string, layout: ChatLayout): string {
+export function renderChatAnswerWindow(text: string, layout: ChatLayout, offsetFromBottom = 0): string {
   const { area } = layout;
-  const { lines, hidden } = windowChatAnswer(text, layout.answerRows, area.textWidth);
-  const visible = hidden > 0
-    ? [`\x1b[38;5;244m${chatAnswerOverflowNote(hidden)}\x1b[0m`, ...lines.map((line) => `\x1b[38;5;253m${line}\x1b[0m`)]
-    : lines.map((line) => `\x1b[38;5;253m${line}\x1b[0m`);
+  const { lines, hiddenAbove } = windowChatAnswerAt(text, layout.answerRows, area.textWidth, offsetFromBottom);
+  const visible = hiddenAbove > 0
+    ? [`\x1b[38;5;244m${chatAnswerOverflowNote(hiddenAbove)}\x1b[0m`, ...lines.map((line) => renderAnswerLine(line, area.textWidth))]
+    : lines.map((line) => renderAnswerLine(line, area.textWidth));
   let sequence = '\x1b7';
   for (let index = 0; index < layout.answerRows; index++) {
     const row = layout.answerTop + index;

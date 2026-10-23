@@ -13,6 +13,9 @@ import {
   renderChatThoughtTimeUpdate,
   describeActivity,
   describeToolActivity,
+  describeWait,
+  WAIT_NOTICE_AFTER_MS,
+  WAIT_NOTICE_REPEAT_MS,
   formatElapsed,
   navigateQuestionHistory,
   renderWelcomePopupLayer,
@@ -35,6 +38,12 @@ import {
   getChatAnswerArea,
   getChatLayout,
   getChatComposerRows,
+  getChatActivityRows,
+  renderChatActivityBlock,
+  clearChatActivityBlock,
+  wrapAnswerLines,
+  windowChatAnswerAt,
+  renderAnswerLine,
   renderChatUsageUpdate,
 } from '../src/ui/welcome.js';
 import { promptInteractiveTurn } from '../src/ui/composer.js';
@@ -548,15 +557,16 @@ describe('OpenCode-style Welcome TUI', () => {
     const thinking = stripAnsi(renderChatThoughtTimeUpdate(12, 120, {
       glyph: '⠋', label: 'Thinking', reasoning: 'checking whether the cache key includes the model',
     }));
-    expect(thinking).toContain('⠋ Thinking · checking whether');
-    expect(thinking).toContain('· 12s');
+    // The clock belongs to the phase, so it sits right after the label and
+    // before the message — the message is what gets clipped, not the time.
+    expect(thinking).toContain('⠋ Thinking · 12s · checking whether');
     expect(paintedWidth(thinking)).toBeLessThanOrEqual(cardWidth);
 
     // A long thought keeps its newest words, truncates from the left, and stays in the card.
     const longThought = renderChatThoughtTimeUpdate(12, 120, {
       glyph: '⠋', label: 'Thinking', reasoning: `${'filler '.repeat(60)}NEWEST-WORDS`,
     });
-    expect(stripAnsi(longThought)).toContain('⠋ Thinking · …');
+    expect(stripAnsi(longThought)).toContain('⠋ Thinking · 12s · …');
     expect(stripAnsi(longThought)).toContain('NEWEST-WORDS');
     expect(paintedWidth(longThought)).toBeLessThanOrEqual(cardWidth);
 
@@ -637,6 +647,159 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(formatElapsed(59.6)).toBe('1m 00s');
     expect(formatElapsed(64)).toBe('1m 04s');
     expect(formatElapsed(750)).toBe('12m 30s');
+  });
+
+  it('spreads the processing log over the empty answer area instead of one clipped row', () => {
+    const layout = getChatLayout(100, 30, 'Build a weather app', 5);
+    const sequence = renderChatActivityBlock({
+      glyph: '⠋',
+      label: 'Thinking',
+      reasoning: 'checking whether the cache key includes the model identifier before reusing an answer',
+      history: [
+        { glyph: '✔', label: 'Reading src/ui/welcome.ts', tone: 'done' },
+        { glyph: '⠼', label: 'Running npm test', tone: 'active' },
+      ],
+    }, layout, 12);
+    const rows = [...sequence.matchAll(/\x1b\[(\d+);(\d+)H/g)].map((match) => Number(match[1]));
+    expect(rows).toHaveLength(getChatActivityRows(layout));
+    expect(rows[0]).toBe(layout.statusRow);
+    const text = stripAnsi(sequence);
+    // The header keeps the phase and the clock; the rows underneath carry the work.
+    expect(text).toContain('⠋ Thinking · 12s');
+    expect(text).toContain('✔ Reading src/ui/welcome.ts');
+    expect(text).toContain('⠼ Running npm test');
+    // Reasoning is wrapped, not clipped into a single `…` tail.
+    expect(text).toContain('checking whether the cache key');
+    expect(text.split('\n').filter((line) => line.includes('cache key')).length).toBeGreaterThan(0);
+  });
+
+  it('never lets the activity block overflow the card or reach the composer', () => {
+    // Every terminal width and height the CLI can meet, with a 20-entry log and
+    // CJK reasoning: the widest glyphs and the longest history at once.
+    const history = Array.from({ length: 20 }, (_, index) => ({
+      glyph: '✔', label: `Editing src/deeply/nested/path/file_${index}.ts`, tone: 'done' as const,
+    }));
+    const rowsOf = (sequence: string): Array<{ row: number; col: number; cells: number }> => {
+      const parts = sequence.split(/\x1b\[(\d+);(\d+)H/);
+      const painted: Array<{ row: number; col: number; cells: number }> = [];
+      for (let index = 1; index < parts.length; index += 3) {
+        painted.push({
+          row: Number(parts[index]),
+          col: Number(parts[index + 1]),
+          cells: displayWidth(parts[index + 2].replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\x1b[78]/g, '')),
+        });
+      }
+      return painted;
+    };
+    for (const width of [20, 30, 40, 44, 60, 80, 100, 120, 200]) {
+      for (const height of [12, 24, 30, 40]) {
+        const layout = getChatLayout(width, height, 'A question long enough to wrap over several rows in a narrow terminal', 5);
+        const area = getChatAnswerArea(width);
+        // The card has a 70-column floor; the terminal does not.
+        const budget = Math.min(area.cardWidth, Math.max(8, width - area.startColumn + 1));
+        const painted = rowsOf(renderChatActivityBlock({
+          glyph: '⠋', label: 'Thinking', reasoning: '检查缓存键是否包含模型标识'.repeat(20), history,
+        }, layout, 3725));
+        // The block claims at most its cap, and never the composer's rows.
+        expect(painted.length).toBeLessThanOrEqual(getChatActivityRows(layout));
+        for (const row of painted) {
+          expect(row.row).toBeGreaterThanOrEqual(layout.statusRow);
+          expect(row.row).toBeLessThan(layout.composerTop - 1);
+          expect(row.col).toBe(area.startColumn);
+          expect(row.cells).toBeLessThanOrEqual(budget);
+        }
+      }
+    }
+    // A viewport too short for a block falls back to the single status row.
+    const tiny = getChatLayout(80, 12, 'Q', 5);
+    expect(renderChatActivityBlock({ glyph: '⠋', label: 'Thinking' }, tiny, 3)).toBe('');
+    expect(clearChatActivityBlock(tiny)).toBe('');
+  });
+
+  it('paints the turn summary as a tinted panel that survives wrapping', () => {
+    const answer = [
+      'Prose above the report.',
+      '',
+      '```summary',
+      '# Turn summary',
+      '## Done',
+      `- ${'a very long action '.repeat(6)}`,
+      '```',
+    ].join('\n');
+    const lines = wrapAnswerLines(answer, 40);
+    // The fence is scaffolding, never content.
+    expect(lines.join('')).not.toContain('```');
+    const summaryLines = lines.filter((line) => line.startsWith('\u0001'));
+    expect(summaryLines.length).toBeGreaterThanOrEqual(4);
+    // The long bullet wraps, and every continuation keeps the marker — otherwise
+    // the band would break in the middle of a sentence.
+    expect(summaryLines.filter((line) => line.includes('a very long action')).length).toBeGreaterThan(1);
+
+    const band = renderAnswerLine(summaryLines[0], 40);
+    expect(band).toContain('\x1b[48;5;236m');
+    expect(band).toContain('▍');
+    // Exactly the card's text column: the tint reaches the right edge, no further.
+    expect(displayWidth(stripAnsi(band))).toBe(40);
+    // Headings lose their hashes and gain the warm bold tone.
+    const heading = renderAnswerLine(`\u0001## Done`, 40);
+    expect(stripAnsi(heading)).not.toContain('##');
+    expect(heading).toContain('1;38;5;222');
+
+    // Prose outside the fence is untouched.
+    const prose = renderAnswerLine(lines[0], 40);
+    expect(prose).not.toContain('48;5;236');
+    expect(prose).toContain('Prose above the report.');
+  });
+
+  it('scrolls the answer window up from the tail and reports the position', () => {
+    const answer = Array.from({ length: 30 }, (_, index) => `line ${index + 1}`).join('\n');
+    const layout = getChatLayout(100, 30, 'Q', 5);
+    const rows = layout.answerRows;
+
+    const tail = windowChatAnswerAt(answer, rows, 90, 0);
+    expect(tail.hiddenBelow).toBe(0);
+    expect(tail.hiddenAbove).toBeGreaterThan(0);
+    expect(tail.lines[tail.lines.length - 1]).toBe('line 30');
+
+    const up = windowChatAnswerAt(answer, rows, 90, 5);
+    expect(up.hiddenBelow).toBe(5);
+    expect(up.hiddenAbove).toBe(tail.hiddenAbove - 5);
+    expect(up.lines[up.lines.length - 1]).toBe('line 25');
+
+    // The offset is clamped, so holding PgUp cannot scroll into empty space.
+    const top = windowChatAnswerAt(answer, rows, 90, 10_000);
+    expect(top.hiddenAbove).toBe(0);
+    expect(top.lines[0]).toBe('line 1');
+
+    // The status row carries the position while the reader is scrolled up.
+    const frame = stripAnsi(renderChatScreen({
+      model: 'z-ai/glm-5', tokens: 10, cost: '$0.00', workspace: '~/w',
+      mode: 'Execute', autoApprove: false, chatQuestion: 'Q', chatAnswer: answer,
+      chatThoughtTime: 9, chatTaskDone: true, chatAnswerOffset: 5, width: 100,
+    }, 30));
+    expect(frame).toContain('above');
+    expect(frame).toContain('below');
+    expect(frame).toContain('PgUp/PgDn');
+  });
+
+  it('says it is waiting only after ten quiet seconds, then every twenty', () => {
+    // Normal inference is silent; ten seconds is not a stall and must not look
+    // like one, otherwise every ordinary turn cries wolf.
+    expect(describeWait(0)).toBeUndefined();
+    expect(describeWait(9_999)).toBeUndefined();
+    expect(describeWait(Number.NaN)).toBeUndefined();
+    expect(describeWait(WAIT_NOTICE_AFTER_MS - 1)).toBeUndefined();
+
+    // The first notice has no clock: "no output for 10s" is not yet informative.
+    expect(describeWait(WAIT_NOTICE_AFTER_MS)).toEqual({ label: 'Waiting on the model' });
+    expect(describeWait(25_000)).toEqual({ label: 'Waiting on the model' });
+
+    // Then the length of the silence is quantised to the repeat cadence, so the
+    // row changes every twenty seconds rather than on every repaint.
+    expect(describeWait(30_000)?.elapsedLabel).toBe('no output for 30s');
+    expect(describeWait(49_000)?.elapsedLabel).toBe('no output for 30s');
+    expect(describeWait(50_000)?.elapsedLabel).toBe('no output for 50s');
+    expect(describeWait(50_000 + WAIT_NOTICE_REPEAT_MS)?.elapsedLabel).toBe('no output for 70s');
   });
 
   it('keeps temporary status rows inside the chat card columns while the turn runs', () => {

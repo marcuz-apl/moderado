@@ -13,6 +13,7 @@ export const STANDARD_SLASH_COMMANDS = [
   '/btw',
   '/mcp',
   '/session',
+  '/transcript',
   '/queue',
   '/workflow',
   '/review',

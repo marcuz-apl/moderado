@@ -5,6 +5,15 @@ import type { AgentEvent } from '@moderado/contracts';
 
 export type TurnStatus = 'completed' | 'step_limit_reached' | 'cancelled' | 'failed';
 
+/**
+ * Fence that marks the turn summary inside a chat answer.
+ *
+ * The renderer paints everything between these markers as a tinted panel, so
+ * the report reads as an afterword rather than more prose. `ui/welcome.ts`
+ * imports this constant rather than repeating the literal.
+ */
+export const SUMMARY_FENCE = '```summary';
+
 export interface TurnCommandRecord {
   command: string;
   ok: boolean;
@@ -292,7 +301,12 @@ function readWebAppHint(canonicalRoot: string, directory: string): WebAppHint | 
  */
 export function formatTurnSummary(summary: TurnSummary, style: 'chat' | 'terminal' = 'chat'): string {
   const chat = style === 'chat';
-  const heading = (title: string): string => (chat ? `**${title}**` : `\x1b[1;38;5;75m${title}\x1b[0m`);
+  // Chat renders the report as a fenced block so the CLI can paint it as a
+  // tinted panel: the summary is the answer's afterword, and it has to read as
+  // a different thing from the prose above it. `#`/`##`/`-` keep it valid
+  // markdown outside the CLI, where the fence degrades to a code block.
+  const heading = (title: string, level: 1 | 2 = 2): string =>
+    chat ? `${'#'.repeat(level)} ${title}` : `\x1b[1;38;5;75m${title}\x1b[0m`;
   const quote = (value: string): string => (chat ? `\`${value}\`` : value);
   const bullet = (text: string): string => (chat ? `- ${text}` : `  \x1b[38;5;253m•\x1b[0m ${text}`);
   const section = (title: string, items: string[]): string => [heading(title), ...items.map(bullet)].join('\n');
@@ -306,7 +320,7 @@ export function formatTurnSummary(summary: TurnSummary, style: 'chat' | 'termina
   if (changed.length > listed.length) listed.push(`… +${changed.length - listed.length} more actions`);
 
   const sections = [
-    heading('Turn summary'),
+    heading('Turn summary', 1),
     section('Done', listed.length > 0 ? listed : ['No workspace changes were needed.']),
   ];
 
@@ -325,5 +339,7 @@ export function formatTurnSummary(summary: TurnSummary, style: 'chat' | 'termina
     ]));
   }
 
-  return sections.join('\n\n');
+  // One blank line between sections keeps the tinted band readable; the fence
+  // markers are the contract with `wrapAnswerLines` in `ui/welcome.ts`.
+  return chat ? [SUMMARY_FENCE, sections.join('\n'), '```'].join('\n') : sections.join('\n\n');
 }

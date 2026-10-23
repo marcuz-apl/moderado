@@ -5,6 +5,7 @@
  * Split out of `ui/welcome.ts`, which now owns only layout and painting.
  */
 import readline from 'node:readline';
+import { spawnSync } from 'node:child_process';
 import type { UsageEvent } from '@moderado/contracts';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
 import {
@@ -24,9 +25,24 @@ import {
   renderFullWelcomeScreen,
   renderHelpPopupBox,
   renderWelcomePopupLayer,
+  windowChatAnswerAt,
 } from './welcome.js';
 import type { WelcomeLayoutOptions } from './welcome.js';
 
+
+/**
+ * Open a file in the user's pager. Returns false when no pager could be run, so
+ * the caller can print the path instead of pretending something was shown.
+ */
+function openInPager(file: string): boolean {
+  const configured = process.env.PAGER?.trim();
+  const command = configured
+    ? configured.split(/\s+/).filter(Boolean)
+    : process.platform === 'win32' ? [] : ['less', '-R'];
+  if (command.length === 0) return false;
+  const result = spawnSync(command[0], [...command.slice(1), file], { stdio: 'inherit' });
+  return !result.error;
+}
 
 export interface InteractiveTurnResult {
   text: string;
@@ -72,6 +88,11 @@ export interface PromptInteractiveTurnOptions {
   onExit?: () => string;
   onMcp?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onSession?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
+  /**
+   * Called for /transcript. Writes the whole conversation to a file and returns
+   * its path, which the composer then opens in the pager.
+   */
+  onTranscript?: () => Promise<string | undefined>;
   onQueue?: (command: string, drawFrame: (popupLines: string[]) => void) => Promise<void>;
   onBtw?: (
     command: string,
@@ -118,6 +139,11 @@ export async function promptInteractiveTurn(
   }
   let mentionFiles: string[] = [];
   let mentionSelection = 0;
+  /**
+   * Rows the answer is scrolled up from its tail. 0 follows the newest line;
+   * PgUp/PgDn and the mouse wheel move it, and every new turn starts at 0.
+   */
+  let answerOffset = 0;
 
   const updateMentions = (): void => {
     const mention = activeMentionToken(input, caret);
@@ -153,6 +179,7 @@ export async function promptInteractiveTurn(
     commandSelection,
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
+    chatAnswerOffset: answerOffset,
     chatThoughtTime: options.chatThoughtTime,
     chatTaskDone: options.chatTaskDone,
     outputTokenRate: options.outputTokenRate,
@@ -232,6 +259,42 @@ export async function promptInteractiveTurn(
 
   const onResize = () => redrawFull();
 
+  /** Layout of the chat frame as it is painted right now. */
+  const currentChatLayout = () => getChatLayout(
+    stdout.columns,
+    getRows(),
+    options.chatQuestion ?? '',
+    getChatComposerRows(getOptions()),
+  );
+
+  /** How many rows of answer sit above the tail view — the scroll range. */
+  const answerScrollLimit = (): number => {
+    const answer = options.chatAnswer;
+    if (!answer || answer.trim().length === 0) return 0;
+    const layout = currentChatLayout();
+    if (layout.answerRows <= 0) return 0;
+    return windowChatAnswerAt(answer, layout.answerRows, layout.area.textWidth, 0).hiddenAbove;
+  };
+
+  /**
+   * Move the answer view; positive scrolls up towards older lines.
+   *
+   * A long turn summary is taller than the answer area, so the tail view hides
+   * its opening sections. This is the way back: the whole report stays in the
+   * buffer, and the status row reports the position.
+   */
+  const scrollAnswer = (delta: number): void => {
+    const limit = answerScrollLimit();
+    if (limit <= 0) return;
+    const next = Math.max(0, Math.min(limit, answerOffset + delta));
+    if (next === answerOffset) return;
+    answerOffset = next;
+    redrawFull();
+  };
+
+  /** One page is one screenful of answer rows, minus the overflow note. */
+  const answerPage = (): number => Math.max(1, currentChatLayout().answerRows - 1);
+
   /**
    * Place the caret where the user clicked on the composer line. Only a primary
    * press is honoured; releases, drags, wheel and other buttons are ignored.
@@ -241,6 +304,11 @@ export async function promptInteractiveTurn(
     let reported = false;
     for (const report of text.matchAll(MOUSE_REPORT_PATTERN)) {
       reported = true;
+      // Wheel up (64) / down (65): three rows a notch, like every other pager.
+      if (report[4] === 'M' && (Number(report[1]) === 64 || Number(report[1]) === 65)) {
+        scrollAnswer(Number(report[1]) === 64 ? 3 : -3);
+        continue;
+      }
       if (report[4] !== 'M' || Number(report[1]) !== 0) continue;
       const { row, column } = getComposerAnchor();
       if (Number(report[3]) !== row) continue;
@@ -310,6 +378,15 @@ export async function promptInteractiveTurn(
         if (key && key.ctrl && key.name === 'c') {
           cleanup();
           return await exitCleanly('\x1b[33mSession cancelled.\x1b[0m');
+        }
+
+        // ── Answer scrollback ─────────────────────────────────────────────────
+        // PgUp/PgDn browse the answer without leaving the composer. The turn
+        // summary is often taller than the answer area, and the terminal's own
+        // scrollback is not available to a full-screen TUI.
+        if (key && (key.name === 'pageup' || key.name === 'pagedown')) {
+          scrollAnswer(key.name === 'pageup' ? answerPage() : -answerPage());
+          return;
         }
 
         // ── /help overlay popup ───────────────────────────────────────────────
@@ -407,6 +484,32 @@ export async function promptInteractiveTurn(
           readline.emitKeypressEvents(stdin);
           stdin.resume();
           stdin.setRawMode(true);
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
+          positionCursorOnInput();
+          bindComposerInput();
+          return;
+        }
+
+        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/transcript') {
+          setInput('');
+          unbindComposerInput();
+          stdout.write('\x1b[H\x1b[J');
+          const file = await options.onTranscript?.();
+          if (file) {
+            // The pager needs the terminal in cooked mode and no mouse reporting;
+            // both are process state, so they are restored before repainting.
+            try { stdin.setRawMode(false); } catch { /* ignore */ }
+            stdout.write(MOUSE_REPORT_OFF);
+            const opened = openInPager(file);
+            stdout.write(MOUSE_REPORT_ON);
+            try { stdin.setRawMode(true); } catch { /* ignore */ }
+            if (!opened) stdout.write(`\x1b[38;5;244mTranscript written to ${file}\x1b[0m\n`);
+          } else {
+            stdout.write('\x1b[38;5;244mNo transcript to show yet — finish a turn first.\x1b[0m\n');
+          }
+          readline.emitKeypressEvents(stdin);
+          stdin.resume();
           stdout.write('\x1b[H\x1b[J');
           stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
           positionCursorOnInput();

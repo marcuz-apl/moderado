@@ -1,12 +1,88 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-23 (three field fixes after 1b3a86f)
+Updated: 2026-10-23 (summary panel, answer scrollback, /transcript)
 Branch: master (tracking origin/master)
-Status: three reported glitches, the hardening pass, the jail canonicalization
-split, the module decomposition, the repeat-question fix and the status row work
-are committed. **Two change sets are in the working tree, uncommitted**: the
-status row v2 and the three field fixes below — the Security Center blocks git's
-index write.
+Status: everything through the three field fixes is committed (`2a6b001`,
+`v0.4.34+261023c`). **Two change sets are in the working tree, uncommitted**:
+the multi-row activity log + wait notice, and the summary panel + scrollback +
+`/transcript`. Build clean, affected suites green.
+
+## Session 2026-10-23 — readable reports (panel, scrollback, transcript)
+
+Follow-up to two questions: the turn summary ran past one page with no way back,
+and it looked like more prose.
+
+### The summary is a panel
+
+`formatTurnSummary(..., 'chat')` now emits a fenced block:
+
+```
+```summary
+# Turn summary
+## Done
+- Added `src/App.jsx`
+```
+
+`wrapAnswerLines` (in `ui/welcome.ts`) strips the fence and prefixes every
+wrapped line with `SUMMARY_MARK` (`\u0001`); `renderAnswerLine` turns a marked
+line into a band — rail `▍`, `48;5;236` background padded to the card edge, warm
+bold headings. Resolving the fence *before* wrapping is the whole trick: a long
+bullet keeps its band across continuations, and a block whose top scrolled away
+stays styled.
+
+### The answer scrolls
+
+- `windowChatAnswerAt(text, maxRows, textWidth, offset)` — offset measured in
+  rows up from the tail, clamped to the real range. `windowChatAnswer` is now a
+  wrapper with offset 0.
+- `WelcomeLayoutOptions.chatAnswerOffset` flows through both painters.
+- Composer: PgUp/PgDn by a page, wheel by 3 rows, status row shows
+  `↑ 8 above · ↓ 6 below · PgUp/PgDn`.
+
+### Past turns
+
+`/transcript` → `src/transcript.ts` writes
+`~/.moderado/transcripts/<workspace>-<stamp>.md` (summary unfenced into
+`### Turn summary`) and opens it in `$PAGER`/`less -R`, restoring raw mode, mouse
+reporting and the frame afterwards. Wired through
+`PromptInteractiveTurnOptions.onTranscript`; `chat.ts` supplies the history.
+
+Note: `/transcript` is 11 characters, so `getHelpCommandLines` pads to 13 now.
+
+## Session 2026-10-23 — the processing log gets rows (Cline-style)
+
+Follow-up to "the processing message is squeezed into one line".
+
+### What Cline does that we did not
+
+Cline renders the turn as a short live log in the transcript area: a phase
+header with a spinner and a clock, indented sub-lines for each tool call with a
+✓/✗ when it settles, and the model's current thought wrapped over several rows.
+The block collapses into the answer once text streams. We had one clipped row.
+
+### What changed
+
+- `renderChatActivityBlock` / `clearChatActivityBlock` / `getChatActivityRows` /
+  `ActivityEntry` / `ChatActivityBlock` in `ui/welcome.ts`.
+- The block starts at `layout.statusRow` — the same row the one-line status
+  uses — and runs to `composerTop - 2`, capped at `ACTIVITY_BLOCK_MAX_ROWS = 6`.
+  It only paints while `streamedAnswer` is empty, so it borrows the empty answer
+  area for free and returns it on the first token.
+- `chat.ts` keeps `activityHistory` (20 entries) and `activityBlockPainted`.
+  `tool_call_initiated` pushes `⠼ <verb> <target>`; `tool_result` settles the
+  entry to `✔` / `⊘` / `✖`. `paintActivity` picks block vs one-liner per frame.
+- `describeWait` (10s quiet → `Waiting on the model`, then every 20s with
+  `no output for 30s`); `chat.ts` tracks `lastEventAt` and `waitElapsedLabel`.
+- The settled row at turn end now passes `layout.statusRow` instead of the
+  default row 13, and a tool-only turn clears the block before settling.
+
+### Overflow guarantees
+
+Every row is `\x1b[2K`-cleared then written with `truncateToWidth` to
+`min(cardWidth, terminalWidth - startColumn + 1)` cells — the card has a
+70-column floor, the screen does not. `ChatLayout` gained `terminalWidth` for
+exactly this. The test asserts both the row bounds and the cell bounds at 9
+widths × 4 heights with CJK reasoning and a 20-entry log.
 
 ## Session 2026-10-23 — three field fixes (from a real weather-app run)
 
