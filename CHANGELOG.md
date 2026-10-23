@@ -11,10 +11,24 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                           └─► v0.4.33 (Approval boundary and width fixes)
                                 └─► v0.4.34 (No frozen CLI — Ctrl+C always escapes)
                                       └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect,
-                                                      jail canonicalization, chat/UI module split)
+                                                      jail canonicalization, chat/UI module split,
+                                                      live reasoning in the status row)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23 (live status row)
+**Feature: the status row shows what the agent is thinking**
+
+- **Type**: `feat` / `patch-level`
+- **Scope**: `apps/cli` chat status row
+- **Key Deliverables**:
+  - **Symptom**: with reasoning hidden, a running turn printed `Step 1/25` and then sat still until text streamed. Nothing on screen changed for the length of a long inference, so the CLI looked hung.
+  - **Phase label**: `describeActivity` collapses the engine's progress sentence into a short phase — `Step 2/25: Inferring next action with a-model...` becomes `Thinking`, and model discovery, retries and sub-task delegation each get their own name. The renderer also strips a leading `Step n/m:` so the counter no longer prints twice beside the same text.
+  - **Reasoning preview**: `reasoning_delta` keeps a bounded 240-character tail and repaints the row at most every 100ms. The row shows the newest words and truncates from the left, so the part still moving stays visible.
+  - **Phase progression**: `Thinking` → `Writing` → `Running <tool>` → `Reviewing`, with the reasoning tail cleared the moment the answer starts streaming, so the row never competes with the answer area.
+  - **Not a transcript**: the reasoning is never accumulated for display or written to the transcript — one dim line, clipped to the card width.
+  - **Coverage**: `welcome.test.ts` pins the phase mapping, the de-duplicated step counter, the left-truncating tail and that the painted row stays inside the card.
 
 ### [Unreleased] — 2026-10-23 (repeat-question fix)
 **Fix: a stopped task was replayed as if it were an answer**

@@ -1,11 +1,48 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-23 (repeat-question fix after 857d8fe)
+Updated: 2026-10-23 (live status row after cdcbe2a)
 Branch: master (tracking origin/master)
 Status: three reported glitches, the hardening pass, the jail canonicalization
-split, the module decomposition and the repeat-question fix are all committed
-and pushed. The tracked tree is clean; the remaining known items are cosmetic
-and listed per session.
+split, the module decomposition, the repeat-question fix and the live status row
+are all committed and pushed. The tracked tree is clean; the remaining known
+items are cosmetic and listed per session.
+
+## Session 2026-10-23 — live status row
+
+### Summary
+
+Reported: with reasoning hidden, a running turn showed `Step 1/25` and then sat
+still, which reads as a hung CLI rather than a thinking one.
+
+### Completed
+
+- **Phase label**: `describeActivity` (`ui/welcome.ts`) collapses the engine's
+  progress sentence into a short phase — `Inferring next action…` becomes
+  `Thinking`, plus `Selecting model`, `Retrying request`, `Delegating a
+  sub-task`. `renderChatThoughtTimeUpdate` also strips a leading `Step n/m:`
+  from the label, so the counter no longer prints twice.
+- **Reasoning preview**: `reasoning_delta` appends to a 240-character tail and
+  repaints at most every 100ms. `ChatActivity.reasoning` is only set during the
+  `Thinking` phase; the renderer keeps the newest words and truncates from the
+  left, then clips the finished line to the card width.
+- **Phase progression**: `Thinking` → `Writing` → `Running <tool>` →
+  `Reviewing`. The tail is cleared on the first `assistant_delta`, so the row
+  never competes with the answer area.
+- **Not a transcript**: reasoning is never accumulated for display and is not
+  written to the conversation.
+
+### Verification
+
+`tsc -b --force` clean. Full suite 70 files / 672 tests. The first full run
+timed out eight workers (`[vitest-worker]: Timeout calling "fetch" with
+["/@vite/env","ssr"]`, machine-load related, no assertion failures); all eight
+files were then run directly and pass.
+
+### Notes
+
+- The build counter in `VERSION` is hexadecimal and is stamped by
+  `.githooks/pre-commit` + `commit-msg`; a subject typed as `+2610240` is
+  rewritten to `+261023a`. Let the hooks stamp it rather than computing it.
 
 ## Session 2026-10-23 — repeat-question fix
 
