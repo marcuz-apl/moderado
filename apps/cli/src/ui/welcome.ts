@@ -88,6 +88,12 @@ export function getWelcomeCardWidth(width?: number): number {
   return Math.max(70, Math.min(terminalWidth - 2, 120));
 }
 
+/** Chat fills the available columns; the startup Welcome card keeps its own width. */
+export function getChatCardWidth(width?: number): number {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  return Math.max(1, terminalWidth - 2);
+}
+
 /** Left indent that centers a block of `blockWidth` visible columns on the terminal. */
 export function getWelcomeIndent(blockWidth: number, width?: number): number {
   const terminalWidth = width ?? (process.stdout.columns || 80);
@@ -112,14 +118,14 @@ function centerBlock(lines: string[], width?: number): string[] {
  */
 export function getChatAnswerArea(width?: number): { indent: number; cardWidth: number; textWidth: number; startColumn: number; wrapWidth: number } {
   const terminalWidth = width ?? (process.stdout.columns || 80);
-  const cardWidth = getWelcomeCardWidth(terminalWidth);
+  const cardWidth = getChatCardWidth(terminalWidth);
   const indent = getWelcomeIndent(cardWidth, terminalWidth);
-  const textWidth = Math.max(20, cardWidth - 2);
+  const textWidth = Math.max(1, cardWidth - 2);
   return { indent, cardWidth, textWidth, startColumn: indent + 1, wrapWidth: indent + textWidth };
 }
 
-/** Rows the logo header occupies: leading blank, five logo lines, blank, hint. */
-export const CHAT_HEADER_ROWS = MODERADO_ASCII_LOGO.length + 3;
+/** The chat header is a single compact brand row. */
+export const CHAT_HEADER_ROWS = 1;
 /** Rows the composer card occupies: blank surface, input, blank surface, mode, workspace. */
 export const CHAT_COMPOSER_ROWS = 5;
 
@@ -131,7 +137,7 @@ export interface ChatLayout {
   answerTop: number;
   answerRows: number;
   composerTop: number;
-  /** Real viewport width; the card has a floor, the terminal does not. */
+  /** Real viewport width used to size the chat card. */
   terminalWidth: number;
 }
 
@@ -147,7 +153,7 @@ export function getChatLayout(width?: number, height?: number, question = '', co
   // shows fewer sections (the composer always wins — see renderChatScreen).
   const terminalHeight = Math.max(2, height ?? (process.stdout.rows || 24));
   const area = getChatAnswerArea(terminalWidth);
-  const wrappedQuestion = wrapText(question, area.textWidth - 2).length;
+  const wrappedQuestion = wrapText(question, Math.max(1, area.textWidth - 2)).length;
   const questionTop = CHAT_HEADER_ROWS + 2;
   // Rows above the answer: header, blank, question rows, status, blank.
   const answerTopOffset = CHAT_HEADER_ROWS + 4;
@@ -292,7 +298,9 @@ export function renderQueuedCommandsBox(commands: readonly string[], width: numb
 }
 
 export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
-  const width = getWelcomeCardWidth(options.width);
+  const width = options.chatQuestion === undefined
+    ? getWelcomeCardWidth(options.width)
+    : getChatCardWidth(options.width);
   const indent = ' '.repeat(getWelcomeIndent(width, options.width));
 
   const displayInput =
@@ -323,19 +331,27 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const processInfo = options.chatQuestion ? `${processPrefix}${processSuffix}` : details.slice(0, modeSpace);
   const left4 = processInfo ? `\x1b[38;5;244m${processInfo}\x1b[0m` : '';
 
-  const right4 =
-    options.mode === 'Plan'
+  const compactChatFooter = options.chatQuestion !== undefined && width < 72;
+  const right4Raw = compactChatFooter
+    ? options.mode === 'Plan' ? '[Plan]' : '[Execute]'
+    : options.mode === 'Plan' ? '[Plan] / Execute (Tab)' : 'Plan / [Execute] (Tab)';
+  const compactMode = right4Raw.length > width ? (options.mode === 'Plan' ? 'P' : 'E') : right4Raw;
+  const right4 = compactChatFooter
+    ? `\x1b[1;38;5;75m${compactMode}\x1b[0m`
+    : options.mode === 'Plan'
       ? '\x1b[1;38;5;75m[Plan]\x1b[0m / Execute (Tab)'
       : 'Plan / \x1b[1;38;5;75m[Execute]\x1b[0m (Tab)';
-  const right4Raw = options.mode === 'Plan' ? '[Plan] / Execute (Tab)' : 'Plan / [Execute] (Tab)';
-
-  const spaces4Count = Math.max(1, width - visibleLen(left4) - right4Raw.length);
-  const line4 = left4 + ' '.repeat(spaces4Count) + right4;
+  const right4Visible = compactChatFooter ? compactMode : right4Raw;
+  const left4Fit = compactChatFooter
+    ? truncateToWidth(processInfo, Math.max(0, width - right4Visible.length - 1))
+    : left4;
+  const spaces4Count = Math.max(0, width - visibleLen(left4Fit) - right4Visible.length);
+  const line4 = left4Fit + ' '.repeat(spaces4Count) + right4;
 
   // Line 5: Working directory (left) ... provider, model, and Auto-approve (right)
-  const approvalLabelRaw = options.autoApprove
-    ? 'Auto-approve enabled (Shift+Tab)'
-    : 'Auto-approve off (Shift+Tab)';
+  const approvalLabelRaw = compactChatFooter
+    ? width < 20 ? (options.autoApprove ? 'On' : 'Off') : (options.autoApprove ? 'Auto-approve on' : 'Auto-approve off')
+    : options.autoApprove ? 'Auto-approve enabled (Shift+Tab)' : 'Auto-approve off (Shift+Tab)';
   const modelSpace = Math.max(8, width - approvalLabelRaw.length - 10);
   const provider = options.provider?.trim() ?? '';
   const providerSpace = Math.max(1, modelSpace - 6);
@@ -358,7 +374,22 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     : '\x1b[38;5;242mAuto-approve off (Shift+Tab)\x1b[0m';
   const modelLabel = `\x1b[38;5;180m${modelText}\x1b[0m`;
   const spaces5Count = Math.max(1, width - shortWs.length - modelText.length - approvalLabelRaw.length - 1);
-  const line5 = left5 + ' '.repeat(spaces5Count) + modelLabel + ' ' + approvalLabel;
+  const line5 = compactChatFooter
+    ? (() => {
+      const fieldBudget = Math.max(0, width - approvalLabelRaw.length - 2);
+      const workspaceBudget = Math.ceil(fieldBudget / 2);
+      const modelBudget = fieldBudget - workspaceBudget;
+      const workspaceText = sliceTailToWidth(options.workspace, workspaceBudget);
+      const modelField = sliceTailToWidth(modelText, modelBudget);
+      if (fieldBudget === 0) return truncateToWidth(approvalLabel, width);
+      const fields = [
+        workspaceText ? `\x1b[38;5;245m${workspaceText}\x1b[0m` : '',
+        modelField ? `\x1b[38;5;180m${modelField}\x1b[0m` : '',
+        `\x1b[38;5;242m${approvalLabelRaw}\x1b[0m`,
+      ].filter(Boolean);
+      return fields.join(' ');
+    })()
+    : left5 + ' '.repeat(spaces5Count) + modelLabel + ' ' + approvalLabel;
 
   const cardLines: string[] = [];
   const queuedBox = renderQueuedCommandsBox(options.queuedCommands ?? [], width);
@@ -501,6 +532,13 @@ export function renderModeradoHeader(width?: number): string {
   ].join('\n');
 }
 
+/** Compact wordmark used after the welcome screen transitions into chat. */
+export function renderChatHeader(width?: number): string {
+  const terminalWidth = width ?? (process.stdout.columns || 80);
+  const label = 'MODERADO'.slice(0, Math.max(1, terminalWidth));
+  return ' '.repeat(Math.max(0, terminalWidth - label.length)) + `\x1b[1;38;5;75m${label}\x1b[0m`;
+}
+
 /** Word-wrap plain text to `maxWidth` visible columns, hard-breaking long words. */
 export function wrapText(text: string, maxWidth: number): string[] {
   const out: string[] = [];
@@ -561,11 +599,11 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   const area = layout.area;
   const indent = ' '.repeat(area.indent);
   const lines: string[] = [];
-  lines.push(...renderModeradoHeader(terminalWidth).split('\n'));
+  lines.push(renderChatHeader(terminalWidth));
   lines.push('');
   // Row 1: the user's question, wrapped onto the same columns as the composer card.
   const questionMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
-  const questionLines = wrapText(question, area.textWidth - 2);
+  const questionLines = wrapText(question, Math.max(1, area.textWidth - 2));
   const visibleQuestion = questionLines.slice(0, layout.questionRows);
   for (const [index, questionLine] of visibleQuestion.entries()) {
     const clipped = index === layout.questionRows - 1 && questionLines.length > layout.questionRows
@@ -636,11 +674,11 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
  * queued-commands box grows the card; the relative form is the legacy path.
  */
 export function renderChatComposerCursor(options: Pick<WelcomeLayoutOptions, 'width'>, inputLength: number, composerTop?: number): string {
-  const width = getWelcomeCardWidth(options.width);
+  const width = getChatCardWidth(options.width);
   const indent = getWelcomeIndent(width, options.width);
-  const caretColumn = indent + 3 + Math.min(inputLength, width - 3);
+  const caretColumn = indent + 3 + Math.min(inputLength, Math.max(0, width - 3));
   if (composerTop !== undefined) return `\x1b[1 q\x1b[?25h\x1b[${composerTop + 1};${caretColumn}H`;
-  return `\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${indent + 2 + Math.min(inputLength, width - 3)}C`;
+  return `\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${indent + 2 + Math.min(inputLength, Math.max(0, width - 3))}C`;
 }
 
 export function navigateQuestionHistory(history: string[], direction: -1 | 1, index: number, draft: string): { input: string; index: number; draft: string } {

@@ -69,6 +69,13 @@ export interface ProviderPresetMeta {
   /** Local-only runtimes (Ollama, LM Studio) never require a key. */
   requiresApiKey: boolean;
   /**
+   * True when the models are served by a runtime on this machine rather than a
+   * hosted endpoint. Local catalogs publish no `pricing` and no `access` tier,
+   * so every entry is free by construction — which also means a free/paid split
+   * of the catalog has an empty paid side and an unprovable free side.
+   */
+  local?: boolean;
+  /**
    * Exact model ids this preset guarantees cost nothing, for aliases the
    * provider's own catalog cannot prove. Matched by exact equality only — a
    * substring or id-shape match would free an entire aggregator catalog.
@@ -188,6 +195,7 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     kind: 'openai-compatible',
     baseUrl: 'http://127.0.0.1:11434/v1',
     requiresApiKey: false,
+    local: true,
   },
   {
     id: 'lm-studio',
@@ -196,6 +204,7 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
     kind: 'openai-compatible',
     baseUrl: 'http://127.0.0.1:1234/v1',
     requiresApiKey: false,
+    local: true,
   },
 ];
 
@@ -215,6 +224,18 @@ export function isLoopbackBaseUrl(baseUrl: string): boolean {
 export function findProviderPreset(id: string): ProviderPresetMeta | undefined {
   const canonicalId = id === 'moderado-cloud' ? 'moderado' : id;
   return CONNECT_PROVIDER_PRESET_META.find((preset) => preset.id === canonicalId);
+}
+
+/**
+ * Whether a connection id names a runtime that serves models from this machine.
+ *
+ * Resolved by connection id like every other preset property, so a hosted
+ * provider can never inherit local treatment, and an unknown id is simply not
+ * local. Presentation code uses this to label catalog rows; selection code uses
+ * it to decide that a free/paid split of the catalog is meaningless.
+ */
+export function isLocalProvider(connectionId: string | undefined): boolean {
+  return connectionId ? findProviderPreset(connectionId)?.local === true : false;
 }
 
 /**

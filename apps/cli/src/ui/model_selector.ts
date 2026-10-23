@@ -8,7 +8,7 @@ import {
   selectConfirmPopup,
   type PopupListItem,
 } from './popup.js';
-import { loadConfig, saveConfig, resolveApiKey, freeModelPolicyFor, type ProviderFreePolicy } from '../config.js';
+import { loadConfig, saveConfig, resolveApiKey, freeModelPolicyFor, isLocalProvider, type ProviderFreePolicy } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
 import { ProviderError } from '@moderado/contracts';
 
@@ -83,16 +83,20 @@ export function buildCompatibleModelMenuItems(
   models: CompatibleModelEntry[],
   currentModel?: string,
   freePolicy?: ProviderFreePolicy,
-  options: { listModelsDirectly?: boolean; autoLabel?: string; catalogError?: string; noAvailableModels?: boolean } = {}
+  options: { listModelsDirectly?: boolean; autoLabel?: string; catalogError?: string; noAvailableModels?: boolean; local?: boolean } = {}
 ): PopupListItem[] {
   const items: PopupListItem[] = [];
   if (options.listModelsDirectly) {
-    items.push({
-      label: options.autoLabel ?? 'Auto',
-      value: 'model:auto',
-      tag: 'Gateway',
-      description: 'Let the Gateway choose a configured route.',
-    });
+    // The Gateway is the only provider with a routing model of its own; a local
+    // runtime or a plain OpenAI-compatible endpoint has no `auto` to offer.
+    if (options.autoLabel) {
+      items.push({
+        label: options.autoLabel,
+        value: 'model:auto',
+        tag: 'Gateway',
+        description: 'Let the Gateway choose a configured route.',
+      });
+    }
     if (options.catalogError) {
       items.push({ label: 'Model list unavailable', value: 'catalog-status', tag: 'Check connection', description: options.catalogError });
     } else if (options.noAvailableModels) {
@@ -105,7 +109,7 @@ export function buildCompatibleModelMenuItems(
     }
     items.push(...models
       .filter((model) => model.id !== 'auto')
-      .map((model) => ({ ...compatibleModelPopupItem(model, providerName, freePolicy), value: `model:${model.id}` })));
+      .map((model) => ({ ...compatibleModelPopupItem(model, providerName, freePolicy, options.local), value: `model:${model.id}` })));
   } else if (freePolicy?.freeCatalog && models.length > 0 && models.every(model => isFreeCompatibleModel(model, freePolicy))) {
     // A provider that declares its whole catalog free (Agnes AI) has nothing to
     // filter on, so it offers one entry listing everything rather than a
@@ -151,7 +155,18 @@ function isFreeCompatibleModel(model: CompatibleModelEntry, policy?: ProviderFre
   return isFreeModelOption(model, { modelId: model.id, accessTier: 'unknown', toolSupport: 'unknown', source: 'heuristic' }, policy);
 }
 
-function compatibleModelPopupItem(model: CompatibleModelEntry, providerName: string, policy?: ProviderFreePolicy): PopupListItem {
+function compatibleModelPopupItem(model: CompatibleModelEntry, providerName: string, policy?: ProviderFreePolicy, local = false): PopupListItem {
+  // A local catalog reports no `pricing` and no `access`, so the generic
+  // "price unknown" row would describe every model on the machine. Local is
+  // the honest label: the model runs here and costs nothing.
+  if (local) {
+    return {
+      label: model.id,
+      value: model.id,
+      tag: 'Local',
+      description: `Served locally by ${providerName} · no key, no cost.`,
+    };
+  }
   const isFree = isFreeCompatibleModel(model, policy);
   const price = model.pricing?.prompt;
   return {
@@ -171,6 +186,7 @@ export async function selectCompatibleModelOverlay(
 ): Promise<string | undefined> {
   const { apiKey, baseUrl, providerId, providerName, currentModel, signal, drawFrame } = options;
   const isModerado = providerId === 'moderado' || providerId === 'moderado-cloud';
+  const isLocal = isLocalProvider(providerId);
   // Whether the provider is entirely free is a declared property of the
   // preset, never a provider id hardcoded at the call site.
   const freePolicy = freeModelPolicyFor(providerId);
@@ -187,21 +203,28 @@ export async function selectCompatibleModelOverlay(
     // Capture the diagnostic for every provider, not just Moderado: an Ollama or
     // LM Studio instance that is running but returns a bad response, or one that
     // is not running at all, should still tell the user what happened instead of
-    // hiding behind "Enter a model ID".
+    // hiding behind "Enter a model ID". Naming the provider keeps the message
+    // readable when the underlying error is a bare network failure.
     discoveryError = error instanceof ProviderError
-      ? `${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
-      : `Could not load the model list: ${error instanceof Error ? error.message : String(error)}`;
+      ? `Could not load the ${providerName} model list: ${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
+      : `Could not load the ${providerName} model list: ${error instanceof Error ? error.message : String(error)}`;
   }
 
   const cloudRoutes = models.filter((model) => model.id !== 'auto');
-  const menuOptions = isModerado
+  const freeCount = models.filter((model) => isFreeCompatibleModel(model, freePolicy)).length;
+  // A free/paid split only means something when at least one side is non-empty.
+  // Local runtimes publish no pricing, so nothing is ever classified free and
+  // the split degrades into a menu with no models in it — the discovered
+  // catalog has to be listed directly instead. The same fallback covers any
+  // other provider whose catalog turns out to have no free endpoints at all.
+  const listModelsDirectly = isModerado || isLocal || (models.length > 0 && freeCount === 0);
+  const menuOptions = listModelsDirectly
     ? {
       listModelsDirectly: true,
-      autoLabel: 'auto',
-      ...(discoveryError ? { catalogError: discoveryError } : cloudRoutes.length === 0 ? { noAvailableModels: true } : {}),
+      local: isLocal,
+      ...(isModerado ? { autoLabel: 'auto' } : {}),
+      ...(discoveryError ? { catalogError: discoveryError } : isModerado && cloudRoutes.length === 0 ? { noAvailableModels: true } : {}),
     }
-    : discoveryError
-    ? { catalogError: discoveryError }
     : undefined;
 
   // For non-Moderado providers with a discovery error, inject the diagnostic
@@ -220,7 +243,7 @@ export async function selectCompatibleModelOverlay(
   const picked = await selectListPopup(
     isModerado || !models.some((model) => isFreeCompatibleModel(model, freePolicy))
       ? `${providerName} Models` : `${providerName} Free Models`,
-    buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy, menuOptions),
+    items,
     { drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close' }
   );
   if (picked === null || picked === 'keep' || picked === 'cancel' || picked === 'catalog-status') return currentModel;
@@ -255,10 +278,14 @@ async function askCompatibleModelId(
   return new Promise((resolve) => {
     const finish = (modelId: string | undefined): void => {
       stdin.removeListener('keypress', onKeypress);
+      process.stdout.removeListener('resize', onResize);
       signal?.removeEventListener('abort', onAbort);
       resolve(modelId);
     };
     const onAbort = (): void => finish(undefined);
+    // A resize repaints the background and clears this box; redraw it at the
+    // new geometry so the prompt does not disappear mid-entry.
+    const onResize = (): void => redraw();
     const onKeypress = (str: string, key: { name?: string; ctrl?: boolean; meta?: boolean } | undefined): void => {
       if (key?.name === 'escape' || (key?.ctrl && key.name === 'c')) return finish(undefined);
       if (key?.name === 'return' || key?.name === 'enter') return finish(value.trim() || undefined);

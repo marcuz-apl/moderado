@@ -119,7 +119,10 @@ describe('Moderado model picker discovery', () => {
 
   it('shows a diagnostic when an Ollama instance is not running', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:99999'));
-    pickerState.selected = 'catalog-status'; // Select the diagnostic item
+    // The mocked picker records its items before returning, so an early exit on
+    // 'cancel' still exercises the menu construction. 'custom' would fall
+    // through to the free-text prompt and block on stdin.
+    pickerState.selected = 'cancel';
     const ollamaOptions = {
       apiKey: undefined,
       baseUrl: 'http://127.0.0.1:99999/v1',
@@ -142,16 +145,13 @@ describe('Moderado model picker discovery', () => {
   });
 
   it('shows a diagnostic when an LM Studio instance returns a 503', async () => {
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ error: { message: 'server overloaded' } }), {
-        status: 503,
-        headers: { 'content-type': 'application/json' },
-      })
+    const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(
+      new Error('Network Error')
     );
-    pickerState.selected = 'catalog-status'; // Select the diagnostic item
+    pickerState.selected = 'cancel';
     const lmStudioOptions = {
       apiKey: undefined,
-      baseUrl: 'http://127.0.0.1:1234/v1',
+      baseUrl: 'http://127.0.0.1:19999/v1', // Wrong port ensures network error
       providerId: 'lm-studio',
       providerName: 'LM Studio',
       currentModel: undefined,
@@ -166,6 +166,91 @@ describe('Moderado model picker discovery', () => {
         label: 'Model list unavailable',
         description: expect.stringContaining('LM Studio'),
       }),
+    ]));
+  });
+});
+
+describe('local provider model picker', () => {
+  // A local runtime publishes no `pricing` and no `access` tier, so nothing in
+  // its catalog is ever classified free. The /model menu used to offer only a
+  // free/paid split, which left it with no models in it at all — discovery
+  // appeared to do nothing for Ollama and LM Studio.
+  let server: ReturnType<typeof createServer>;
+  let baseUrl: string;
+
+  beforeEach(async () => {
+    pickerState.selected = 'cancel';
+    pickerState.items = [];
+    server = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        data: [
+          { id: 'gemma4:31b-cloud', object: 'model', owned_by: 'library' },
+          { id: 'deepseek-v4-flash:cloud', object: 'model', owned_by: 'library' },
+        ],
+      }));
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('Mock local runtime failed to start.');
+    baseUrl = `http://127.0.0.1:${address.port}/v1`;
+  });
+
+  afterEach(async () => {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    vi.restoreAllMocks();
+  });
+
+  const localOptions = (providerId: string, providerName: string, currentModel?: string) => ({
+    apiKey: undefined,
+    baseUrl,
+    providerId,
+    providerName,
+    currentModel,
+    drawFrame: vi.fn(),
+  });
+
+  it('lists every discovered model for Ollama instead of an empty free/paid split', async () => {
+    await selectCompatibleModelOverlay(localOptions('ollama', 'Ollama', 'gemma4:31b-cloud'));
+
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'gemma4:31b-cloud', value: 'model:gemma4:31b-cloud', tag: 'Local' }),
+      expect.objectContaining({ label: 'deepseek-v4-flash:cloud', value: 'model:deepseek-v4-flash:cloud', tag: 'Local' }),
+    ]));
+    // The Gateway routing row and the free-only browse row are both meaningless
+    // for a runtime that serves models from this machine.
+    expect(pickerState.items.some((item) => item.value === 'model:auto')).toBe(false);
+    expect(pickerState.items.some((item) => item.value === 'free' || item.value === 'browse')).toBe(false);
+    // The manual escape hatches stay available.
+    expect(pickerState.items.some((item) => item.value === 'custom')).toBe(true);
+    expect(pickerState.items.some((item) => item.value === 'keep')).toBe(true);
+  });
+
+  it('lists every discovered model for LM Studio', async () => {
+    await selectCompatibleModelOverlay(localOptions('lm-studio', 'LM Studio'));
+
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'gemma4:31b-cloud', value: 'model:gemma4:31b-cloud', tag: 'Local' }),
+      expect.objectContaining({ label: 'deepseek-v4-flash:cloud', value: 'model:deepseek-v4-flash:cloud', tag: 'Local' }),
+    ]));
+  });
+
+  it('returns the exact selected local model ID', async () => {
+    pickerState.selected = 'model:deepseek-v4-flash:cloud';
+
+    await expect(selectCompatibleModelOverlay(localOptions('ollama', 'Ollama')))
+      .resolves.toBe('deepseek-v4-flash:cloud');
+  });
+
+  it('still lists a hosted catalog directly when nothing in it is classified free', async () => {
+    await selectCompatibleModelOverlay({
+      ...localOptions('some-custom-endpoint', 'Some Endpoint'),
+      providerId: 'some-custom-endpoint',
+    });
+
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'gemma4:31b-cloud', value: 'model:gemma4:31b-cloud' }),
+      expect.objectContaining({ label: 'deepseek-v4-flash:cloud', value: 'model:deepseek-v4-flash:cloud' }),
     ]));
   });
 });

@@ -255,10 +255,16 @@ export async function selectListPopup(
       if (done) return;
       done = true;
       stdin.removeListener('keypress', onKeypress);
+      stdout.removeListener('resize', onResize);
       options.signal?.removeEventListener('abort', onAbort);
       resolve(value);
     };
     const onAbort = (): void => finish(null);
+    // Dragging the terminal corner changes the geometry this box was measured
+    // against. Without a repaint the popup keeps its old width and centering,
+    // and the composer's own resize repaint clears it off screen entirely until
+    // the next keypress — the window looks like it vanished.
+    const onResize = (): void => renderPopup();
 
     if (options.signal?.aborted) {
       resolve(null);
@@ -323,6 +329,7 @@ export async function selectListPopup(
     };
 
     stdin.on('keypress', onKeypress);
+    stdout.on('resize', onResize);
     renderPopup();
   });
 }

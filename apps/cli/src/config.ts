@@ -6,7 +6,7 @@ import { McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
 import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, resolveModeradoBaseUrl } from '@moderado/providers';
 import type { ConnectProviderPresetId, ConnectProvidersConfig, ProviderConnectionKind } from '@moderado/providers';
 import { credentialReference, CredentialStore, resolveCredential } from './credentials.js';
-export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLoopbackBaseUrl, MODERADO_BASE_URL, MODERADO_DEVELOPMENT_BASE_URL, MODERADO_PRODUCTION_BASE_URL, MODERADO_CLOUD_BASE_URL, MODERADO_CLOUD_DEVELOPMENT_BASE_URL, MODERADO_CLOUD_PRODUCTION_BASE_URL, resolveModeradoBaseUrl, resolveModeradoCloudBaseUrl } from '@moderado/providers';
+export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLocalProvider, isLoopbackBaseUrl, MODERADO_BASE_URL, MODERADO_DEVELOPMENT_BASE_URL, MODERADO_PRODUCTION_BASE_URL, MODERADO_CLOUD_BASE_URL, MODERADO_CLOUD_DEVELOPMENT_BASE_URL, MODERADO_CLOUD_PRODUCTION_BASE_URL, resolveModeradoBaseUrl, resolveModeradoCloudBaseUrl } from '@moderado/providers';
 export type { ConnectProviderPresetId, ConnectProvidersConfig, CustomConnectProvider, ProviderConnectionKind, ProviderPresetMeta, ProviderFreePolicy } from '@moderado/providers';
 
 export interface ModeradoConfig {
@@ -52,6 +52,17 @@ function canonicalProviderId(id: string): string {
 export function getConfigPath(customHome?: string): string {
   const home = customHome || os.homedir();
   return path.join(home, CONFIG_DIR_NAME, CONFIG_FILE_NAME);
+}
+
+/** Preserve settings owned by other Moderado apps when the CLI updates its fields. */
+function readConfigDocument(customHome?: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(getConfigPath(customHome), 'utf8'));
+    const result = z.record(z.string(), z.unknown()).safeParse(parsed);
+    return result.success ? result.data : {};
+  } catch {
+    return {};
+  }
 }
 
 export function loadConfig(customHome?: string): ModeradoConfig {
@@ -164,7 +175,8 @@ export function saveConfig(config: ModeradoConfig, customHome?: string): void {
   }
 
   const existing = loadConfig(customHome);
-  const merged: ModeradoConfig = {
+  const merged = {
+    ...readConfigDocument(customHome),
     ...existing,
     ...config,
   };
@@ -284,7 +296,11 @@ export async function resolveConnectionCredential(connection: ProviderConnection
 /** Move legacy plaintext provider keys into a credential store only when every write succeeds. */
 export async function migrateLegacyCredentials(store: CredentialStore, customHome?: string): Promise<number> {
   const config = loadConfig(customHome);
-  const next: ModeradoConfig = { ...config, connections: { ...config.connections } };
+  const next: ModeradoConfig & Record<string, unknown> = {
+    ...readConfigDocument(customHome),
+    ...config,
+    connections: { ...config.connections },
+  };
   const pending: Array<{ id: string; secret: string }> = [];
   if (config.apiKey?.trim()) pending.push({ id: 'nvidia-nim', secret: config.apiKey.trim() });
   for (const connection of Object.values(config.connections ?? {})) {

@@ -17,10 +17,26 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                                                        answer scrollback, /transcript,
                                                        contained approval dialog,
                                                        multi-line run log,
-                                                       one scrollable turn transcript)
+                                                       one scrollable turn transcript,
+                                                       /model lists local-provider catalogs,
+                                                       popups repaint on terminal resize)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23 (`/model` lists the local-provider catalog; popups survive a resize)
+
+**Fix: `/model` offered no models at all for Ollama and LM Studio**
+
+- **Type**: `fix` / `patch-level`
+- **Scope**: `apps/cli` model selector, `packages/providers` presets, popup layer
+- **Key Deliverables**:
+  - **Discovery worked; the menu threw the result away.** `selectCompatibleModelOverlay` fetched the catalog correctly for both local runtimes and then handed it to `buildCompatibleModelMenuItems`, whose only non-Gateway branch is a *free/paid split*. A local runtime publishes no `pricing` and no `access`, so nothing was ever classified free, `freeCount` was `0`, and the split contributed zero rows. The user got "Enter a model ID", "Keep Current Model" and "Cancel" — the discovered models were unreachable, which reads exactly like "discovery does nothing with `/model`". Connecting worked because `provider_connect.ts` lists the fetched ids directly; `/model` never did.
+  - **The split now falls back to a direct listing.** `listModelsDirectly` is set for the Gateway, for a provider the preset marks `local`, and for *any* provider whose catalog turns out to have no free endpoints at all — so the empty-side case can no longer hide a whole catalog. `ProviderPresetMeta` gains a declared `local` flag (Ollama, LM Studio) resolved through a new `isLocalProvider` accessor, keeping "is this local" a property of the preset rather than an id check at the call site.
+  - **Local rows are labelled honestly.** `compatibleModelPopupItem` returns `Local` / "Served locally by {provider} · no key, no cost." instead of the meaningless "Price unknown" every entry would otherwise carry. The Gateway `auto` row is now emitted only when an `autoLabel` is supplied, so a local runtime is no longer offered Gateway routing.
+  - **The failure diagnostic names the provider.** `Could not load the {provider} model list: …` replaces a bare network message, so an unreachable Ollama says *Ollama* rather than `connect ECONNREFUSED 127.0.0.1:11434`.
+  - **Popups repaint on terminal resize.** `selectListPopup` had no resize listener: dragging the window corner left the box at its old width and centring, and the composer's own resize repaint cleared it off screen entirely until the next keypress — the popup looked like it had vanished. It now re-renders at the new geometry and detaches the listener on exit. The `/help` overlay and the manual model-ID prompt do the same.
+  - **Coverage**: `model_selector_cloud.test.ts` gains four regression tests (Ollama lists every discovered model with no `auto`/free-browse row; LM Studio likewise; the exact selected id is returned; a hosted all-unfree catalog still lists directly) and the two local-provider diagnostic tests no longer hang on stdin. Full suite green.
 
 ### [Unreleased] — 2026-10-23 (the turn transcript is one scrollable list)
 **Feature: the activity log no longer disappears when the answer starts streaming**

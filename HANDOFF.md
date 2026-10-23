@@ -1,11 +1,60 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-23 (summary panel, answer scrollback, /transcript)
-Branch: master (tracking origin/master)
-Status: everything through the three field fixes is committed (`2a6b001`,
-`v0.4.34+261023c`). **Two change sets are in the working tree, uncommitted**:
-the multi-row activity log + wait notice, and the summary panel + scrollback +
-`/transcript`. Build clean, affected suites green.
+Updated: 2026-10-23 UTC (feature version history rewrite)
+Branch: master, HEAD and origin/master `db2c728` (`v0.4.43+261023j`), synced
+after the authorized history rewrite and same-commit versioning fix.
+Backup: `backup/pre-feature-version-history-rewrite-20261023` preserves old HEAD
+`20c5b74`. The working tree has the restored uncommitted work listed below.
+
+Working tree: `CHANGELOG.md`, `apps/cli/src/config.ts`, CLI UI files
+(`composer.ts`, `model_selector.ts`, `popup.ts`, `terminal_approval.ts`,
+`welcome.ts`), `apps/cli/tests/model_selector_cloud.test.ts`,
+`packages/providers/src/presets.ts`, this handoff, and two cross-client config
+design documents. No test suites were run for the versioning work.
+
+## Active task — feature version history
+
+User authorized rewriting published history since `v0.4.34+2610235`.
+`+2610235` is now `feat(cli)` at `v0.4.35`; each later `feat` in the rewritten
+range advances `p`, ending at `v0.4.42+261023i`. Existing commit bodies,
+authors, dates, and non-version file trees were preserved. The original history
+is recoverable from the backup branch. The automatic feature-bump hook was
+committed and pushed as `db2c728` (`v0.4.43+261023j feat(versioning)`).
+
+## Session 2026-10-23 — patch bump on every feature
+
+- Changed the `+2610235` subject from `refactor(cli)` to `feat(cli)` and set it
+  to `v0.4.35+2610235`.
+- Rewrote later feature commit snapshots to advance the patch, ending at
+  `v0.4.42+261023i`; updated CLI package and lockfile versions in each snapshot.
+- Force-pushed rewritten `master` with `--force-with-lease`; local and remote
+  HEADs match. The previous published HEAD remains at
+  `backup/pre-feature-version-history-rewrite-20261023`.
+- Added hooks so future `feat:` commits bump the patch and sync package versions.
+  The same-commit amend now keeps the subject, VERSION, package manifest, and
+  lockfile aligned at `.43`. Syntax checks and `git diff --check` passed; no tests ran.
+
+## Active task — shared config coordination (not yet implemented)
+
+- User approved the shared lock/config protocol and approved the spec and plan.
+- Spec: `docs/superpowers/specs/2026-10-23-cross-client-config-coordination-design.md`.
+- Plan: `docs/superpowers/plans/2026-10-23-cross-client-config-coordination.md`.
+- CLI/IDE use `~/.moderado/config.json`; Desktop still stores global defaults in
+  `provider.json`. No concurrency implementation or tests have been run.
+- IDE and Desktop repositories are outside this repo's writable root; changes
+  there require filesystem escalation.
+
+## Active task — terminal resize reflow
+
+- User wants the CLI header, question bar, answer workspace, and footer to resize
+  with the terminal edge/corner drag.
+- User approved chat-only responsive sizing; Welcome startup logo/card remains
+  unchanged. Chat panels now fill available columns, footer fields compact at
+  narrow widths, and cursor placement follows the resized chat card.
+- Existing resize listeners redraw the active composer and streaming chat.
+- `npm run typecheck` and `git diff --check` passed. No tests were run.
+
+Next action: continue the approved cross-client config coordination plan.
 
 ## Session 2026-10-23 — the approval dialog, contained
 

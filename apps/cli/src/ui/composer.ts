@@ -16,6 +16,7 @@ import {
   exitCleanly,
   getChatComposerRows,
   getChatLayout,
+  getChatCardWidth,
   getMatchingCommands,
   getWelcomeBottomPadding,
   getWelcomeCardWidth,
@@ -29,6 +30,24 @@ import {
   buildChatTranscriptRows,
 } from './welcome.js';
 import type { ChatActivityBlock, WelcomeLayoutOptions } from './welcome.js';
+
+async function animateChatWordmark(stdout: NodeJS.WriteStream): Promise<void> {
+  const wordmark = 'MODERADO';
+  const frames = 6;
+  for (let frame = 0; frame <= frames; frame += 1) {
+    const columns = stdout.columns || 80;
+    const rows = stdout.rows || 24;
+    const width = Math.min(columns, wordmark.length);
+    const startColumn = Math.max(1, Math.floor((columns - width) / 2) + 1);
+    const endColumn = Math.max(1, columns - width + 1);
+    const progress = frame / frames;
+    const column = Math.round(startColumn + (endColumn - startColumn) * progress);
+    const startRow = Math.max(1, Math.floor(rows / 2) - 4);
+    const row = Math.round(startRow + (1 - startRow) * progress);
+    stdout.write(`\x1b[H\x1b[J\x1b[${row};${column}H\x1b[1;38;5;75m${wordmark.slice(0, width)}\x1b[0m`);
+    if (frame < frames) await new Promise<void>((resolve) => setTimeout(resolve, 30));
+  }
+}
 
 
 /**
@@ -244,7 +263,10 @@ export async function promptInteractiveTurn(
   /** Screen row and 1-based column of the composer's first text cell. */
   const getComposerAnchor = (): { row: number; column: number } => {
     const options = getOptions();
-    const column = getWelcomeIndent(getWelcomeCardWidth()) + 3;
+    const cardWidth = options.chatQuestion !== undefined
+      ? getChatCardWidth(stdout.columns)
+      : getWelcomeCardWidth(stdout.columns);
+    const column = getWelcomeIndent(cardWidth, stdout.columns) + 3;
     if (options.chatQuestion !== undefined) {
       // Chat frames place the composer at a computed row. Measure the card that
       // is actually painted — a queued-commands or mention box makes it taller —
@@ -264,7 +286,10 @@ export async function promptInteractiveTurn(
    */
   const positionCursorOnInput = () => {
     const { row, column } = getComposerAnchor();
-    const { caretColumn } = composerInputWindow(input, caret, getWelcomeCardWidth());
+    const cardWidth = getOptions().chatQuestion !== undefined
+      ? getChatCardWidth(stdout.columns)
+      : getWelcomeCardWidth(stdout.columns);
+    const { caretColumn } = composerInputWindow(input, caret, cardWidth);
     stdout.write(`\x1b[1 q\x1b[?25h\x1b[${row};${column + caretColumn}H`);
   };
 
@@ -434,8 +459,15 @@ export async function promptInteractiveTurn(
 
           // Paint: full welcome TUI (background) + help box on top
           const helpLines = renderHelpPopupBox(options.version ?? 'v0.1', options.workspace);
-          stdout.write('\x1b[H\x1b[J');
-          stdout.write(renderWelcomePopupLayer(getOptions(), helpLines, stdout.columns, stdout.rows));
+          const paintHelp = (): void => {
+            stdout.write('\x1b[H\x1b[J');
+            stdout.write(renderWelcomePopupLayer(getOptions(), helpLines, stdout.columns, stdout.rows));
+          };
+          // The composer's own resize repaint clears the box off screen, so the
+          // overlay has to repaint itself at the new geometry.
+          const onHelpResize = (): void => paintHelp();
+          stdout.on('resize', onHelpResize);
+          paintHelp();
 
           // Wait for Esc / Enter / q to dismiss
           await new Promise<void>((dismissResolve) => {
@@ -446,6 +478,7 @@ export async function promptInteractiveTurn(
                 (k && k.ctrl && k.name === 'c')
               ) {
                 stdin.removeListener('keypress', onDismiss);
+                stdout.removeListener('resize', onHelpResize);
                 dismissResolve();
               }
             };
@@ -799,8 +832,10 @@ export async function promptInteractiveTurn(
             return;
           }
           const trimmed = input.trim();
+          const animateFirstChat = options.chatQuestion === undefined && trimmed.length > 0;
           cleanup();
           if (options.signal) options.signal.removeEventListener('abort', onAbort);
+          if (animateFirstChat) await animateChatWordmark(stdout as NodeJS.WriteStream);
           const moveDown = 4 + getExtraLines();
           stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
           resolve({ text: trimmed, mode: currentMode, autoApprove: currentAutoApprove });

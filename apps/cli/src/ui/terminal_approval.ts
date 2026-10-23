@@ -65,99 +65,100 @@ export class TerminalApprovalHandler implements IApprovalHandler {
       return { requestId: request.requestId, status: 'approved' };
     }
 
-    const lines: string[] = [];
+    const paintApproval = (): void => {
+      const lines: string[] = [];
 
-    if (request.exactPayload.targetFile) {
-      lines.push(`\x1b[38;5;245mTarget File\x1b[0m   \x1b[38;5;253m${request.exactPayload.targetFile}\x1b[0m`);
-    }
-
-    if (request.exactPayload.command) {
-      lines.push(`\x1b[38;5;245mCommand\x1b[0m       \x1b[1;38;5;75m${request.exactPayload.command.join(' ')}\x1b[0m`);
-      if (request.exactPayload.cwd) {
-        lines.push(`\x1b[38;5;245mWorking Dir\x1b[0m   \x1b[38;5;242m${request.exactPayload.cwd}\x1b[0m`);
+      if (request.exactPayload.targetFile) {
+        lines.push(`\x1b[38;5;245mTarget File\x1b[0m   \x1b[38;5;253m${request.exactPayload.targetFile}\x1b[0m`);
       }
-    }
 
-    // The dialog is composited over the frame, so its height has to leave room
-    // for the borders, the command block, the key row and the prompt: a fixed
-    // ten-line preview overflowed a 24-row terminal.
-    const previewBudget = Math.max(0, Math.min(PREVIEW_LINES, this.rows() - 13));
-
-    if (request.exactPayload.diffPreview) {
-      // Summarise rather than dump: a minified file or a twenty-file patch used
-      // to push the whole prompt off the screen, which is unreadable and was the
-      // main reason an approval got denied by accident. On a short terminal the
-      // budget is zero and only the counts survive, which is still the useful part.
-      const previewLines = request.exactPayload.diffPreview.split('\n');
-      const added = previewLines.filter((line) => line.startsWith('+')).length;
-      const removed = previewLines.filter((line) => line.startsWith('-')).length;
-      const shown = previewLines.slice(0, previewBudget);
-      const hidden = previewLines.length - shown.length;
-      const summary = [`+${added}`, `-${removed}`, hidden > 0 ? `${hidden} more line${hidden === 1 ? '' : 's'}` : '']
-        .filter(Boolean)
-        .join(', ');
-      lines.push('---');
-      lines.push(`\x1b[1;38;5;250mDiff Preview\x1b[0m \x1b[38;5;244m(${summary})\x1b[0m`);
-      for (const line of shown) {
-        if (line.startsWith('+')) {
-          lines.push(`  \x1b[38;5;114m${line}\x1b[0m`);
-        } else if (line.startsWith('-')) {
-          lines.push(`  \x1b[38;5;203m${line}\x1b[0m`);
-        } else {
-          lines.push(`  \x1b[38;5;244m${line}\x1b[0m`);
+      if (request.exactPayload.command) {
+        lines.push(`\x1b[38;5;245mCommand\x1b[0m       \x1b[1;38;5;75m${request.exactPayload.command.join(' ')}\x1b[0m`);
+        if (request.exactPayload.cwd) {
+          lines.push(`\x1b[38;5;245mWorking Dir\x1b[0m   \x1b[38;5;242m${request.exactPayload.cwd}\x1b[0m`);
         }
       }
-      if (hidden > 0) lines.push(`  \x1b[38;5;244m… ${hidden} more line${hidden === 1 ? '' : 's'} not shown\x1b[0m`);
-    }
 
-    lines.push('---');
-    lines.push(approvalKeyRow(this.boxWidth() - 6));
+      // Recompute preview and width after a terminal resize so the prompt stays
+      // visible inside the new viewport.
+      const previewBudget = Math.max(0, Math.min(PREVIEW_LINES, this.rows() - 13));
+      if (request.exactPayload.diffPreview) {
+        const previewLines = request.exactPayload.diffPreview.split('\n');
+        const added = previewLines.filter((line) => line.startsWith('+')).length;
+        const removed = previewLines.filter((line) => line.startsWith('-')).length;
+        const shown = previewLines.slice(0, previewBudget);
+        const hidden = previewLines.length - shown.length;
+        const summary = [`+${added}`, `-${removed}`, hidden > 0 ? `${hidden} more line${hidden === 1 ? '' : 's'}` : '']
+          .filter(Boolean)
+          .join(', ');
+        lines.push('---');
+        lines.push(`\x1b[1;38;5;250mDiff Preview\x1b[0m \x1b[38;5;244m(${summary})\x1b[0m`);
+        for (const line of shown) {
+          if (line.startsWith('+')) {
+            lines.push(`  \x1b[38;5;114m${line}\x1b[0m`);
+          } else if (line.startsWith('-')) {
+            lines.push(`  \x1b[38;5;203m${line}\x1b[0m`);
+          } else {
+            lines.push(`  \x1b[38;5;244m${line}\x1b[0m`);
+          }
+        }
+        if (hidden > 0) lines.push(`  \x1b[38;5;244m… ${hidden} more line${hidden === 1 ? '' : 's'} not shown\x1b[0m`);
+      }
 
-    const box = renderBox(lines, {
-      title: `⚠️ Permission Required: ${request.toolName}`,
-      minWidth: 58,
-      // Never wider than the terminal, whatever the diff contains.
-      maxWidth: this.boxWidth(),
-      borderColor: '\x1b[38;5;214m',
-      titleColor: '\x1b[1;38;5;222m',
-    });
+      lines.push('---');
+      lines.push(approvalKeyRow(this.boxWidth() - 6));
+      const box = renderBox(lines, {
+        title: `⚠️ Permission Required: ${request.toolName}`,
+        minWidth: 58,
+        maxWidth: this.boxWidth(),
+        borderColor: '\x1b[38;5;214m',
+        titleColor: '\x1b[1;38;5;222m',
+      });
 
-    if (this.renderLayer) {
-      // Clear, then composite: dimmed frame underneath, dialog centred on top.
-      this.stdout.write(`\x1b[H\x1b[J${this.renderLayer(box.split('\n'))}`);
-    } else {
-      this.stdout.write(`\n${box}\n`);
-    }
+      if (this.renderLayer) {
+        this.stdout.write(`\x1b[H\x1b[J${this.renderLayer(box.split('\n'))}`);
+        this.paintPromptRow();
+      } else {
+        this.stdout.write(`\n${box}\n`);
+      }
+    };
+    const onResize = (): void => paintApproval();
+    this.stdout.on('resize', onResize);
+    paintApproval();
 
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      this.paintPromptRow();
-      const answer = await this.prompt('\x1b[1mApprove this action? [Y/n/a/q]: \x1b[0m', signal);
-      // A closed stdin resolves like a bare Enter; approving there would turn an
-      // unattended session into an auto-approver, so it fails closed instead.
-      if (answer === NO_INPUT) {
-        return { requestId: request.requestId, status: 'aborted', reason: 'No input available for approval' };
-      }
-      const normalized = answer.trim().toLowerCase();
+    try {
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        this.paintPromptRow();
+        const answer = await this.prompt('\x1b[1mApprove this action? [Y/n/a/q]: \x1b[0m', signal);
+        // A closed stdin resolves like a bare Enter; approving there would turn an
+        // unattended session into an auto-approver, so it fails closed instead.
+        if (answer === NO_INPUT) {
+          return { requestId: request.requestId, status: 'aborted', reason: 'No input available for approval' };
+        }
+        const normalized = answer.trim().toLowerCase();
 
-      // Enter approves once: the box advertises the capitalised key as the
-      // default, and pressing Enter only to be told "denied" is the behaviour
-      // that made an ordinary `npx` scaffold look like a permissions bug.
-      if (normalized === '' || normalized === 'y' || normalized === 'yes') {
-        return { requestId: request.requestId, status: 'approved' };
+        // Enter approves once: the box advertises the capitalised key as the
+        // default, and pressing Enter only to be told "denied" is the behaviour
+        // that made an ordinary `npx` scaffold look like a permissions bug.
+        if (normalized === '' || normalized === 'y' || normalized === 'yes') {
+          return { requestId: request.requestId, status: 'approved' };
+        }
+        if (normalized === 'a' || normalized === 'all' || normalized === 'always') {
+          this.alwaysApprove = true;
+          return { requestId: request.requestId, status: 'approved' };
+        }
+        if (normalized === 'n' || normalized === 'no') {
+          return { requestId: request.requestId, status: 'denied', reason: 'User denied approval' };
+        }
+        if (normalized === 'q' || normalized === 'quit') {
+          return { requestId: request.requestId, status: 'aborted', reason: 'User quit session' };
+        }
+        // Anything else is a typo or a stray keystroke, not a decision. Keep the
+        // note on the row above the prompt so it is actually readable.
+        this.paintNote('\x1b[38;5;222mPlease answer y, a, n, or q.\x1b[0m');
       }
-      if (normalized === 'a' || normalized === 'all' || normalized === 'always') {
-        this.alwaysApprove = true;
-        return { requestId: request.requestId, status: 'approved' };
-      }
-      if (normalized === 'n' || normalized === 'no') {
-        return { requestId: request.requestId, status: 'denied', reason: 'User denied approval' };
-      }
-      if (normalized === 'q' || normalized === 'quit') {
-        return { requestId: request.requestId, status: 'aborted', reason: 'User quit session' };
-      }
-      // Anything else is a typo or a stray keystroke, not a decision. Keep the
-      // note on the row above the prompt so it is actually readable.
-      this.paintNote('\x1b[38;5;222mPlease answer y, a, n, or q.\x1b[0m');
+    } finally {
+      this.stdout.removeListener('resize', onResize);
     }
     return { requestId: request.requestId, status: 'denied', reason: 'No valid answer after five prompts' };
   }
