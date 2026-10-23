@@ -1,5 +1,15 @@
 # Changelog
 
+### [Unreleased] — 2026-10-23 (inline chart color gradients)
+**Feature: inline bar and line charts use a blue-to-red color transition**
+
+- **Type**: `feat` / `patch-level`
+- **Scope**: `apps/cli` inline chart rendering
+- **Key Deliverables**:
+  - Line charts transition from blue through cyan, green, yellow, and orange to red across the ordered data points. Bar colors reflect each value's magnitude on the same scale.
+  - ANSI color is shown only in TTY output and is disabled when `NO_COLOR` is set; labels and values remain readable without color.
+
+
 ## Semantic Version Progression
 
 ```text

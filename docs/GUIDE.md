@@ -127,6 +127,26 @@ pushing the card off the bottom of the terminal. The frame always ends one row
 above the viewport bottom, which is what keeps the input, mode, and workspace
 rows stable while a turn streams.
 
+### Inline charts
+
+Ask for a bar chart to compare categories or a line chart for ordered values.
+Moderado renders a validated `chart` block inline. Line charts transition from
+blue through cyan, green, yellow, and orange to red along the data points; bar
+colors reflect value magnitude. Color is shown in an interactive terminal and
+is automatically disabled for redirected output or when `NO_COLOR` is set.
+
+For example, ask for a line chart of `y = x² + 5x + 12` from `x = -5` to `5`.
+The model supplies the sample points; Moderado renders them and does not
+evaluate arbitrary expressions itself.
+
+### Session usage and cost
+
+The footer tracks token usage and estimated session cost. Cost is shown as
+unknown when a turn has estimated token counts or the provider does not report
+exact prompt and completion prices for the model. A session that includes an
+unpriced turn keeps its total unknown rather than presenting a partial amount
+as the full cost. Free models with known zero pricing show `$0.00`.
+
 ### Composer completion
 
 - Type `@` to filter workspace files. The list opens under the card,
