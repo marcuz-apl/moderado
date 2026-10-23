@@ -74,10 +74,10 @@ next session:
    The failed attempt leaves `.git/index.lock` behind; move it aside with
    `node -e "fs.renameSync('.git/index.lock', '/tmp/…')"` and retry, or grant
    the permission.
-3. Twelve 4-byte untracked debris files sit in the repo root (`0ymgyj55`,
-   `9gi6u5xt`, `b5n8p6u3`, `g6b_wo3h`, `g8yrac19`, `klkfx71m`, `rzw68gcq`,
-   `utmzbr79`, `xcmyxnp8`, `xh_imj8l`, `yd5oce4v`, `yz18hg3r`). They are
-   leftovers from killed test runs and were deliberately not committed.
+3. Test runs in a restricted sandbox can leave 4-byte `blat` placeholders in
+   the repo root; the twelve from this session were cleared, so the tracked tree
+   and the untracked set are both empty. If more appear, they are safe to move
+   aside — but check size and content first, and never glob a delete.
 
 ## Session 2026-10-23 — hardening pass
 
