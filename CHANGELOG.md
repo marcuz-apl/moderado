@@ -16,6 +16,17 @@ v0.4.28 (Help organization and interrupted-chat resilience)
 
 ## Milestone Change Log Details
 
+### [Unreleased] — 2026-10-23 (repeat-question fix)
+**Fix: a stopped task was replayed as if it were an answer**
+
+- **Type**: `fix` / `patch-level`
+- **Scope**: `apps/cli` chat session
+- **Key Deliverables**:
+  - **Symptom**: after a task was interrupted, asking the same question again returned the interruption notice verbatim (`[This task was interrupted before a response was produced. …]` or `Task stopped.`) instead of a real answer.
+  - **Cause**: the consecutive-repeat cache in `handleChatSession` replayed `lastAnswer` whenever the new question matched the previous one. It only checked that the string was non-empty — but after a cancelled or failed turn `lastAnswer` holds a status note, and after resuming an interrupted session `restoreLastSessionTurn` restores that note as the last answer. So the note was served as a cache hit and the provider was never called.
+  - **Fix**: `lastAnswerReplayable` tracks whether `lastAnswer` is a genuine answer. It is set only when a turn completes, or when a failed turn still produced usable web-search evidence, and cleared at turn start, on cancellation, on failure, on a budget stop, and when restoring an interrupted session. The cache now requires it, so a stopped task is re-asked rather than replayed. A successful repeated question is still replayed instantly — the cache itself is unchanged.
+  - **Coverage**: `chat_replay.test.ts` asserts the provider is called again after a failed turn and after resuming an interrupted session, and that a genuinely answered repeated question is still served from the cache. All three fail without the flag except the last, which pins the existing behaviour.
+
 ### [Unreleased] — 2026-10-23 (structure pass)
 **Refactor: split the two oversized modules; stop re-canonicalizing the jail root**
 

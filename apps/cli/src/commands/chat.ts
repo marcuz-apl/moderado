@@ -608,6 +608,14 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let lastQuestion = restoredTurn.question;
   let lastAnswer = restoredTurn.answer;
   let lastTurnDone = conversationHistory.length > 0 && !hasInterruptedTurn(conversationHistory);
+  /**
+   * Whether `lastAnswer` is a real answer that may be replayed when the same
+   * question is asked twice. A cancelled, failed, or interrupted turn leaves a
+   * status note in `lastAnswer` rather than an answer; replaying that would
+   * claim the model answered a question it never answered, so those turns leave
+   * this false and the question reaches the model again.
+   */
+  let lastAnswerReplayable = lastTurnDone;
   let lastThoughtTime = 0;
   let lastOutputTokenRate: number | undefined;
   let lastTokenUsage: UsageEvent | undefined;
@@ -875,6 +883,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
             lastQuestion = restored.question;
             lastAnswer = restored.answer;
             lastTurnDone = conversationHistory.length > 0 && !hasInterruptedTurn(conversationHistory);
+            lastAnswerReplayable = lastTurnDone;
           }
           return;
         }
@@ -1082,8 +1091,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       continue;
     }
 
-    // 2. Consecutive repeated question cache: instant replay without redundant network round-trip
-    if (lastQuestion && trimmed.toLowerCase() === lastQuestion.toLowerCase() && lastAnswer && lastAnswer.trim().length > 0) {
+    // 2. Consecutive repeated question cache: instant replay without redundant network round-trip.
+    // Only a genuine answer may be replayed — see `lastAnswerReplayable`.
+    if (lastAnswerReplayable && lastQuestion && trimmed.toLowerCase() === lastQuestion.toLowerCase() && lastAnswer && lastAnswer.trim().length > 0) {
       lastQuestion = trimmed;
       lastThoughtTime = 0.001;
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
@@ -1186,6 +1196,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         lastSessionCheckpointAt = Date.now();
       };
       lastAnswer = '';
+      lastAnswerReplayable = false;
       lastTurnDone = false;
       let taskStep: { step: number; maxSteps: number } | undefined;
       let activityLabel: string | undefined;
@@ -1530,6 +1541,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         );
       }
       lastAnswer = hasSearchFallback ? searchFallback : resolution.answer;
+      // A cancelled, failed, or budget-stopped turn leaves a status note here.
+      // Only a completed turn — or a failed one that still produced usable search
+      // evidence — may be replayed for a repeated question.
+      lastAnswerReplayable = hasSearchFallback || (!resolution.isError && !budgetStopped);
       if (budgetStopped) {
         const note = `Token budget reached (${tokenBudget?.toLocaleString()} per task). Task stopped; usage may exceed the limit because providers report in chunks.`;
         lastAnswer = [lastAnswer, note].filter(Boolean).join('\n\n');
