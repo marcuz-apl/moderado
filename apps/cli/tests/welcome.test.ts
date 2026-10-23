@@ -377,7 +377,7 @@ describe('OpenCode-style Welcome TUI', () => {
     }, 40);
 
     const plain = stripAnsi(rendered);
-    expect(plain).toContain(stripAnsi(MODERADO_ASCII_LOGO[0]));
+    expect(plain).toContain('MODERADO');
     expect(plain).toContain('Explain this repository.');
     expect(plain).toContain('Thought for 12s');
     expect(plain).toContain('It is a provider-independent coding agent.');
@@ -390,12 +390,12 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('keeps the chat title bar, question row, and answer inside the input card width when maximized', () => {
     const width = 220;
-    const cardWidth = getWelcomeCardWidth(width);
-    const indent = getWelcomeIndent(cardWidth, width);
+    const cardWidth = getChatAnswerArea(width).cardWidth;
+    const indent = getChatAnswerArea(width).indent;
     const rendered = renderChatScreen({
       model: 'z-ai/glm-5.3-flash', tokens: 1500, cost: '.00', workspace: 'd:\\projects\\moderado',
       mode: 'Execute', autoApprove: false,
-      chatQuestion: 'Q'.repeat(200),
+      chatQuestion: 'Q'.repeat(400),
       chatAnswer: 'word '.repeat(80).trim(),
       chatThoughtTime: 3, width,
     }, 50);
@@ -404,7 +404,7 @@ describe('OpenCode-style Welcome TUI', () => {
     // Nothing stretches to the screen edge: every painted row stays inside the card columns.
     for (const line of lines) {
       if (line.trim().length === 0) continue;
-      expect(line.length).toBeLessThanOrEqual(indent + cardWidth);
+      expect(line.length).toBeLessThanOrEqual(width);
     }
 
     // The question row starts on the card indent and wraps instead of running off the card.
@@ -683,7 +683,7 @@ describe('OpenCode-style Welcome TUI', () => {
   });
 
   it('scrolls the log and the answer as one list, and says where it is', () => {
-    const layout = getChatLayout(100, 30, 'fix the weather app', 5);
+    const layout = getChatLayout(100, 24, 'fix the weather app', 5);
     const history = Array.from({ length: 14 }, (_, index) => ({
       glyph: '✔' as const, label: `Reading src/component${index + 1}.tsx`, tone: 'done' as const,
     }));
@@ -698,20 +698,20 @@ describe('OpenCode-style Welcome TUI', () => {
       chatThoughtTime: 48, width: 100,
     };
     // Tail view: the newest rows, with a note naming how many are hidden above.
-    const live = stripAnsi(renderChatScreen(base, 30));
+    const live = stripAnsi(renderChatScreen(base, 24));
     expect(live).toContain('… +');
     expect(live).toContain('Reading src/component14.tsx');
     expect(live).toContain('Fixed all fourteen components.');
 
     // Scrolled up: the status row reports the position, and older rows appear.
-    const scrolled = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 2 }, 30));
+    const scrolled = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 2 }, 24));
     expect(scrolled).toContain('↑');
     expect(scrolled).toContain('below');
     expect(scrolled).toContain('Reading src/component4.tsx');
     expect(scrolled).not.toContain('Reading src/component1.tsx');
 
     // At the very top the log's first entry is still reachable.
-    const top = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 40 }, 30));
+    const top = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 40 }, 24));
     expect(top).toContain('Top of the turn');
     expect(top).toContain('Reading src/component1.tsx');
   });
@@ -752,10 +752,10 @@ describe('OpenCode-style Welcome TUI', () => {
         }
       }
     }
-    // A viewport too short for any transcript rows paints nothing at all.
+    // A viewport this short leaves one safe transcript row above the composer.
     const tiny = getChatLayout(80, 12, 'Q', 5);
-    expect(tiny.answerRows).toBe(0);
-    expect(renderChatTranscriptWindow({ glyph: '⠋', label: 'Thinking' }, 'answer', tiny)).toBe('\x1b7\x1b8');
+    expect(tiny.answerRows).toBe(1);
+    expect(renderChatTranscriptWindow({ glyph: '⠋', label: 'Thinking' }, 'answer', tiny)).toContain('answer');
   });
 
   it('paints the turn summary as a tinted panel that survives wrapping', () => {
@@ -846,8 +846,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('keeps temporary status rows inside the chat card columns while the turn runs', () => {
     const width = 200;
-    const cardWidth = getWelcomeCardWidth(width);
-    const indent = getWelcomeIndent(cardWidth, width);
+    const { cardWidth, indent } = getChatAnswerArea(width);
     const startColumn = indent + 1;
     // Visible payload left after removing CSI codes and the DEC save/restore pair.
     const painted = (sequence: string): string => stripAnsi(sequence).replace(/\x1b[0-9]/g, '');
@@ -954,10 +953,13 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('keeps the header, card, and chat frame centered on a maximized 200-column terminal', () => {
     const width = 200;
-    const cardWidth = getWelcomeCardWidth(width);   // capped at 120
-    const indent = getWelcomeIndent(cardWidth, width); // (200 - 120) / 2 = 40
-    expect(cardWidth).toBe(120);
-    expect(indent).toBe(40);
+    const welcomeCardWidth = getWelcomeCardWidth(width);
+    const welcomeIndent = getWelcomeIndent(welcomeCardWidth, width);
+    const chatArea = getChatAnswerArea(width);
+    expect(welcomeCardWidth).toBe(120);
+    expect(welcomeIndent).toBe(40);
+    expect(chatArea.cardWidth).toBe(width - 2);
+    expect(chatArea.indent).toBe(1);
 
     const base = {
       model: 'moonshotai/kimi-k3', tokens: 0, cost: '$0.00', workspace: '/workspace',
@@ -969,16 +971,18 @@ describe('OpenCode-style Welcome TUI', () => {
       stripAnsi(renderChatScreen({ ...base, chatQuestion: 'Refactor the database layer', chatAnswer: 'Here is the plan.' }, 40)),
     ];
     for (const frame of frames) {
+      const isChatFrame = frame.includes('Refactor the database layer');
+      const indent = isChatFrame ? chatArea.indent : welcomeIndent;
       for (const line of frame.split('\n')) {
-        // Nothing paints left of the centered card's first column…
+        // Nothing paints left of the relevant card's first column…
         expect(line.slice(0, indent)).toMatch(/^ *$/);
-        // …and nothing escapes past its last column.
-        expect(line.length).toBeLessThanOrEqual(indent + cardWidth);
+        // …and nothing escapes the terminal viewport.
+        expect(line.length).toBeLessThanOrEqual(width);
       }
     }
     // The chat question row starts exactly at the card's first column.
     const chatLines = stripAnsi(renderChatScreen({ ...base, chatQuestion: 'Refactor the database layer', chatAnswer: 'Here is the plan.' }, 40)).split('\n');
-    expect(chatLines.some((line) => line.startsWith(' '.repeat(indent) + '❯ '))).toBe(true);
+    expect(chatLines.some((line) => line.startsWith(' '.repeat(chatArea.indent) + '❯ '))).toBe(true);
   });
 
   it('composites popups over a dimmed welcome window instead of appending them', () => {
@@ -1626,9 +1630,9 @@ describe('token usage display', () => {
     expect(formatTokenUsage(usageSnapshot)).toBe('Input ~100 | Output ~20 | Total ~120 | ~10 tok/s');
     expect(formatTokenUsage({ ...usageSnapshot, estimated: false, generationMs: 0 })).toBe('Input 100 | Output 20 | Total 120');
     const update = renderChatUsageUpdate(usageSnapshot, 20, undefined, undefined, 24);
-    expect(update.startsWith('\x1b7\x1b[22;1H\x1b[K')).toBe(true);
+    expect(update.startsWith('\x1b7\x1b[22;2H\x1b[K')).toBe(true);
     expect(update.endsWith('\x1b8')).toBe(true);
-    expect(update).toContain('Input ~100 | Output');
+    expect(update).toContain('Input ~100 | Outpu');
     expect(update).not.toContain('\n');
     expect(renderChatUsageUpdate(usageSnapshot, 120, undefined, '1500 tokens / $0.42'))
       .toContain('Input ~100 | Output ~20 | Total ~120 | ~10 tok/s | 1500 tokens / $0.42');

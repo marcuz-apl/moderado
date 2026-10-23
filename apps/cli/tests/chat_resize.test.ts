@@ -89,5 +89,6 @@ it('repaints the chat frame centered after the terminal is maximized mid-answer'
   // The resize event itself must repaint; a final turn repaint is too late.
   expect(resizeRepaint).toContain('\x1b[H\x1b[J');
   const lines = welcome.stripAnsi(resizeRepaint).split('\n');
-  expect(lines.some((line) => line.startsWith(' '.repeat(40) + '❯ Explain the module'))).toBe(true);
+  const chatIndent = welcome.getChatAnswerArea(200).indent;
+  expect(lines.some((line) => line.startsWith(' '.repeat(chatIndent) + '❯ Explain the module'))).toBe(true);
 });
