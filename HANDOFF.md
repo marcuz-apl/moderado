@@ -1,10 +1,43 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-23 (structure pass after eecf296)
+Updated: 2026-10-23 (repeat-question fix after 857d8fe)
 Branch: master (tracking origin/master)
 Status: three reported glitches, the hardening pass, the jail canonicalization
-split and the module decomposition are all committed and pushed. The tracked
-tree is clean; the remaining known items are cosmetic and listed per session.
+split, the module decomposition and the repeat-question fix are all committed
+and pushed. The tracked tree is clean; the remaining known items are cosmetic
+and listed per session.
+
+## Session 2026-10-23 — repeat-question fix
+
+### Summary
+
+Reported: after stopping a task, asking the same question again returned the
+interruption notice verbatim instead of an answer.
+
+### Completed
+
+- **Cause**: `handleChatSession` has a consecutive-repeat cache that replays
+  `lastAnswer` when the new question matches the previous one. It only checked
+  that the string was non-empty. After a cancelled or failed turn `lastAnswer`
+  holds a status note (`Task stopped.`, or the `[This task was interrupted…]`
+  marker written by `saveFailedTurnPrompt`), and after resuming an interrupted
+  session `restoreLastSessionTurn` restores that marker as the last answer. The
+  note was therefore served as a cache hit and the provider was never called.
+- **Fix**: a `lastAnswerReplayable` flag records whether `lastAnswer` is a
+  genuine answer. Set only when a turn completes, or when a failed turn still
+  produced usable web-search evidence; cleared at turn start, on cancellation,
+  on failure, on a budget stop, and when restoring an interrupted session. The
+  cache requires it. The cache itself is unchanged, so a genuinely answered
+  repeated question is still replayed instantly.
+- **Coverage**: `apps/cli/tests/chat_replay.test.ts` — the provider is called
+  again after a failed turn and after resuming an interrupted session, and a
+  repeated question that *was* answered is still served from the cache. The two
+  bug cases fail without the flag; the third pins the existing behaviour.
+
+### Verification
+
+`tsc -b --force` clean; full suite 70 files / 671 tests pass. Committed as
+`8503342` (`v0.4.34+2610238`) and pushed.
 
 ## Session 2026-10-23 — structure pass
 
