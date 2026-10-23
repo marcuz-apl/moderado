@@ -10,10 +10,22 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                     └─► v0.4.32 (Short `modr` command alias)
                           └─► v0.4.33 (Approval boundary and width fixes)
                                 └─► v0.4.34 (No frozen CLI — Ctrl+C always escapes)
-                                      └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect)
+                                      └─► Unreleased (Turn summary, bounded answer area, one-step Moderado connect,
+                                                      jail canonicalization, chat/UI module split)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23 (structure pass)
+**Refactor: split the two oversized modules; stop re-canonicalizing the jail root**
+
+- **Type**: `refactor` + `perf` / `patch-level`
+- **Scope**: `apps/cli` chat command and welcome UI, `packages/tools` jail and tools
+- **Key Deliverables**:
+  - **One canonicalization per operation**: `resolveInJail` re-ran `canonicalizeRoot` (exists/stat/realpath) on every call, so a caller resolving N paths paid a syscall pair per path. It is now a one-line wrapper over `resolveInJailFromRoot(canonicalRoot, path)`, which keeps every check unchanged; checkpoint `paths`/`capture`/`recordPostWrite`/`restore`, `git_diff`'s per-file validation and `apply_patch`'s `edits` canonicalize once and loop. `TurnRecorder` resolves its root once per turn, and `detectWebApp` once per scan. Single-path tools stay on `resolveInJail` — one or two calls per invocation leaves nothing to amortize, and the self-contained form is the safer API. A cache on the security boundary was still not added.
+  - **`commands/chat.ts` 1965 → 1615 lines**: command routing (`chat_slash.ts`), local meta queries (`chat_meta.ts`), web-search routing (`chat_search.ts`) and turn outcomes (`chat_outcome.ts`) moved out and are re-exported, so `commands/chat.js` remains the single import surface. The file keeps the turn loop and the wiring.
+  - **`ui/welcome.ts` 1477 → 772 lines**: the interactive composer loop moved to `ui/composer.ts` (731 lines), sliced byte-exactly rather than retyped. `MOUSE_REPORT_*` stay in `welcome.ts` because `exitCleanly` writes `MOUSE_REPORT_OFF`; keeping them in the composer would have made the pair circular.
+  - **Test wiring**: a spy on a re-export does not change the original binding, so the three composer tests now import and spy `ui/composer.js`, which is also where `commands/chat.ts` imports `promptInteractiveTurn`. Their teardowns also swallow a refused `rmSync`, so a sandbox that blocks temp deletes reports assertions instead of teardown failures.
 
 ### [Unreleased] — 2026-10-23 (hardening pass)
 **Fix: the `@` completion list, protected-path precision, and evidence for failed turns**
@@ -24,7 +36,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
   - **`@` completion works again**: the interactive composer maintained a mention selection and reserved rows for it, but never passed `mentionFiles`/`mentionSelection` to the card, so the list was never painted and `Up`/`Down`/`Tab` operated on an invisible list. Both fields are now part of the composer options, and `welcome.test.ts` asserts the list is painted and the caret stays on the input row.
   - **Protected paths are exact**: the blacklist matched any segment starting with `id_`, so a legitimate `id_notes.md` could not be read or written at all. It now matches the SSH key names (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, with an optional suffix such as `.pub`). `docs/SECURITY.md` no longer claims `*secret*`/`*credential*` matching the code never had.
   - **Failed turns leave evidence**: a turn that fails without throwing — the loop reports a status plus an `error` event — reached neither the diagnostic log nor any support report. `chat` and `run` now append a redacted record to `~/.moderado/logs/moderado.jsonl`; a cancelled turn is user intent and is not logged.
-  - **Measured, not assumed**: `resolveInJail` re-canonicalizes the jail root on every call (13.7 µs per call, 6.5 µs of it canonicalization). Call sites are one or two per tool invocation and directory walks do not call it per entry, so the saving is noise — a cache on the security boundary was deliberately not added.
+  - **Measured, not assumed**: `resolveInJail` re-canonicalizes the jail root on every call (13.7 µs per call, 6.5 µs of it canonicalization). Call sites are one or two per tool invocation and directory walks do not call it per entry, so the saving is noise — a cache on the security boundary was deliberately not added. (The cost was later removed structurally instead; see the structure pass above.)
 
 ### [Unreleased] — 2026-10-23
 **Fix: end-of-turn report, contained answer area, and a Moderado connect flow that stops interrogating**

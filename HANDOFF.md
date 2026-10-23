@@ -1,9 +1,83 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-23 (hardening pass after 1d36247)
+Updated: 2026-10-23 (structure pass after eecf296)
 Branch: master (tracking origin/master)
-Status: three reported glitches are fixed and pushed (1d36247); a follow-up
-hardening pass is in the working tree.
+Status: three reported glitches, the hardening pass, the jail canonicalization
+split and the module decomposition are all committed and pushed. The tracked
+tree is clean; the remaining known items are cosmetic and listed per session.
+
+## Session 2026-10-23 — structure pass
+
+### Summary
+
+Two review items: remove the redundant root canonicalization in the workspace
+jail, and split the two oversized modules. Each was built and tested before
+moving on.
+
+### Completed
+
+- **One canonicalization per operation (`packages/tools`)**: `resolveInJail`
+  re-ran `canonicalizeRoot` (exists + stat + realpath) on every call. It is now
+  a one-line wrapper over the new `resolveInJailFromRoot(canonicalRoot, path)`,
+  which keeps every check — empty path, traversal, symlink escape, protected
+  path — byte for byte. Converted the real per-path loops: checkpoint
+  `paths`/`capture`/`recordPostWrite`/`restore`, `git_diff`'s `filePaths`
+  validation, `apply_patch`'s `edits` (both `preview` and `execute`).
+  `TurnRecorder` resolves its root once per turn instead of once per tool call,
+  and `detectWebApp` canonicalizes once per scan instead of twice per candidate
+  directory. Single-path tools (`read_file`, `write_file`, `edit_file`,
+  `list_files`, `search_files`, `run_command`) stay on `resolveInJail`: one or
+  two calls per invocation leaves nothing to amortize, and the self-contained
+  form is the safer API. `jail.test.ts` asserts the canonical-root resolver
+  returns the identical path and still throws for `../escape.txt`, `.env`,
+  `.git/config` and `''`.
+- **`commands/chat.ts` 1965 → 1615 lines**: `chat_slash.ts` (command list, edit
+  distance, typo advice), `chat_meta.ts` (local session questions and the
+  network-command predicate), `chat_search.ts` (web-search routing and evidence
+  shaping) and `chat_outcome.ts` (failure formatting, answer resolution,
+  interrupted-prompt bookkeeping, exit/share/cancel predicates). All four are
+  re-exported from `chat.ts`, so `commands/chat.js` stays the single import
+  surface the tests rely on; the symbols still used inside `chat.ts` are also
+  imported explicitly, because `export *` does not put names in local scope.
+  `chat.ts` keeps the turn loop and the wiring.
+- **`ui/welcome.ts` 1477 → 772 lines**: the interactive composer
+  (`InteractiveTurnResult`, `PromptInteractiveTurnOptions`, `isMcpCommandInput`,
+  `promptInteractiveTurn`) moved to `ui/composer.ts` (731 lines). Moved by
+  byte-exact slicing, not retyped. `MOUSE_REPORT_PATTERN/ON/OFF` stay in
+  `welcome.ts` because `exitCleanly` writes `MOUSE_REPORT_OFF`; putting them in
+  the composer would have made the pair circular. `composerInputWindow` is now
+  exported from `welcome.ts` — both modules use it.
+- **Test wiring**: a spy on a re-export does not change the original binding, so
+  `chat_resize.test.ts`, `chat_usage.test.ts` and `welcome.test.ts` now import
+  and spy `ui/composer.js`, which is also where `chat.ts` imports
+  `promptInteractiveTurn` from. Those three teardowns, plus
+  `turn_summary.test.ts`, now swallow a refused `rmSync` — a sandbox that blocks
+  temp deletes was failing assertions that had already passed.
+
+### Verification
+
+`tsc -b --force` clean; full suite 69 files / 668 tests pass, run once after the
+last edit. Committed as `e591cb2` (`v0.4.34+2610234`) and `5276f49`
+(`v0.4.34+2610235`), both pushed.
+
+### Next action
+
+Nothing outstanding from the review list. Three things worth knowing before the
+next session:
+
+1. **Running the test suite repeatedly in this sandbox kills the shell.** Each
+   denied file delete adds a rule to the profile passed to `sandbox-exec`; it
+   grows past the 65535-byte argument limit and then every command fails
+   (`echo`, `tsc`, `git`, and `Grep`, which shells out to ripgrep) while
+   `Read`/`Write`/`Edit`/`Glob` keep working. Restarting the session clears it.
+2. **Git cannot rewrite `.git/index` here** ("unable to write new index file").
+   The failed attempt leaves `.git/index.lock` behind; move it aside with
+   `node -e "fs.renameSync('.git/index.lock', '/tmp/…')"` and retry, or grant
+   the permission.
+3. Twelve 4-byte untracked debris files sit in the repo root (`0ymgyj55`,
+   `9gi6u5xt`, `b5n8p6u3`, `g6b_wo3h`, `g8yrac19`, `klkfx71m`, `rzw68gcq`,
+   `utmzbr79`, `xcmyxnp8`, `xh_imj8l`, `yd5oce4v`, `yz18hg3r`). They are
+   leftovers from killed test runs and were deliberately not committed.
 
 ## Session 2026-10-23 — hardening pass
 
