@@ -43,10 +43,11 @@ and test cycle after each.
 
 ### Next action
 
-Commit and push the hardening pass. Remaining known item: `commands/chat.ts`
-(~2k lines) and `ui/welcome.ts` (~1.5k lines) still mix routing, execution, and
-rendering; splitting them is a refactor with no user-visible payoff and should
-be scheduled on its own.
+Done: committed as `eecf296` (VERSION auto-bumped to `v0.4.34+2610232` by the
+pre-commit hook) and pushed to `origin/master`. Remaining known item:
+`commands/chat.ts` (~2k lines) and `ui/welcome.ts` (~1.5k lines) still mix
+routing, execution, and rendering; splitting them is a refactor with no
+user-visible payoff and should be scheduled on its own.
 
 ## Session 2026-10-23 — three reported glitches fixed
 
