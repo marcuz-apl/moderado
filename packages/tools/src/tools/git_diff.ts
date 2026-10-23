@@ -6,7 +6,7 @@ import {
   ToolExecutionContext,
   ToolResult,
 } from '@moderado/contracts';
-import { resolveInJail } from '../jail.js';
+import { canonicalizeRoot, resolveInJailFromRoot } from '../jail.js';
 
 const MAX_DIFF_BYTES = 100 * 1024; // 100KB limit
 
@@ -17,7 +17,9 @@ export const GitDiffTool: IToolDefinition<GitDiffParams> = {
   parametersSchema: GitDiffParamsSchema,
 
   async execute(params: GitDiffParams, context: ToolExecutionContext): Promise<ToolResult> {
-    const cwd = resolveInJail(context.workspaceRoot, '.');
+    // Canonicalize the root once, then validate every requested path against it.
+    const canonicalRoot = canonicalizeRoot(context.workspaceRoot);
+    const cwd = resolveInJailFromRoot(canonicalRoot, '.');
 
     const args = ['diff', '--no-ext-diff', '--no-color', '--no-textconv'];
     if (params.staged) {
@@ -30,7 +32,7 @@ export const GitDiffTool: IToolDefinition<GitDiffParams> = {
       args.push('--');
       for (const fp of params.filePaths) {
         // Validate each path doesn't escape workspace
-        resolveInJail(context.workspaceRoot, fp);
+        resolveInJailFromRoot(canonicalRoot, fp);
         args.push(fp);
       }
     }

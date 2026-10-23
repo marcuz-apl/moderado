@@ -3,20 +3,23 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { ApplyPatchParams, ApplyPatchParamsSchema, IToolDefinition, ToolExecutionContext, ToolResult } from '@moderado/contracts';
 import { generateDiffPreview } from '../diff.js';
-import { resolveInJail } from '../jail.js';
+import { canonicalizeRoot, resolveInJailFromRoot } from '../jail.js';
 
 export const ApplyPatchTool: IToolDefinition<ApplyPatchParams> = {
   name: 'apply_patch', description: 'Apply validated exact edits to multiple workspace files.', requiresApproval: true, parametersSchema: ApplyPatchParamsSchema,
   async preview(params, context) {
+    // One canonicalization for the whole patch instead of one per edited file.
+    const canonicalRoot = canonicalizeRoot(context.workspaceRoot);
     return params.edits.map((edit) => {
-      const original = fs.readFileSync(resolveInJail(context.workspaceRoot, edit.path), 'utf8');
+      const original = fs.readFileSync(resolveInJailFromRoot(canonicalRoot, edit.path), 'utf8');
       return generateDiffPreview(edit.path, original, edit.targetContent, edit.replacementContent).diffPreview;
     }).join('\n');
   },
   async execute(params: ApplyPatchParams, context: ToolExecutionContext): Promise<ToolResult> {
     const staged: { absolute: string; temp: string; original: Buffer; diff: string }[] = [];
     try {
-      const paths = params.edits.map((edit) => resolveInJail(context.workspaceRoot, edit.path));
+      const canonicalRoot = canonicalizeRoot(context.workspaceRoot);
+      const paths = params.edits.map((edit) => resolveInJailFromRoot(canonicalRoot, edit.path));
       if (new Set(paths).size !== paths.length) throw new Error('Patch edits must target unique files.');
       for (let index = 0; index < params.edits.length; index++) {
         const edit = params.edits[index];

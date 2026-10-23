@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { z } from 'zod';
-import { canonicalizeRoot, resolveInJail } from './jail.js';
+import { canonicalizeRoot, resolveInJailFromRoot } from './jail.js';
 
 const EntrySchema = z.object({
   path: z.string().min(1),
@@ -48,7 +48,7 @@ export class WorkspaceCheckpointStore {
 
   private paths(root: string, rawPaths: string[]): { root: string; paths: string[] } {
     const canonicalRoot = canonicalizeRoot(root);
-    const paths = rawPaths.map((raw) => path.relative(canonicalRoot, resolveInJail(canonicalRoot, raw)).split(path.sep).join('/'));
+    const paths = rawPaths.map((raw) => path.relative(canonicalRoot, resolveInJailFromRoot(canonicalRoot, raw)).split(path.sep).join('/'));
     if (new Set(paths).size !== paths.length) throw new Error('Checkpoint paths must be unique.');
     return { root: canonicalRoot, paths };
   }
@@ -56,7 +56,7 @@ export class WorkspaceCheckpointStore {
   capture(root: string, rawPaths: string[]): void {
     const prepared = this.paths(root, rawPaths);
     const entries: Entry[] = prepared.paths.map((relative) => {
-      const file = resolveInJail(prepared.root, relative);
+      const file = resolveInJailFromRoot(prepared.root, relative);
       return fs.existsSync(file)
         ? { path: relative, existed: true, content: fs.readFileSync(file).toString('base64') }
         : { path: relative, existed: false };
@@ -73,7 +73,7 @@ export class WorkspaceCheckpointStore {
     if (checkpoint.entries.length !== prepared.paths.length || checkpoint.entries.some((entry) => !prepared.paths.includes(entry.path))) {
       throw new Error('Checkpoint paths do not match the completed mutation.');
     }
-    for (const entry of checkpoint.entries) entry.postHash = currentDigest(resolveInJail(prepared.root, entry.path));
+    for (const entry of checkpoint.entries) entry.postHash = currentDigest(resolveInJailFromRoot(prepared.root, entry.path));
     this.writeJson(this.target(prepared.root), checkpoint);
     const redo = this.target(prepared.root, '.redo');
     if (fs.existsSync(redo)) fs.unlinkSync(redo);
@@ -86,7 +86,7 @@ export class WorkspaceCheckpointStore {
     if (!fs.existsSync(target)) return { restored: [], conflicts: [] };
     const checkpoint = this.readJson(target);
     if (checkpoint.workspace !== canonicalRoot) throw new Error('Checkpoint workspace does not match the active workspace.');
-    const files = checkpoint.entries.map((entry) => ({ entry, file: resolveInJail(canonicalRoot, entry.path) }));
+    const files = checkpoint.entries.map((entry) => ({ entry, file: resolveInJailFromRoot(canonicalRoot, entry.path) }));
     const conflicts = files.filter(({ entry, file }) => !entry.postHash || currentDigest(file) !== entry.postHash).map(({ entry }) => entry.path);
     if (conflicts.length) return { restored: [], conflicts };
 

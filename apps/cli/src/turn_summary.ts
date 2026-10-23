@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveInJail } from '@moderado/tools';
+import { canonicalizeRoot, resolveInJailFromRoot } from '@moderado/tools';
 import type { AgentEvent } from '@moderado/contracts';
 
 export type TurnStatus = 'completed' | 'step_limit_reached' | 'cancelled' | 'failed';
@@ -57,8 +57,17 @@ export class TurnRecorder {
   private readonly checks: { name: string; ok: boolean }[] = [];
   private readonly failures: string[] = [];
   private denied = 0;
+  /** Jail root, resolved on first use: one recorder serves one workspace for one turn. */
+  private canonicalRootCache?: string;
 
   constructor(private readonly workspaceRoot: string) {}
+
+  private get canonicalRoot(): string {
+    // `resolveInJail` would stat + realpath the root on every tool call; the root
+    // cannot change under a single turn, so resolve it once.
+    if (!this.canonicalRootCache) this.canonicalRootCache = canonicalizeRoot(this.workspaceRoot);
+    return this.canonicalRootCache;
+  }
 
   record(event: AgentEvent): void {
     if (event.type === 'tool_call_initiated') {
@@ -155,7 +164,7 @@ export class TurnRecorder {
   private fileExists(relative: unknown): boolean {
     if (typeof relative !== 'string' || !relative) return false;
     try {
-      return fs.existsSync(resolveInJail(this.workspaceRoot, relative));
+      return fs.existsSync(resolveInJailFromRoot(this.canonicalRoot, relative));
     } catch {
       return false;
     }
@@ -202,6 +211,14 @@ const START_SCRIPTS = ['dev', 'start', 'serve', 'preview'] as const;
  * A build-only library therefore never claims to be runnable.
  */
 export function detectWebApp(workspaceRoot: string, changedPaths: readonly string[]): WebAppHint | undefined {
+  // Every candidate directory resolves `package.json` and `index.html`; canonicalize
+  // the root once for the whole scan rather than once per file.
+  let canonicalRoot: string;
+  try {
+    canonicalRoot = canonicalizeRoot(workspaceRoot);
+  } catch {
+    return undefined;
+  }
   const directories: string[] = [];
   const seen = new Set<string>();
   const add = (directory: string): void => {
@@ -218,17 +235,17 @@ export function detectWebApp(workspaceRoot: string, changedPaths: readonly strin
   }
   add('.');
   for (const directory of directories) {
-    const hint = readWebAppHint(workspaceRoot, directory);
+    const hint = readWebAppHint(canonicalRoot, directory);
     if (hint) return hint;
   }
   return undefined;
 }
 
-function readWebAppHint(workspaceRoot: string, directory: string): WebAppHint | undefined {
+function readWebAppHint(canonicalRoot: string, directory: string): WebAppHint | undefined {
   const relative = (file: string): string => (directory === '.' ? file : `${directory}/${file}`);
   const absolute = (file: string): string | undefined => {
     try {
-      return resolveInJail(workspaceRoot, relative(file));
+      return resolveInJailFromRoot(canonicalRoot, relative(file));
     } catch {
       return undefined;
     }

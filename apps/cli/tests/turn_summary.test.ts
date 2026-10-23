@@ -12,7 +12,13 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  fs.rmSync(workspace, { recursive: true, force: true });
+  // A refused cleanup must not fail the assertions: some sandboxes block deletes
+  // under the temp directory, and that is an environment fact, not a test result.
+  try {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
 });
 
 function toolCall(toolCallId: string, toolName: string, parameters: Record<string, unknown>): AgentEvent {

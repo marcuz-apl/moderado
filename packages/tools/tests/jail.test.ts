@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import {
   resolveInJail,
+  resolveInJailFromRoot,
   isProtectedPath,
   canonicalizeRoot,
   normalizeCrossPlatformPath,
@@ -352,6 +353,18 @@ describe('Workspace Security Jail', () => {
       expect(() => resolveInJail(tempDir, 'sub/secrets.key')).toThrow(SecurityViolationError);
       expect(() => resolveInJail(tempDir, 'sub/id_ed25519')).toThrow(SecurityViolationError);
       expect(() => resolveInJail(tempDir, 'credentials.json')).toThrow(SecurityViolationError);
+    });
+
+    it('enforces the same jail through the canonical-root resolver', () => {
+      // Callers that resolve many paths canonicalize once; the guarantee must not
+      // weaken when they reuse the root.
+      const canonicalRoot = canonicalizeRoot(tempDir);
+      expect(resolveInJailFromRoot(canonicalRoot, 'sub/file.txt'))
+        .toBe(resolveInJail(tempDir, 'sub/file.txt'));
+      expect(() => resolveInJailFromRoot(canonicalRoot, '../escape.txt')).toThrow(SecurityViolationError);
+      expect(() => resolveInJailFromRoot(canonicalRoot, '.env')).toThrow(SecurityViolationError);
+      expect(() => resolveInJailFromRoot(canonicalRoot, '.git/config')).toThrow(SecurityViolationError);
+      expect(() => resolveInJailFromRoot(canonicalRoot, '')).toThrow(SecurityViolationError);
     });
   });
 });
