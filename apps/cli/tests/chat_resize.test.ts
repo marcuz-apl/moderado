@@ -7,6 +7,7 @@ import { parseCliArgs } from '../src/args.js';
 import { handleChatSession } from '../src/commands/chat.js';
 import * as config from '../src/config.js';
 import * as welcome from '../src/ui/welcome.js';
+import * as composer from '../src/ui/composer.js';
 
 const homes: string[] = [];
 let originalExitListeners: Function[] = [];
@@ -21,7 +22,15 @@ afterEach(() => {
   for (const listener of process.listeners('exit')) {
     if (!originalExitListeners.includes(listener)) process.removeListener('exit', listener);
   }
-  for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true });
+  // A refused cleanup must not fail assertions that already passed: some
+  // sandboxes block deletes under the temp directory.
+  for (const home of homes.splice(0)) {
+    try {
+      fs.rmSync(home, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
   if (originalColumns) Object.defineProperty(process.stdout, 'columns', originalColumns);
   else delete (process.stdout as { columns?: number }).columns;
   if (originalIsTTY) Object.defineProperty(process.stdin, 'isTTY', originalIsTTY);
@@ -54,7 +63,7 @@ it('repaints the chat frame centered after the terminal is maximized mid-answer'
 
   const controller = new AbortController();
   let promptCount = 0;
-  vi.spyOn(welcome, 'promptInteractiveTurn').mockImplementation(async () => {
+  vi.spyOn(composer, 'promptInteractiveTurn').mockImplementation(async () => {
     promptCount++;
     if (promptCount === 2) controller.abort();
     return { text: promptCount === 1 ? 'Explain the module' : '', mode: 'Execute', autoApprove: false };

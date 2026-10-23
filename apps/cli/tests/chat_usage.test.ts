@@ -7,6 +7,7 @@ import { parseCliArgs } from '../src/args.js';
 import { handleChatSession } from '../src/commands/chat.js';
 import * as config from '../src/config.js';
 import * as welcome from '../src/ui/welcome.js';
+import * as composer from '../src/ui/composer.js';
 import { createSession, SessionStore } from '../src/sessions.js';
 
 const homes: string[] = [];
@@ -18,7 +19,15 @@ afterEach(() => {
   for (const listener of process.listeners('exit')) {
     if (!originalExitListeners.includes(listener)) process.removeListener('exit', listener);
   }
-  for (const home of homes.splice(0)) fs.rmSync(home, { recursive: true, force: true });
+  // A refused cleanup must not fail assertions that already passed: some
+  // sandboxes block deletes under the temp directory.
+  for (const home of homes.splice(0)) {
+    try {
+      fs.rmSync(home, { recursive: true, force: true });
+    } catch {
+      // ignore
+    }
+  }
 });
 
 it('shows zero cost for a direct web-search-only session without model usage', async () => {
@@ -39,7 +48,7 @@ it('shows zero cost for a direct web-search-only session without model usage', a
   }));
   const controller = new AbortController();
   let promptCount = 0;
-  vi.spyOn(welcome, 'promptInteractiveTurn').mockImplementation(async () => {
+  vi.spyOn(composer, 'promptInteractiveTurn').mockImplementation(async () => {
     promptCount++;
     if (promptCount === 2) controller.abort();
     return { text: promptCount === 1 ? 'What is the weather today?' : '', mode: 'Execute', autoApprove: false };
@@ -80,7 +89,7 @@ it('shows zero cost for estimated Moderado usage across a generically paid model
   sessionStore.save(previousSession);
   const controller = new AbortController();
   let promptCount = 0;
-  vi.spyOn(welcome, 'promptInteractiveTurn').mockImplementation(async () => {
+  vi.spyOn(composer, 'promptInteractiveTurn').mockImplementation(async () => {
     promptCount++;
     if (promptCount === 2) controller.abort();
     return { text: promptCount === 1 ? 'Explain a simple example.' : '', mode: 'Execute', autoApprove: false };
@@ -110,7 +119,7 @@ it('updates usage while the provider is streaming and adds reported counts acros
   const controller = new AbortController();
   let promptCount = 0;
   const prompts: welcome.PromptInteractiveTurnOptions[] = [];
-  vi.spyOn(welcome, 'promptInteractiveTurn').mockImplementation(async (options) => {
+  vi.spyOn(composer, 'promptInteractiveTurn').mockImplementation(async (options) => {
     prompts.push(options);
     promptCount++;
     if (promptCount === 3) controller.abort();

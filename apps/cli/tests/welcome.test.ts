@@ -22,7 +22,6 @@ import {
   COMMAND_HINT,
   stripAnsi,
   getMatchingCommands,
-  promptInteractiveTurn,
   selectCommandCandidate,
   renderMentionSuggestionsBox,
   renderSuggestionsBox,
@@ -34,6 +33,7 @@ import {
   getChatComposerRows,
   renderChatUsageUpdate,
 } from '../src/ui/welcome.js';
+import { promptInteractiveTurn } from '../src/ui/composer.js';
 import { handleMcpCommand } from '../src/commands/chat.js';
 
 type ComposerStdin = typeof process.stdin;
@@ -935,7 +935,12 @@ describe('OpenCode-style Welcome TUI', () => {
       stdin.setRawMode = originalSetRawMode;
       if (originalIsTTY) Object.defineProperty(stdin, 'isTTY', originalIsTTY);
       else delete (stdin as { isTTY?: boolean }).isTTY;
-      fs.rmSync(configHome, { recursive: true, force: true });
+      // A refused cleanup must not fail assertions that already passed.
+      try {
+        fs.rmSync(configHome, { recursive: true, force: true });
+      } catch {
+        // ignore
+      }
     }
   });
 
