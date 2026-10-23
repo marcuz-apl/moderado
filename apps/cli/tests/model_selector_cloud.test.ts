@@ -119,6 +119,7 @@ describe('Moderado model picker discovery', () => {
 
   it('shows a diagnostic when an Ollama instance is not running', async () => {
     const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:99999'));
+    pickerState.selected = 'catalog-status'; // Select the diagnostic item
     const ollamaOptions = {
       apiKey: undefined,
       baseUrl: 'http://127.0.0.1:99999/v1',
@@ -141,13 +142,13 @@ describe('Moderado model picker discovery', () => {
   });
 
   it('shows a diagnostic when an LM Studio instance returns a 503', async () => {
-    // Use a fetch mock so the request goes to our controlled endpoint.
     const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ error: { message: 'server overloaded' } }), {
         status: 503,
         headers: { 'content-type': 'application/json' },
       })
     );
+    pickerState.selected = 'catalog-status'; // Select the diagnostic item
     const lmStudioOptions = {
       apiKey: undefined,
       baseUrl: 'http://127.0.0.1:1234/v1',

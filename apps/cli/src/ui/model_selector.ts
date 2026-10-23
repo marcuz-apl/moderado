@@ -204,6 +204,19 @@ export async function selectCompatibleModelOverlay(
     ? { catalogError: discoveryError }
     : undefined;
 
+  // For non-Moderado providers with a discovery error, inject the diagnostic
+  // directly into the menu so the user sees why the list is empty instead of
+  // being handed a bare "Enter a model ID" and left to guess.
+  const items = buildCompatibleModelMenuItems(providerName, models, currentModel, freePolicy, menuOptions);
+  if (!isModerado && discoveryError && !items.some((item) => item.value === 'catalog-status')) {
+    items.unshift({
+      label: 'Model list unavailable',
+      value: 'catalog-status',
+      tag: 'Check connection',
+      description: discoveryError,
+    });
+  }
+
   const picked = await selectListPopup(
     isModerado || !models.some((model) => isFreeCompatibleModel(model, freePolicy))
       ? `${providerName} Models` : `${providerName} Free Models`,
