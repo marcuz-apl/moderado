@@ -9,12 +9,16 @@ const hook = (name: string): string => fs.readFileSync(path.join(repoRoot, '.git
 describe('Alfazen version hooks', () => {
   it('computes explicit patch and minor bumps from a connected identifier', () => {
     expect(computeNextVersion('v0.4.33+2610214', 'patch', '261021')).toEqual({
-      version: 'v0.4.34+2610211',
+      version: 'v0.4.34+2610214',
       packageVersion: '0.4.34',
     });
     expect(computeNextVersion('v0.4.33+2610214', 'minor', '261021')).toEqual({
-      version: 'v0.5.0+2610211',
+      version: 'v0.5.0+2610214',
       packageVersion: '0.5.0',
+    });
+    expect(computeNextVersion('v0.4.45+261023l', 'patch', '261023')).toEqual({
+      version: 'v0.4.46+261023l',
+      packageVersion: '0.4.46',
     });
   });
 

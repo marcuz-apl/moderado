@@ -24,8 +24,10 @@ export function computeNextVersion(current, level, today) {
     ? [major, minor + 1, 0]
     : [major, minor, patch + 1];
   const semver = `${nextMajor}.${nextMinor}.${nextPatch}`;
-  // The build counter is `1` here; `pre-commit` advances it for the actual commit.
-  return { version: `v${semver}+${today}1`, packageVersion: semver };
+  // Keep today's counter as the pre-commit baseline so the hook advances it
+  // once, instead of resetting the daily sequence during a SemVer bump.
+  const buildCounter = match[4] === today ? match[5] : '1';
+  return { version: `v${semver}+${today}${buildCounter}`, packageVersion: semver };
 }
 
 function utcBuildDate() {
