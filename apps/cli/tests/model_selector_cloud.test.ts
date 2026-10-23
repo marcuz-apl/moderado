@@ -49,6 +49,7 @@ describe('Moderado model picker discovery', () => {
 
   afterEach(async () => {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+    vi.restoreAllMocks();
   });
 
   const pickerOptions = (currentModel = 'auto') => ({
@@ -112,6 +113,57 @@ describe('Moderado model picker discovery', () => {
       expect.objectContaining({
         label: 'No available Gateway routes',
         description: expect.stringContaining('no configured routes'),
+      }),
+    ]));
+  });
+
+  it('shows a diagnostic when an Ollama instance is not running', async () => {
+    const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('connect ECONNREFUSED 127.0.0.1:99999'));
+    const ollamaOptions = {
+      apiKey: undefined,
+      baseUrl: 'http://127.0.0.1:99999/v1',
+      providerId: 'ollama',
+      providerName: 'Ollama',
+      currentModel: 'llama3.2',
+      drawFrame: vi.fn(),
+    };
+    await selectCompatibleModelOverlay(ollamaOptions);
+    fetchSpy.mockRestore();
+
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: 'Model list unavailable',
+        description: expect.stringContaining('Ollama'),
+      }),
+    ]));
+    expect(pickerState.items.some((item) => item.value === 'custom')).toBe(true);
+    expect(pickerState.items.some((item) => item.value === 'keep')).toBe(true);
+  });
+
+  it('shows a diagnostic when an LM Studio instance returns a 503', async () => {
+    // Use a fetch mock so the request goes to our controlled endpoint.
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ error: { message: 'server overloaded' } }), {
+        status: 503,
+        headers: { 'content-type': 'application/json' },
+      })
+    );
+    const lmStudioOptions = {
+      apiKey: undefined,
+      baseUrl: 'http://127.0.0.1:1234/v1',
+      providerId: 'lm-studio',
+      providerName: 'LM Studio',
+      currentModel: undefined,
+      drawFrame: vi.fn(),
+    };
+
+    await selectCompatibleModelOverlay(lmStudioOptions);
+    fetchSpy.mockRestore();
+
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: 'Model list unavailable',
+        description: expect.stringContaining('LM Studio'),
       }),
     ]));
   });

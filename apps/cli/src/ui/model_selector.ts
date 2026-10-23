@@ -184,11 +184,13 @@ export async function selectCompatibleModelOverlay(
       .sort((a, b) => a.id.localeCompare(b.id));
   } catch (error) {
     // Explicit model entry remains available when a provider does not expose /models.
-    if (isModerado) {
-      discoveryError = error instanceof ProviderError
-        ? `${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
-        : 'Could not load the model list. Check Gateway connectivity and retry /model.';
-    }
+    // Capture the diagnostic for every provider, not just Moderado: an Ollama or
+    // LM Studio instance that is running but returns a bad response, or one that
+    // is not running at all, should still tell the user what happened instead of
+    // hiding behind "Enter a model ID".
+    discoveryError = error instanceof ProviderError
+      ? `${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
+      : `Could not load the model list: ${error instanceof Error ? error.message : String(error)}`;
   }
 
   const cloudRoutes = models.filter((model) => model.id !== 'auto');
@@ -198,6 +200,8 @@ export async function selectCompatibleModelOverlay(
       autoLabel: 'auto',
       ...(discoveryError ? { catalogError: discoveryError } : cloudRoutes.length === 0 ? { noAvailableModels: true } : {}),
     }
+    : discoveryError
+    ? { catalogError: discoveryError }
     : undefined;
 
   const picked = await selectListPopup(
