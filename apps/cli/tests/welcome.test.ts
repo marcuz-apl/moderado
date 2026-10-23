@@ -10,6 +10,7 @@ import {
   renderChatComposerCursor,
   renderChatAnswerWindow,
   renderChatThoughtTimeUpdate,
+  describeActivity,
   navigateQuestionHistory,
   renderWelcomePopupLayer,
   renderFullWelcomeScreen,
@@ -533,6 +534,29 @@ describe('OpenCode-style Welcome TUI', () => {
       .toContain('⠹ Working · 14s');
     expect(renderChatThoughtTimeUpdate(14.2, undefined, 100, { glyph: '✔', label: 'Done' }))
       .toContain('✔ Done · 14s');
+    // The engine's status sentence already carries the step; it must not print twice.
+    const deduped = stripAnsi(renderChatThoughtTimeUpdate(12, { step: 1, maxSteps: 25 }, 120, { glyph: '⠋', label: 'Step 1/25: Inferring next action with a-model' }));
+    expect(deduped).toContain('⠋ Inferring next action with a-model · Step 1/25 · 12s');
+    expect(deduped.match(/Step 1\/25/g)).toHaveLength(1);
+
+    // While the model thinks, one dim line of the newest reasoning shows the turn
+    // is alive without turning the row into a transcript.
+    const paintedWidth = (sequence: string): number => stripAnsi(sequence).replace(/\x1b[78]/g, '').length;
+    const cardWidth = getChatAnswerArea(120).cardWidth;
+    const thinking = stripAnsi(renderChatThoughtTimeUpdate(12, { step: 1, maxSteps: 25 }, 120, {
+      glyph: '⠋', label: 'Thinking', reasoning: 'checking whether the cache key includes the model',
+    }));
+    expect(thinking).toContain('⠋ Thinking · checking whether');
+    expect(thinking).toContain('Step 1/25 · 12s');
+    expect(paintedWidth(thinking)).toBeLessThanOrEqual(cardWidth);
+
+    // A long thought keeps its newest words, truncates from the left, and stays in the card.
+    const longThought = renderChatThoughtTimeUpdate(12, undefined, 120, {
+      glyph: '⠋', label: 'Thinking', reasoning: `${'filler '.repeat(60)}NEWEST-WORDS`,
+    });
+    expect(stripAnsi(longThought)).toContain('⠋ Thinking · …');
+    expect(stripAnsi(longThought)).toContain('NEWEST-WORDS');
+    expect(paintedWidth(longThought)).toBeLessThanOrEqual(cardWidth);
     const answerLayout = getChatLayout(100, 30, 'Who are you?');
     const answerWindow = renderChatAnswerWindow('Hi', answerLayout);
     expect(answerWindow.startsWith('\x1b7')).toBe(true);
@@ -541,6 +565,20 @@ describe('OpenCode-style Welcome TUI', () => {
     // Only the rows the layout reserves are repainted: the composer is untouched.
     expect(answerWindow).not.toContain(`\x1b[${answerLayout.composerTop};`);
     expect(answerWindow.match(/\x1b\[2K/g)).toHaveLength(answerLayout.answerRows);
+  });
+
+  it('names the phase the agent is in instead of echoing the engine sentence', () => {
+    // The reasoning stream is not displayed, so this label is the only thing that
+    // moves during a long silent inference.
+    expect(describeActivity('Step 1/25: Inferring next action with z-ai/glm-5...')).toBe('Thinking');
+    expect(describeActivity('Step 7/25: Inferring next action with a-model...')).toBe('Thinking');
+    expect(describeActivity('Discovering and selecting models...')).toBe('Selecting model');
+    expect(describeActivity('Retrying z-ai/glm-5 in 500ms...')).toBe('Retrying request');
+    expect(describeActivity('Delegating sub-task: find the failing test...')).toBe('Delegating a sub-task');
+    // Already short, caller-supplied phases pass through untouched.
+    expect(describeActivity('Running read_file')).toBe('Running read_file');
+    expect(describeActivity('Reviewing')).toBe('Reviewing');
+    expect(describeActivity('   ')).toBe('Working');
   });
 
   it('keeps temporary status rows inside the chat card columns while the turn runs', () => {

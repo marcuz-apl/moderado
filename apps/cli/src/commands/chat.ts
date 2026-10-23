@@ -16,7 +16,7 @@ import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthCon
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows } from '../ui/welcome.js';
+import { exitCleanly, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity } from '../ui/welcome.js';
 import type { WelcomeLayoutOptions } from '../ui/welcome.js';
 import { promptInteractiveTurn } from '../ui/composer.js';
 import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
@@ -1223,13 +1223,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         process.stdout.write(renderChatAnswerWindow(streamedAnswer, layout));
       };
       let lastErrorEvent: { code?: string; message: string } | undefined;
+      /** Tail of the model's reasoning, shown as one dim line while it thinks. */
+      let reasoningTail = '';
+      let lastReasoningPaint = 0;
       // Keep a live spinner on the status row for the whole turn: streaming
       // text and silent tool execution both leave the screen looking settled.
       const stopActivity = (): void => {
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
       };
       const paintActivity = (glyph: string, label: string): void => {
-        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns, { glyph, label }, layout.statusRow));
+        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns, { glyph, label, reasoning: label === 'Thinking' ? reasoningTail : undefined }, layout.statusRow));
       };
       const startActivity = (): void => {
         stopActivity();
@@ -1391,16 +1394,18 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           if (event.type === 'model_change') usedModels.add(event.newModelId);
           if (event.type === 'progress') {
             taskStep = { step: event.step, maxSteps: event.maxSteps ?? 0 };
-            activityLabel = event.status;
-            paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
+            activityLabel = describeActivity(event.status);
+            paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel);
           }
           if (event.type === 'tool_call_initiated') {
             activityLabel = `Running ${event.toolName}`;
             paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel);
           }
           if (event.type === 'tool_result') {
-            activityLabel = undefined;
             if (!thinkingTimer) startActivity();
+            // `startActivity` clears the label; a result means the agent is about
+            // to read it and decide the next move.
+            activityLabel = 'Reviewing';
           }
           // The approval prompt owns the screen until the tool result arrives.
           if (event.type === 'approval_request') stopActivity();
@@ -1421,8 +1426,24 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
               lastUsagePaint = event.timestamp;
             }
           }
+          if (event.type === 'reasoning_delta') {
+            // Keep a bounded tail: enough to show what the model is working
+            // through, without turning the status row into a transcript.
+            reasoningTail = (reasoningTail + event.delta).slice(-240);
+            activityLabel = 'Thinking';
+            const now = Date.now();
+            if (now - lastReasoningPaint >= 100) {
+              lastReasoningPaint = now;
+              paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], 'Thinking');
+            }
+          }
           if (event.type === 'assistant_delta') {
             streamedAnswer += event.delta;
+            reasoningTail = '';
+            if (activityLabel !== 'Writing') {
+              activityLabel = 'Writing';
+              paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel);
+            }
             if (Date.now() - lastSessionCheckpointAt >= 1_000) checkpointInterruptedTurn();
             paintAnswer();
           }

@@ -548,6 +548,32 @@ export interface ChatActivity {
   glyph: string;
   /** What the agent is doing right now, for example `Running run_command`. */
   label: string;
+  /**
+   * The newest reasoning text, already collapsed to one line. Only the tail is
+   * painted — enough to show the model is working through something, without
+   * turning the status row into a transcript.
+   */
+  reasoning?: string;
+}
+
+/**
+ * Shorten the engine's progress sentence into a phase the user can follow.
+ *
+ * The status row is the only thing moving during a long, silent inference — the
+ * reasoning stream is deliberately not displayed — so it names what the agent is
+ * doing instead of repeating the step counter.
+ */
+export function describeActivity(status: string): string {
+  const text = status
+    .trim()
+    .replace(/^step\s+\d+\s*\/\s*\d+\s*:\s*/i, '')
+    .replace(/\s*\.{3}$/, '')
+    .trim();
+  if (/^inferring next action/i.test(text)) return 'Thinking';
+  if (/^discovering and selecting models/i.test(text)) return 'Selecting model';
+  if (/^retrying\b/i.test(text)) return 'Retrying request';
+  if (/^delegating sub-task/i.test(text)) return 'Delegating a sub-task';
+  return text || 'Working';
 }
 
 /**
@@ -567,10 +593,28 @@ export function renderChatThoughtTimeUpdate(
   const stepText = taskStep && taskStep.maxSteps > 0 && taskStep.step >= 0
     ? `Step ${taskStep.step}/${taskStep.maxSteps}`
     : undefined;
-  const status = (activity
-    ? [`${activity.glyph} ${activity.label}`, stepText, label].filter(Boolean).join(' · ')
-    : stepText ? `Processing task… ${stepText} · ${label}` : `Thought for ${label}`).slice(0, area.cardWidth);
-  return `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${status}\x1b[0m\x1b8`;
+  // The engine's sentence often already carries the step ("Step 2/8: Inferring
+  // next action..."), which would otherwise print twice beside `stepText`.
+  const activityText = activity
+    ? `${activity.glyph} ${activity.label.replace(/^step\s+\d+\s*\/\s*\d+\s*:\s*/i, '')}`
+    : undefined;
+  const trailing = [stepText, label].filter(Boolean).join(' · ');
+  const reasoning = activity?.reasoning?.replace(/\s+/g, ' ').trim() ?? '';
+  let status: string;
+  if (activityText && reasoning) {
+    // Keep the newest words: the tail is the part that is still moving, so the
+    // excerpt shrinks from the left as the row fills up.
+    const room = area.cardWidth - activityText.length - trailing.length - 6;
+    const tail = room > 8
+      ? (reasoning.length > room ? `…${reasoning.slice(-(room - 1))}` : reasoning)
+      : '';
+    status = tail ? `${activityText} · ${tail} · ${trailing}` : `${activityText} · ${trailing}`;
+  } else if (activityText) {
+    status = `${activityText} · ${trailing}`;
+  } else {
+    status = stepText ? `Processing task… ${stepText} · ${label}` : `Thought for ${label}`;
+  }
+  return `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${status.slice(0, area.cardWidth)}\x1b[0m\x1b8`;
 }
 
 /**
