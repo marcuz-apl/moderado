@@ -24,6 +24,12 @@ export interface WelcomeLayoutOptions {
   chatAnswer?: string;
   /** Rows the answer is scrolled up from its tail; 0 is the live view. */
   chatAnswerOffset?: number;
+  /**
+   * Live activity for this turn. When set, the status row carries the current
+   * phase and the transcript below it starts with the activity log, so a full
+   * frame repaint shows the same thing the incremental paints do.
+   */
+  chatActivity?: ChatActivityBlock;
   chatThoughtTime?: number;
   /** Settled turn completed successfully — render the "✔ Done" status marker. */
   chatTaskDone?: boolean;
@@ -223,16 +229,6 @@ export function windowChatAnswerAt(
 }
 
 /**
- * Wrap an answer to the card and keep only the rows that fit. Older rows are
- * dropped (the newest output is what the user is reading) and reported as a
- * count so nothing is silently lost.
- */
-export function windowChatAnswer(text: string, maxRows: number, textWidth: number): { lines: string[]; hidden: number } {
-  const { lines, hiddenAbove } = windowChatAnswerAt(text, maxRows, textWidth, 0);
-  return { lines, hidden: hiddenAbove };
-}
-
-/**
  * Style one answer row.
  *
  * Inside the turn-summary fence every row becomes a band: a rail in the accent
@@ -241,6 +237,11 @@ export function windowChatAnswer(text: string, maxRows: number, textWidth: numbe
  * of thing from the prose above it, rather than three more paragraphs.
  */
 export function renderAnswerLine(line: string, textWidth: number): string {
+  // Activity-log rows share the window with the answer but read as a record of
+  // what happened: dim, no rail, no band. One function, two kinds of row.
+  if (line.startsWith(LOG_MARK)) {
+    return `\x1b[38;5;244m${truncateToWidth(line.slice(LOG_MARK.length), textWidth)}\x1b[0m`;
+  }
   if (!line.startsWith(SUMMARY_MARK)) {
     const heading = line.match(/^\s*(?:#{1,6}\s+([^#]+?)|\*\*(.+?)\*\*)\s*$/);
     return heading
@@ -577,13 +578,27 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
   const answerText = options.chatAnswer ?? '';
   const answerOffset = options.chatAnswerOffset ?? 0;
+  // The activity log and the answer are one list, so both the scroll position
+  // and the window are computed over the merged rows.
+  const transcriptWidth = getChatTranscriptWidth(layout);
+  const transcript = buildChatTranscriptRows(options.chatActivity, answerText, transcriptWidth);
   // While the reader is scrolled up, the status row belongs to the scroll
   // position: the turn clock is not what they are looking for.
-  const scrollWindow = answerText.trim().length > 0 && layout.answerRows > 0 && answerOffset > 0
-    ? windowChatAnswerAt(answerText, layout.answerRows, area.textWidth, answerOffset)
+  const scrollWindow = transcript.rows.length > 0 && layout.answerRows > 0 && answerOffset > 0
+    ? windowChatTranscriptAt(transcript.rows, layout.answerRows, answerOffset)
     : undefined;
-  const chatStatus = scrollWindow
-    ? `${scrollWindow.hiddenAbove === 0 ? 'Top of the answer' : `↑ ${scrollWindow.hiddenAbove} above`} · ↓ ${scrollWindow.hiddenBelow} below · PgUp/PgDn`
+  const activityElapsed = options.chatActivity
+    ? (options.chatActivity.elapsedLabel ?? formatElapsed(thoughtTime))
+    : '';
+  // An offset that no longer hides anything (the answer shrank, or the viewport
+  // grew) must report the live view, not claim a scroll position that is gone.
+  // Sitting at the very top still counts: rows are hidden *below* the window.
+  const scrolled = scrollWindow !== undefined
+    && (scrollWindow.hiddenAbove > 0 || scrollWindow.hiddenBelow > 0);
+  const chatStatus = scrolled
+    ? `${scrollWindow.hiddenAbove === 0 ? 'Top of the turn' : `↑ ${scrollWindow.hiddenAbove} above`} · ↓ ${scrollWindow.hiddenBelow} below · PgUp/PgDn`
+    : options.chatActivity
+    ? truncateToWidth(`${options.chatActivity.glyph} ${options.chatActivity.label} · ${activityElapsed}`, transcriptWidth)
     : !answerText.trim()
     ? ''
     : options.chatTaskDone
@@ -592,20 +607,17 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
     ? ''
     : `Thought for ${thoughtTimeLabel}`;
   lines.push(chatStatus
-    ? indent + `\x1b[38;5;244m${truncateToWidth(chatStatus, area.cardWidth)}\x1b[0m`
+    ? indent + `\x1b[38;5;244m${chatStatus}\x1b[0m`
     : '');
-  // Answer section: multi-line model answer, windowed to the rows the composer leaves free.
-  if (answerText.trim().length > 0 && layout.answerRows > 0) {
+  // Transcript section: the activity log followed by the answer, windowed to the
+  // rows the composer leaves free. The log is never dropped to make room for the
+  // answer — that trade is what produced the one-line view.
+  if (transcript.rows.length > 0 && layout.answerRows > 0) {
     lines.push('');
-    const { lines: answerLines, hiddenAbove } = windowChatAnswerAt(
-      answerText,
-      layout.answerRows,
-      area.textWidth,
-      answerOffset,
-    );
-    if (hiddenAbove > 0) lines.push(indent + `\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), area.cardWidth)}\x1b[0m`);
-    for (const answerLine of answerLines) {
-      lines.push(indent + renderAnswerLine(answerLine, area.textWidth));
+    const { lines: transcriptLines, hiddenAbove } = windowChatTranscriptAt(transcript.rows, layout.answerRows, answerOffset);
+    if (hiddenAbove > 0) lines.push(indent + `\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), transcriptWidth)}\x1b[0m`);
+    for (const transcriptLine of transcriptLines) {
+      lines.push(indent + renderAnswerLine(transcriptLine, getChatTranscriptWidth(layout)));
     }
   }
   // Hard guarantee: the composer starts at `composerTop` and the frame ends one
@@ -854,119 +866,132 @@ export interface ChatActivityBlock {
   history?: ActivityEntry[];
 }
 
-/**
- * Rows the activity block may claim.
- *
- * It lives in the answer area, which is empty until the first token arrives, so
- * it costs nothing: it borrows rows the answer would otherwise leave blank and
- * hands them back the moment text starts streaming. Six is the point where a
- * glance reads the whole turn without the block becoming a transcript.
- */
-export const ACTIVITY_BLOCK_MAX_ROWS = 6;
-
-/** Rows available to the block for this layout; 0 when the viewport is tiny. */
-export function getChatActivityRows(layout: ChatLayout): number {
-  // The block starts on the status row and stops one row short of the composer,
-  // so the header lands exactly where the single status line would be and the
-  // eye does not jump when the two swap.
-  const available = Math.max(0, layout.composerTop - 1 - layout.statusRow);
-  return Math.min(available, ACTIVITY_BLOCK_MAX_ROWS);
-}
-
-const ACTIVITY_TONES: Record<ActivityEntry['tone'], number> = { active: 250, done: 244, failed: 203 };
 
 /**
- * Clamp one body line to the card in terminal cells.
+ * Invisible prefix marking a rendered row as part of the live activity log.
  *
- * `indent + truncateToWidth(..., cardWidth - indent)` is exactly `cardWidth`
- * wide at most: the indent is spent first, so a wide CJK glyph can never push
- * the row past the right border of the frame.
+ * A second mark next to `SUMMARY_MARK` lets one renderer style both kinds of
+ * row in the same scrollable list without them knowing about each other.
  */
-function activityBodyLine(text: string, cells: number, indent: number): string {
-  return ' '.repeat(indent) + truncateToWidth(text, Math.max(0, cells - indent));
+const LOG_MARK = '\u0002';
+
+/**
+ * Cells the transcript may use on this layout.
+ *
+ * The card has a 70-column floor, the terminal does not: on a narrow window the
+ * transcript still has to stop at the screen edge, not at the card's. Wrapping
+ * to the card width and painting anyway is what let a long row spill past the
+ * right border of the frame, so the wrap width is the narrower of the two and
+ * every row is clamped to it.
+ */
+export function getChatTranscriptWidth(layout: ChatLayout): number {
+  const { area } = layout;
+  return Math.min(area.textWidth, Math.min(area.cardWidth, Math.max(8, layout.terminalWidth - area.startColumn + 1)));
 }
 
 /**
- * Paint the live activity block: one phase header on the status row, then the
- * tool log and the newest reasoning, bottom-aligned in the space above the
- * composer.
+ * Rows of the live turn transcript: the activity log first, the answer after.
  *
- * This is the answer to "the processing message is squeezed into one line": the
- * single status row clipped a whole thought into `⠋ Thinking · 12s · …`, which
- * told the reader nothing. Here the header keeps the phase and the clock, and
- * the rows underneath carry what the agent is actually doing.
+ * This is the Cline model. Cline keeps one scrollable list where every action
+ * and every message is a row, the newest pinned to the bottom and the rest
+ * reachable by scrolling. Merging the two here is what fixes "the output
+ * becomes one line again": the activity log used to be a separate block that
+ * handed its rows back the moment the first token streamed, so a long fix
+ * explanation left nothing on screen but a single clipped status row — exactly
+ * when there was most to read.
  *
- * Every row is cleared before it is written and clamped to the card, and the
- * block never reaches past the last answer row, so it cannot overflow the frame
- * or paint over the composer.
+ * The log and the answer now share the window, so the record of what the agent
+ * did and the answer it produced are read in one place and scroll together.
  */
-export function renderChatActivityBlock(
+export function buildChatTranscriptRows(
+  activity: ChatActivityBlock | undefined,
+  answer: string,
+  textWidth: number,
+): { rows: string[]; answerStart: number } {
+  const rows: string[] = [];
+  for (const entry of activity?.history ?? []) {
+    rows.push(LOG_MARK + `${entry.glyph} ${entry.label}`);
+  }
+  const reasoning = activity?.reasoning?.replace(/\s+/g, ' ').trim();
+  if (reasoning) {
+    // Two columns of indent mark the thought as subordinate to the phase, and
+    // wrapping (not truncating) is what turns one clipped line into prose.
+    for (const line of wrapText(reasoning, Math.max(8, textWidth - 2))) rows.push(LOG_MARK + `  ${line}`);
+  }
+  const answerStart = rows.length;
+  if (answer.trim().length > 0) rows.push(...wrapAnswerLines(answer.trimEnd(), textWidth));
+  return { rows, answerStart };
+}
+
+/**
+ * Window the transcript around an offset, measured in rows scrolled up from the
+ * tail. `offset = 0` is the live view (newest rows). One row is reserved for
+ * the "earlier lines hidden" note whenever anything is above the window.
+ */
+export function windowChatTranscriptAt(
+  rows: readonly string[],
+  maxRows: number,
+  offsetFromBottom = 0,
+): { lines: string[]; hiddenAbove: number; hiddenBelow: number } {
+  if (rows.length <= maxRows) return { lines: [...rows], hiddenAbove: 0, hiddenBelow: 0 };
+  // The note costs a row, so the content capacity is one row smaller — and the
+  // maximum offset follows from that capacity, not from the raw row count.
+  const capacity = Math.max(1, maxRows - 1);
+  const maxOffset = Math.max(0, rows.length - capacity);
+  const offset = Math.max(0, Math.min(Math.round(offsetFromBottom), maxOffset));
+  const end = rows.length - offset;
+  const start = Math.max(0, end - capacity);
+  return { lines: [...rows.slice(start, end)], hiddenAbove: start, hiddenBelow: rows.length - end };
+}
+
+/** Rows the transcript occupies for a layout; 0 when the viewport is tiny. */
+export function getChatTranscriptRows(layout: ChatLayout): number {
+  return Math.max(0, layout.answerRows);
+}
+
+/**
+ * Paint the pinned phase header on the status row.
+ *
+ * One row, always: the phase and its clock. Everything it used to squeeze into
+ * that row now lives in the transcript below it.
+ */
+export function renderChatTranscriptHeader(
   activity: ChatActivityBlock,
   layout: ChatLayout,
   thoughtTime: number,
 ): string {
   const { area } = layout;
-  const rows = getChatActivityRows(layout);
-  if (rows === 0) return '';
-  // The card has a 70-column floor, the terminal does not: on a very narrow
-  // window the block still has to stop at the screen edge, not at the card's.
-  const cells = Math.min(area.cardWidth, Math.max(8, layout.terminalWidth - area.startColumn + 1));
+  const cells = getChatTranscriptWidth(layout);
   const elapsed = activity.elapsedLabel ?? formatElapsed(thoughtTime);
   const header = `\x1b[38;5;250m${truncateToWidth(`${activity.glyph} ${activity.label} · ${elapsed}`, cells)}\x1b[0m`;
-  const body: string[] = [];
-  // The log first, the current thought last: a log is read from the bottom, and
-  // the bottom row is where the agent is right now.
-  for (const entry of activity.history ?? []) {
-    body.push(`\x1b[38;5;${ACTIVITY_TONES[entry.tone]}m${activityBodyLine(`${entry.glyph} ${entry.label}`, cells, 0)}\x1b[0m`);
-  }
-  const reasoning = activity.reasoning?.replace(/\s+/g, ' ').trim();
-  if (reasoning) {
-    // Two columns of indent mark the thought as subordinate to the phase, and
-    // wrapping (not truncating) is what turns one clipped line into prose.
-    const wrapped = wrapText(reasoning, Math.max(8, cells - 2));
-    for (const line of wrapped.slice(-ACTIVITY_BLOCK_MAX_ROWS)) {
-      body.push(`\x1b[38;5;244m${activityBodyLine(line, cells, 2)}\x1b[0m`);
-    }
-  }
-  // The header owns row 0; the body gets whatever is left, keeping its tail.
-  // (`slice(-0)` would return everything, so the one-row case is explicit.)
-  const visible = rows > 1 ? body.slice(-(rows - 1)) : [];
-  let sequence = '\x1b7';
-  for (let index = 0; index < rows; index++) {
-    const row = layout.statusRow + index;
-    // Rows past the content are cleared, not skipped: the block shrinks as the
-    // phase changes and must not leave stale text behind.
-    const text = index === 0 ? header : visible[index - 1] ?? '';
-    sequence += `\x1b[${row};${area.startColumn}H\x1b[2K${text}`;
-  }
-  return sequence + '\x1b8';
-}
-
-/** Erase the block without repainting the frame (used when the turn settles). */
-export function clearChatActivityBlock(layout: ChatLayout): string {
-  const rows = getChatActivityRows(layout);
-  if (rows === 0) return '';
-  const { area } = layout;
-  let sequence = '\x1b7';
-  for (let index = 0; index < rows; index++) {
-    sequence += `\x1b[${layout.statusRow + index};${area.startColumn}H\x1b[2K`;
-  }
-  return sequence + '\x1b8';
+  return `\x1b7\x1b[${layout.statusRow};${area.startColumn}H\x1b[2K${header}\x1b8`;
 }
 
 /**
- * Repaint the answer area in place: exactly the rows the layout reserves,
+ * Repaint the transcript in place: exactly the rows the layout reserves,
  * between the status row and the composer. The window scrolls (oldest rows
- * leave first) instead of writing over the composer, so a large model output
- * can never damage the bottom rows. The cursor is saved and restored, so the
- * caller keeps its position on the input line.
+ * leave first) instead of writing over the composer, so a long turn can never
+ * damage the bottom rows. The cursor is saved and restored, so the caller keeps
+ * its position on the input line.
+ *
+ * Unlike the answer window it replaced, this never gives its rows up: the log
+ * and the answer are one list, so the newest rows stay on screen and the rest
+ * is one PgUp away. Every row is clamped to the card in terminal cells, so a
+ * wide CJK glyph or a long path cannot push a row past the right border.
  */
-export function renderChatAnswerWindow(text: string, layout: ChatLayout, offsetFromBottom = 0): string {
+export function renderChatTranscriptWindow(
+  activity: ChatActivityBlock | undefined,
+  answer: string,
+  layout: ChatLayout,
+  offsetFromBottom = 0,
+): string {
   const { area } = layout;
-  const { lines, hiddenAbove } = windowChatAnswerAt(text, layout.answerRows, area.textWidth, offsetFromBottom);
+  const cells = getChatTranscriptWidth(layout);
+  const { rows } = buildChatTranscriptRows(activity, answer, cells);
+  const { lines, hiddenAbove } = windowChatTranscriptAt(rows, layout.answerRows, offsetFromBottom);
   const visible = hiddenAbove > 0
-    ? [`\x1b[38;5;244m${chatAnswerOverflowNote(hiddenAbove)}\x1b[0m`, ...lines.map((line) => renderAnswerLine(line, area.textWidth))]
-    : lines.map((line) => renderAnswerLine(line, area.textWidth));
+    ? [`\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), cells)}\x1b[0m`, ...lines.map((line) => renderAnswerLine(line, cells))]
+    : lines.map((line) => renderAnswerLine(line, cells));
   let sequence = '\x1b7';
   for (let index = 0; index < layout.answerRows; index++) {
     const row = layout.answerTop + index;

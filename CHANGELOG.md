@@ -16,10 +16,25 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                                                        multi-row activity log, summary panel,
                                                        answer scrollback, /transcript,
                                                        contained approval dialog,
-                                                       multi-line run log)
+                                                       multi-line run log,
+                                                       one scrollable turn transcript)
 ```
 
 ## Milestone Change Log Details
+
+### [Unreleased] — 2026-10-23 (the turn transcript is one scrollable list)
+**Feature: the activity log no longer disappears when the answer starts streaming**
+
+- **Type**: `feat` / `patch-level`
+- **Scope**: `apps/cli` chat frame, transcript rendering, composer scrolling
+- **Key Deliverables**:
+  - **The log was traded away for the answer.** It lived in a six-row block inside the answer area, and the moment the first token streamed the block handed its rows back and the one-line status row took over. On a fix turn — where the agent reads files, runs the build, and then explains at length — that meant the whole interesting part was one clipped row. The log and the answer are now **one list**: `buildChatTranscriptRows` puts the activity log first and appends the wrapped answer after it, `windowChatTranscriptAt` windows the merged rows, and `renderChatTranscriptWindow` paints them in place. Nothing is surrendered, so the record of what the agent did and the answer it produced are read in one place and scroll together — the Cline model.
+  - **The phase header is pinned, not competing.** `renderChatTranscriptHeader` paints one row on the status row: `⠋ Thinking · 12s`. Everything that row used to squeeze into itself now lives in the transcript below it.
+  - **The scroll position is shared, not reset.** The composer owns the offset (PgUp/PgDn, three rows per wheel notch) and now reports it through `onTranscriptScroll`; the turn loop paints at the reader's offset instead of yanking them back to the tail on every streamed delta. `getChatActivity` lets the composer compute the scroll *range* over the merged rows. A new turn resets to the tail.
+  - **Narrow terminals are clamped, not painted over.** `getChatTranscriptWidth` takes the narrower of the card's inner width and the real viewport, and the log, the answer, the overflow note and the header are all wrapped or truncated to it. The answer window it replaced wrapped to the card width and painted anyway, which spilled past the right border below ~45 columns.
+  - **The scroll row tells the truth.** The window is computed and clamped first, so an offset that no longer hides anything reports the live view, and sitting at the very top reports `Top of the turn · ↓ N below` instead of claiming to be at the tail.
+  - **Dead code removed:** `renderChatActivityBlock`, `clearChatActivityBlock`, `getChatActivityRows`, `ACTIVITY_BLOCK_MAX_ROWS`, `renderChatAnswerWindow` and `windowChatAnswer` are gone, along with the tests that pinned the old block's geometry. Their replacements cover the merged transcript.
+  - **Coverage**: `welcome.test.ts` (log survives the answer; log and answer scroll as one list with a truthful status row; every width 20–200 × height 12–40 clamped to the card and never reaching the composer), full suite **71 files / 702 tests** green.
 
 ### [Unreleased] — 2026-10-23 (the run log is multi-line and scrollable)
 **Feature: `moderado run` prints a readable log instead of one clipped row per event**

@@ -25,9 +25,10 @@ import {
   renderFullWelcomeScreen,
   renderHelpPopupBox,
   renderWelcomePopupLayer,
-  windowChatAnswerAt,
+  windowChatTranscriptAt,
+  buildChatTranscriptRows,
 } from './welcome.js';
-import type { WelcomeLayoutOptions } from './welcome.js';
+import type { ChatActivityBlock, WelcomeLayoutOptions } from './welcome.js';
 
 
 /**
@@ -72,6 +73,25 @@ export interface PromptInteractiveTurnOptions {
   outputTokenRate?: number;
   tokenUsage?: UsageEvent;
   questionHistory?: string[];
+  /**
+   * Called whenever the transcript is scrolled, with the new offset measured in
+   * rows up from the tail (0 is the live view).
+   *
+   * The turn loop paints the transcript on every streamed delta, so without
+   * this it would repaint at offset 0 and drag a reader who scrolled up back to
+   * the bottom mid-sentence. The offset is the composer's; the loop only needs
+   * to be told when it changes.
+   */
+  onTranscriptScroll?: (offset: number) => void;
+  /**
+   * Live activity for the turn that is running right now.
+   *
+   * The composer owns the scroll position, so it also owns the scroll range —
+   * and the range has to cover the activity log as well as the answer, because
+   * the two are one transcript. The turn loop holds the activity; this is how
+   * the composer reads it without the two sharing mutable state.
+   */
+  getChatActivity?: () => ChatActivityBlock | undefined;
   /**
    * Called when user selects a model via /model. Receives a `drawFrame`
    * callback that composites popup content as a floating layer on top of the
@@ -180,6 +200,9 @@ export async function promptInteractiveTurn(
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
     chatAnswerOffset: answerOffset,
+    // Live activity for the running turn, so a composer-driven repaint shows
+    // the transcript the loop is painting rather than an empty answer area.
+    chatActivity: options.getChatActivity?.(),
     chatThoughtTime: options.chatThoughtTime,
     chatTaskDone: options.chatTaskDone,
     outputTokenRate: options.outputTokenRate,
@@ -267,21 +290,33 @@ export async function promptInteractiveTurn(
     getChatComposerRows(getOptions()),
   );
 
-  /** How many rows of answer sit above the tail view — the scroll range. */
+  /**
+   * How many rows of transcript sit above the tail view — the scroll range.
+   *
+   * The range covers the whole transcript, not just the answer: the activity log
+   * and the answer are one list, so scrolling up reaches what the agent did as
+   * well as what it said.
+   */
   const answerScrollLimit = (): number => {
     const answer = options.chatAnswer;
-    if (!answer || answer.trim().length === 0) return 0;
+    const activity = options.getChatActivity?.();
+    if ((!answer || answer.trim().length === 0) && !activity) return 0;
     const layout = currentChatLayout();
     if (layout.answerRows <= 0) return 0;
-    return windowChatAnswerAt(answer, layout.answerRows, layout.area.textWidth, 0).hiddenAbove;
+    return windowChatTranscriptAt(
+      buildChatTranscriptRows(activity, answer ?? '', layout.area.textWidth).rows,
+      layout.answerRows,
+      0,
+    ).hiddenAbove;
   };
 
   /**
-   * Move the answer view; positive scrolls up towards older lines.
+   * Move the transcript view; positive scrolls up towards older lines.
    *
-   * A long turn summary is taller than the answer area, so the tail view hides
-   * its opening sections. This is the way back: the whole report stays in the
-   * buffer, and the status row reports the position.
+   * A long turn is taller than the transcript area, so the tail view hides its
+   * opening rows. This is the way back: the whole turn stays in the buffer, the
+   * status row reports the position, and the turn loop is told so its next
+   * incremental paint does not yank the reader back to the bottom.
    */
   const scrollAnswer = (delta: number): void => {
     const limit = answerScrollLimit();
@@ -289,6 +324,7 @@ export async function promptInteractiveTurn(
     const next = Math.max(0, Math.min(limit, answerOffset + delta));
     if (next === answerOffset) return;
     answerOffset = next;
+    options.onTranscriptScroll?.(next);
     redrawFull();
   };
 

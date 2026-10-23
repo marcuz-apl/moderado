@@ -9,7 +9,6 @@ import {
   renderCenteredWelcomeScreen,
   renderChatScreen,
   renderChatComposerCursor,
-  renderChatAnswerWindow,
   renderChatThoughtTimeUpdate,
   describeActivity,
   describeToolActivity,
@@ -38,11 +37,12 @@ import {
   getChatAnswerArea,
   getChatLayout,
   getChatComposerRows,
-  getChatActivityRows,
-  renderChatActivityBlock,
-  clearChatActivityBlock,
   wrapAnswerLines,
   windowChatAnswerAt,
+  buildChatTranscriptRows,
+  windowChatTranscriptAt,
+  renderChatTranscriptWindow,
+  renderChatTranscriptHeader,
   renderAnswerLine,
   renderChatUsageUpdate,
 } from '../src/ui/welcome.js';
@@ -580,7 +580,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(longPath).toContain('1m 15s');
     expect(paintedWidth(longPath)).toBeLessThanOrEqual(cardWidth);
     const answerLayout = getChatLayout(100, 30, 'Who are you?');
-    const answerWindow = renderChatAnswerWindow('Hi', answerLayout);
+    const answerWindow = renderChatTranscriptWindow(undefined, 'Hi', answerLayout);
     expect(answerWindow.startsWith('\x1b7')).toBe(true);
     expect(answerWindow.endsWith('\x1b8')).toBe(true);
     expect(answerWindow).toContain(`\x1b[${answerLayout.answerTop};${getChatAnswerArea(100).startColumn}H`);
@@ -649,33 +649,77 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(formatElapsed(750)).toBe('12m 30s');
   });
 
-  it('spreads the processing log over the empty answer area instead of one clipped row', () => {
-    const layout = getChatLayout(100, 30, 'Build a weather app', 5);
-    const sequence = renderChatActivityBlock({
+  it('keeps the activity log on screen when the answer starts streaming', () => {
+    // The regression this guards: the log used to be a separate block that
+    // handed its rows back the moment the first token arrived, so a long fix
+    // explanation left one clipped status row on screen.
+    const layout = getChatLayout(100, 30, 'the weather app crashes, fix it', 5);
+    const activity = {
       glyph: '⠋',
       label: 'Thinking',
-      reasoning: 'checking whether the cache key includes the model identifier before reusing an answer',
+      elapsedLabel: '12s',
+      reasoning: 'the crash is a null map over forecast before the fetch resolves',
       history: [
-        { glyph: '✔', label: 'Reading src/ui/welcome.ts', tone: 'done' },
-        { glyph: '⠼', label: 'Running npm test', tone: 'active' },
+        { glyph: '✔' as const, label: 'Reading src/WeatherCard.tsx', tone: 'done' as const },
+        { glyph: '✔' as const, label: 'Running npm test', tone: 'done' as const },
       ],
-    }, layout, 12);
-    const rows = [...sequence.matchAll(/\x1b\[(\d+);(\d+)H/g)].map((match) => Number(match[1]));
-    expect(rows).toHaveLength(getChatActivityRows(layout));
-    expect(rows[0]).toBe(layout.statusRow);
-    const text = stripAnsi(sequence);
-    // The header keeps the phase and the clock; the rows underneath carry the work.
-    expect(text).toContain('⠋ Thinking · 12s');
-    expect(text).toContain('✔ Reading src/ui/welcome.ts');
-    expect(text).toContain('⠼ Running npm test');
-    // Reasoning is wrapped, not clipped into a single `…` tail.
-    expect(text).toContain('checking whether the cache key');
-    expect(text.split('\n').filter((line) => line.includes('cache key')).length).toBeGreaterThan(0);
+    };
+    const answer = 'The crash was a null map in WeatherCard. I added a loading guard and a fallback.';
+
+    const { rows, answerStart } = buildChatTranscriptRows(activity, answer, layout.area.textWidth);
+    // The log comes first and the answer is appended after it, in one list.
+    expect(answerStart).toBeGreaterThan(0);
+    expect(rows.length).toBeGreaterThan(answerStart);
+
+    const text = stripAnsi(renderChatTranscriptWindow(activity, answer, layout));
+    // Both halves are on screen at once — the log is not dropped for the answer.
+    expect(text).toContain('✔ Reading src/WeatherCard.tsx');
+    expect(text).toContain('✔ Running npm test');
+    expect(text).toContain('the crash is a null map');
+    expect(text).toContain('The crash was a null map in WeatherCard');
+
+    // The pinned header carries the phase and the clock on one row.
+    expect(stripAnsi(renderChatTranscriptHeader(activity, layout, 12))).toContain('⠋ Thinking · 12s');
   });
 
-  it('never lets the activity block overflow the card or reach the composer', () => {
+  it('scrolls the log and the answer as one list, and says where it is', () => {
+    const layout = getChatLayout(100, 30, 'fix the weather app', 5);
+    const history = Array.from({ length: 14 }, (_, index) => ({
+      glyph: '✔' as const, label: `Reading src/component${index + 1}.tsx`, tone: 'done' as const,
+    }));
+    const activity = { glyph: '⠋' as const, label: 'Thinking' as const, elapsedLabel: '48s' as const, history };
+    const answer = 'Fixed all fourteen components.';
+    const { rows } = buildChatTranscriptRows(activity, answer, layout.area.textWidth);
+    expect(rows.length).toBeGreaterThan(layout.answerRows);
+
+    const base = {
+      workspace: '/w', mode: 'Execute' as const, autoApprove: true, model: 'm', tokens: 0, cost: '$0',
+      chatQuestion: 'fix the weather app', chatAnswer: answer, chatActivity: activity,
+      chatThoughtTime: 48, width: 100,
+    };
+    // Tail view: the newest rows, with a note naming how many are hidden above.
+    const live = stripAnsi(renderChatScreen(base, 30));
+    expect(live).toContain('… +');
+    expect(live).toContain('Reading src/component14.tsx');
+    expect(live).toContain('Fixed all fourteen components.');
+
+    // Scrolled up: the status row reports the position, and older rows appear.
+    const scrolled = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 2 }, 30));
+    expect(scrolled).toContain('↑');
+    expect(scrolled).toContain('below');
+    expect(scrolled).toContain('Reading src/component4.tsx');
+    expect(scrolled).not.toContain('Reading src/component1.tsx');
+
+    // At the very top the log's first entry is still reachable.
+    const top = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 40 }, 30));
+    expect(top).toContain('Top of the turn');
+    expect(top).toContain('Reading src/component1.tsx');
+  });
+
+  it('never lets the transcript overflow the card or reach the composer', () => {
     // Every terminal width and height the CLI can meet, with a 20-entry log and
-    // CJK reasoning: the widest glyphs and the longest history at once.
+    // CJK reasoning plus a long answer: the widest glyphs and the longest
+    // history at once.
     const history = Array.from({ length: 20 }, (_, index) => ({
       glyph: '✔', label: `Editing src/deeply/nested/path/file_${index}.ts`, tone: 'done' as const,
     }));
@@ -697,23 +741,21 @@ describe('OpenCode-style Welcome TUI', () => {
         const area = getChatAnswerArea(width);
         // The card has a 70-column floor; the terminal does not.
         const budget = Math.min(area.cardWidth, Math.max(8, width - area.startColumn + 1));
-        const painted = rowsOf(renderChatActivityBlock({
+        const painted = rowsOf(renderChatTranscriptWindow({
           glyph: '⠋', label: 'Thinking', reasoning: '检查缓存键是否包含模型标识'.repeat(20), history,
-        }, layout, 3725));
-        // The block claims at most its cap, and never the composer's rows.
-        expect(painted.length).toBeLessThanOrEqual(getChatActivityRows(layout));
+        }, 'A long answer that also has to stay inside the card. '.repeat(10), layout));
         for (const row of painted) {
-          expect(row.row).toBeGreaterThanOrEqual(layout.statusRow);
-          expect(row.row).toBeLessThan(layout.composerTop - 1);
+          expect(row.row).toBeGreaterThanOrEqual(layout.answerTop);
+          expect(row.row).toBeLessThan(layout.composerTop);
           expect(row.col).toBe(area.startColumn);
           expect(row.cells).toBeLessThanOrEqual(budget);
         }
       }
     }
-    // A viewport too short for a block falls back to the single status row.
+    // A viewport too short for any transcript rows paints nothing at all.
     const tiny = getChatLayout(80, 12, 'Q', 5);
-    expect(renderChatActivityBlock({ glyph: '⠋', label: 'Thinking' }, tiny, 3)).toBe('');
-    expect(clearChatActivityBlock(tiny)).toBe('');
+    expect(tiny.answerRows).toBe(0);
+    expect(renderChatTranscriptWindow({ glyph: '⠋', label: 'Thinking' }, 'answer', tiny)).toBe('\x1b7\x1b8');
   });
 
   it('paints the turn summary as a tinted panel that survives wrapping', () => {

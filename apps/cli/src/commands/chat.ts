@@ -16,8 +16,8 @@ import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthCon
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity, describeToolActivity, describeWait, renderChatActivityBlock, clearChatActivityBlock, getChatActivityRows } from '../ui/welcome.js';
-import type { ActivityEntry } from '../ui/welcome.js';
+import { exitCleanly, renderChatTranscriptWindow, renderChatTranscriptHeader, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity, describeToolActivity, describeWait } from '../ui/welcome.js';
+import type { ActivityEntry, ChatActivityBlock } from '../ui/welcome.js';
 import type { WelcomeLayoutOptions } from '../ui/welcome.js';
 import { promptInteractiveTurn } from '../ui/composer.js';
 import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
@@ -609,6 +609,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   }, sig) };
   const router = new Router();
   const loop = new AgentLoop();
+  /**
+   * Rows the transcript is scrolled up from its tail, mirrored from the
+   * composer. The turn loop paints the transcript on every streamed delta, so
+   * it has to paint at the reader's position — repainting at offset 0 would
+   * drag someone who scrolled up back to the bottom mid-sentence.
+   */
+  let answerOffset = 0;
+  /**
+   * Live activity for the turn that is running, or undefined between turns.
+   * Hoisted out of the turn closure so the composer can read it while it owns
+   * the scroll position.
+   */
+  let currentActivity: ChatActivityBlock | undefined;
   let conversationHistory: ChatMessage[] = [...activeSession.messages];
   const restoredTurn = restoreLastSessionTurn(conversationHistory);
   let lastQuestion = restoredTurn.question;
@@ -649,6 +662,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     autoApprove: activeAutoApprove,
     chatQuestion: lastQuestion,
     chatAnswer: lastAnswer,
+    // Scroll position mirrored from the composer, so a full frame repaint lands
+    // on the same rows the reader is looking at.
+    chatAnswerOffset: answerOffset,
     chatThoughtTime: lastThoughtTime,
     input: commandQueue.currentDraft,
     queuedCommands: commandQueue.items,
@@ -694,6 +710,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           sessionId: activeSession.id,
         })),
         questionHistory: conversationHistory.flatMap((message) => message.role === 'user' && message.content?.trim() ? [message.content] : []),
+        // The composer owns the scroll position; the turn loop needs to know
+        // when it moves so its incremental paints follow the reader.
+        onTranscriptScroll: (offset) => { answerOffset = offset; },
+        getChatActivity: () => currentActivity,
       onModelSelect: async (drawFrame) => {
         if (!activeConnection) {
           await showModelConnectionRequired(drawFrame, signal);
@@ -1210,6 +1230,9 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = '';
       lastAnswerReplayable = false;
       lastTurnDone = false;
+      // A new turn starts at the tail: the reader asked a question, so the
+      // newest rows are what they want, wherever they left the last one.
+      answerOffset = 0;
       let activityLabel: string | undefined;
       let activityFrame = 0;
       /** Last event of any kind, so the row can admit a long silent wait. */
@@ -1233,7 +1256,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (!force && now - lastAnswerPaint < 40) return;
         lastAnswerPaint = now;
         if (!streamedAnswer) return;
-        process.stdout.write(renderChatAnswerWindow(streamedAnswer, layout));
+        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset));
       };
       let lastErrorEvent: { code?: string; message: string } | undefined;
       /** Tail of the model's reasoning, shown as one dim line while it thinks. */
@@ -1241,45 +1264,37 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       let lastReasoningPaint = 0;
       /** Silence clock shown while the model has produced nothing. */
       let waitElapsedLabel: string | undefined;
-      /** Tool log for the live activity block: oldest first, bounded. */
+      /** Tool log for the live activity log: oldest first, bounded. */
       const activityHistory: ActivityEntry[] = [];
-      /** Whether the multi-row block currently owns the answer area. */
-      let activityBlockPainted = false;
       // Keep a live spinner on the status row for the whole turn: streaming
       // text and silent tool execution both leave the screen looking settled.
       const stopActivity = (): void => {
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
       };
+      /**
+       * Paint the pinned phase header and the transcript under it.
+       *
+       * The header is one row; everything below it is the activity log followed
+       * by the answer, in one scrollable window. The block used to be a separate
+       * *six-row* region that handed its rows back the moment text streamed, so a
+       * long answer left a single clipped status row on screen. Merging the two
+       * is what keeps the log readable for the whole turn.
+       */
       const paintActivity = (glyph: string, label: string): void => {
         // The reasoning tail belongs to the thinking phases, including the long
         // wait that follows them — that is when it is most useful.
         const thinking = label === 'Thinking' || label === 'Waiting on the model';
         const elapsedLabel = label === 'Waiting on the model' ? waitElapsedLabel : undefined;
         const thoughtTime = (Date.now() - startedAt) / 1000;
-        // Until the first token arrives the answer area is empty, so the turn
-        // borrows it for a live log instead of squeezing everything into one
-        // clipped row. The moment text streams, the block hands the rows back.
-        if (!streamedAnswer && getChatActivityRows(layout) >= 3) {
-          process.stdout.write(renderChatActivityBlock({
-            glyph,
-            label,
-            reasoning: thinking ? reasoningTail : undefined,
-            elapsedLabel,
-            history: activityHistory,
-          }, layout, thoughtTime));
-          activityBlockPainted = true;
-          return;
-        }
-        if (activityBlockPainted) {
-          process.stdout.write(clearChatActivityBlock(layout));
-          activityBlockPainted = false;
-        }
-        process.stdout.write(renderChatThoughtTimeUpdate(thoughtTime, process.stdout.columns, {
+        currentActivity = {
           glyph,
           label,
           reasoning: thinking ? reasoningTail : undefined,
           elapsedLabel,
-        }, layout.statusRow));
+          history: activityHistory,
+        };
+        process.stdout.write(renderChatTranscriptHeader(currentActivity, layout, thoughtTime));
+        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset));
       };
       const startActivity = (): void => {
         stopActivity();
@@ -1304,6 +1319,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         tokens: Math.round(sessionTokens + (usageRecorded ? 0 : turnUsage?.usage.totalTokens ?? 0)),
         chatQuestion: trimmed,
         chatAnswer: streamedAnswer || lastAnswer,
+        // The live activity rides along with the frame, so a full repaint (a
+        // resize, a keystroke in the composer) shows the same transcript the
+        // incremental paints do instead of an empty answer area.
+        chatActivity: turnActive ? currentActivity : undefined,
         chatThoughtTime: Math.max(0.001, (Date.now() - startedAt) / 1000),
         chatTaskDone: lastTurnDone,
         outputTokenRate,
@@ -1593,14 +1612,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       // The turn is over: replace the spinner with the settled state while
       // usage accounting and catalog refresh finish.
       turnActive = false;
+      // Drop the live activity from the frame so the settled "✔ Done" row and
+      // the finished transcript are what a repaint shows from here on.
+      currentActivity = undefined;
       stopActivity();
-      // A tool-only turn never streams text, so the block is still on screen.
-      // Erase it before the settled row goes in, or six stale log rows sit under
-      // it until the final repaint — which can be seconds of model discovery.
-      if (activityBlockPainted) {
-        process.stdout.write(clearChatActivityBlock(layout));
-        activityBlockPainted = false;
-      }
       process.stdout.write(renderChatThoughtTimeUpdate(
         (Date.now() - startedAt) / 1000,
         process.stdout.columns,
