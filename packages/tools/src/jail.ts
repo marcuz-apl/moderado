@@ -7,7 +7,9 @@ const SENSITIVE_PATTERNS = [
   /^\.env(\.[a-zA-Z0-9_\-]+)?$/i,
   /\.pem$/i,
   /\.key$/i,
-  /^id_[a-zA-Z0-9_]+/i,
+  // SSH key pairs only. A bare `^id_` prefix used to block legitimate files
+  // such as `id_notes.md` from ever being read or written.
+  /^id_(rsa|dsa|ecdsa|ed25519)(\.[a-zA-Z0-9]+)?$/i,
   /credentials\.json$/i,
 ];
 

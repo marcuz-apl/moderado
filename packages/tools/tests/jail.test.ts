@@ -317,6 +317,8 @@ describe('Workspace Security Jail', () => {
       expect(isProtectedPath('id_rsa')).toBe(true);
       expect(isProtectedPath('id_rsa.pub')).toBe(true);
       expect(isProtectedPath('id_ed25519')).toBe(true);
+      expect(isProtectedPath('id_ed25519.pub')).toBe(true);
+      expect(isProtectedPath('id_ecdsa')).toBe(true);
       expect(isProtectedPath('credentials.json')).toBe(true);
       expect(isProtectedPath('config/credentials.json')).toBe(true);
     });
@@ -332,6 +334,10 @@ describe('Workspace Security Jail', () => {
       expect(isProtectedPath('src/environment.ts')).toBe(false);
       expect(isProtectedPath('dotenv.config.js')).toBe(false);
       expect(isProtectedPath('my-credentials.json.ts')).toBe(false);
+      // A bare `id_` prefix must not blacklist ordinary project files.
+      expect(isProtectedPath('id_notes.md')).toBe(false);
+      expect(isProtectedPath('docs/id_report.txt')).toBe(false);
+      expect(isProtectedPath('src/id_generator.ts')).toBe(false);
     });
 
     it('rejects attempts to access sensitive files through resolveInJail', () => {

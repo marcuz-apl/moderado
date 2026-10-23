@@ -127,6 +127,15 @@ pushing the card off the bottom of the terminal. The frame always ends one row
 above the viewport bottom, which is what keeps the input, mode, and workspace
 rows stable while a turn streams.
 
+### Composer completion
+
+- Type `@` to filter workspace files. The list opens under the card,
+  `Up`/`Down` moves the selection, and `Tab` inserts the highlighted path as
+  `@path`. It closes as soon as the token ends, for example on a space.
+- Type `/` for slash commands; `Up`/`Down` browses them and `Tab` completes the
+  highlighted command.
+- `Tab` with neither list open toggles Plan/Execute.
+
 ### Provider presets and custom providers
 
 `/connect` offers built-in provider presets. Omit `connectProviders` in

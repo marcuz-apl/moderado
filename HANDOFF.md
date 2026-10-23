@@ -1,9 +1,52 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-23 (post-v0.4.34 fixes — turn summary, bounded answer area, one-step Moderado connect)
+Updated: 2026-10-23 (hardening pass after 1d36247)
 Branch: master (tracking origin/master)
-Status: v0.4.34 plus the Unreleased fixes are in the working tree; the last
-`getChatLayout` tweak was not re-verified with a build/test run (see below).
+Status: three reported glitches are fixed and pushed (1d36247); a follow-up
+hardening pass is in the working tree.
+
+## Session 2026-10-23 — hardening pass
+
+### Summary
+
+The review items from the previous session, worked one at a time with a build
+and test cycle after each.
+
+### Completed
+
+- **`@` completion restored (`ui/welcome.ts`)**: `promptInteractiveTurn` kept a
+  mention selection, reserved rows for the list, and bound Up/Down/Tab to it,
+  but `getOptions()` never passed `mentionFiles`/`mentionSelection` to
+  `renderWelcomeCard`, so the list was never painted. Both fields are now part
+  of the composer options. `welcome.test.ts` drives a real composer turn with an
+  `@ap` token, asserts the list is painted, and asserts the caret row still
+  matches the input line after the card grows.
+- **Protected-path precision (`packages/tools/src/jail.ts`)**: `/^id_[a-zA-Z0-9_]+/i`
+  blocked any file starting with `id_` — `id_notes.md` could not be read or
+  written. Now `/^id_(rsa|dsa|ecdsa|ed25519)(\.[a-zA-Z0-9]+)?$/i`, covered by
+  `jail.test.ts` (SSH keys still blocked, ordinary `id_*` files allowed).
+  `docs/SECURITY.md` was corrected: it claimed `*secret*`/`*credential*`
+  matching that the code never implemented.
+- **Failed turns are logged (`commands/chat.ts`, `commands/run.ts`)**: only a
+  fatal error escaping `main()` reached `writeDiagnosticLog`. A turn that fails
+  as a status plus an `error` event left no evidence. Both paths now append a
+  redacted record (`chat.turn`, `run.turn`); cancelled turns are not logged.
+- **Rejected after measurement**: memoizing `canonicalizeRoot` inside
+  `resolveInJail`. Benchmarked at 13.7 µs per `resolveInJail` call (6.5 µs of it
+  canonicalization); call sites are one or two per tool invocation and the
+  directory walk in `list_files` does not call it per entry. A cache on the
+  security boundary would buy nothing measurable.
+
+### Verification
+
+`tsc -b --force` clean; full suite 69 files / 667 tests pass.
+
+### Next action
+
+Commit and push the hardening pass. Remaining known item: `commands/chat.ts`
+(~2k lines) and `ui/welcome.ts` (~1.5k lines) still mix routing, execution, and
+rendering; splitting them is a refactor with no user-visible payoff and should
+be scheduled on its own.
 
 ## Session 2026-10-23 — three reported glitches fixed
 
@@ -54,15 +97,17 @@ Three user-reported defects, fixed against the code rather than `HANDOFF.md`:
 
 ### Verification
 
-`npm run build` (tsc -b --force) and the full Vitest suite were green after the
-first two fixes. The shell sandbox then failed session-wide
-(`sandbox-exec: data object length 66215 exceeds maximum (65535)`), so the final
-`getChatLayout` floor change and the new queued-commands test were reviewed
-statically only. **Re-run `npm run build && npm test` before tagging.**
+`npm run build` (tsc -b --force) and the full Vitest suite pass — 69 files /
+665 tests at the time of the commit (667 after the hardening pass). An earlier
+attempt was blocked when the shell sandbox failed session-wide
+(`sandbox-exec: data object length … exceeds maximum`); it recovered before the
+commit, so the last `getChatLayout` change and the queued-commands test were
+verified rather than only reviewed.
 
 ### Next action
 
-Run the build and full suite, then tag the next patch (`cut -d+ -f1 VERSION`).
+Done: committed as `1d36247` and pushed to `origin/master`. Continue with the
+hardening pass below.
 
 ## Session 2026-10-21 — v0.4.33 release preparation
 

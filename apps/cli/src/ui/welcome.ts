@@ -864,6 +864,11 @@ export async function promptInteractiveTurn(
     outputTokenRate: options.outputTokenRate,
     tokenUsage: options.tokenUsage,
     queuedCommands: options.queuedCommands,
+    // The @ completion list lives in the card, so the composer must be told
+    // about it — without these the keypress handler maintained a selection that
+    // was never painted.
+    mentionFiles,
+    mentionSelection,
     isTurnSettled: true,
   });
 

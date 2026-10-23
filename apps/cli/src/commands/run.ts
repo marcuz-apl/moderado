@@ -14,6 +14,7 @@ import { discoverSkills, formatSkillContext, getEnabledSkillNames, selectEnabled
 import { resolveVersion } from '../index.js';
 import { decideApproval } from './chat.js';
 import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
+import { writeDiagnosticLog } from '../diagnostic_log.js';
 
 /**
  * `moderado run` is non-interactive by default, so a mutation may only proceed
@@ -132,6 +133,10 @@ export async function handleRunCommand(
   const router = new Router();
   const loop = new AgentLoop();
   const recorder = new TurnRecorder(canonicalWorkspace);
+  // The loop reports a failure as a status plus an error event rather than by
+  // throwing, so keep the event to log it — a CI run is exactly where a
+  // provider or Gateway failure needs evidence after the fact.
+  let lastErrorEvent: { code?: string; message: string } | undefined;
   const skills = selectEnabledSkills(discoverSkills(), getEnabledSkillNames());
 
   process.stdout.write(`\x1b[1mModerado ${resolveVersion()}\x1b[0m | Workspace: \x1b[36m${canonicalWorkspace}\x1b[0m\n`);
@@ -156,6 +161,7 @@ export async function handleRunCommand(
       },
       eventListener: (event) => {
         recorder.record(event);
+        if (event.type === 'error') lastErrorEvent = { code: event.code, message: event.message };
         renderer.handleEvent(event);
       },
       signal,
@@ -172,9 +178,14 @@ export async function handleRunCommand(
     } else if (result.status === 'cancelled') {
       return 130;
     } else {
+      writeDiagnosticLog(
+        'run.turn',
+        `${lastErrorEvent?.code ? `${lastErrorEvent.code}: ` : ''}${lastErrorEvent?.message ?? `turn ${result.status} without an error event`}`,
+      );
       return 1;
     }
   } catch (err: any) {
+    writeDiagnosticLog('run.turn', err);
     process.stderr.write(`\n\x1b[1;31mExecution Fatal Error:\x1b[0m ${err.message}\n`);
     return 1;
   }

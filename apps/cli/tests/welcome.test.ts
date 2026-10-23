@@ -1084,6 +1084,35 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(result).toBe(`${'x'.repeat(70)}Z${'x'.repeat(20)}`);
   });
 
+  it('paints the @ mention list in the composer and keeps the caret on the input line', async () => {
+    let caretRow = 0;
+    const result = await runComposerTurn(async (stdin, context) => {
+      // The candidate cache is filled from a promise, so give it a tick.
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of '@ap') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      await new Promise((resolve) => setImmediate(resolve));
+
+      const frame = context.writes.filter((write) => write.includes('@app.ts')).pop();
+      expect(frame).toBeDefined();
+      const screen = stripAnsi(frame!);
+      expect(screen).toContain('@app.ts');
+      expect(screen).toContain('@apps/web.ts');
+
+      // The caret has to stay on the input line even though the box grows the card.
+      const lines = screen.split('\n');
+      const inputLineIndex = lines.findIndex((line) => line.includes('❯ @ap'));
+      expect(inputLineIndex).toBeGreaterThan(0);
+      const scrolled = Math.max(0, lines.length - context.rows);
+      caretRow = lastComposerWrite(context.writes).row;
+      expect(caretRow).toBe(inputLineIndex + 1 - scrolled);
+
+      stdin.emit('keypress', '\r', { name: 'return' });
+    }, { onMentionComplete: async () => ['app.ts', 'apps/web.ts'] });
+
+    expect(result).toBe('@ap');
+    expect(caretRow).toBeGreaterThan(0);
+  });
+
   it('keeps the composer status row inside the terminal width', () => {
     const card = stripAnsi(renderWelcomeCard({
       model: 'provider/very-long-model-name-for-testing', tokens: 0, cost: '$0.00',

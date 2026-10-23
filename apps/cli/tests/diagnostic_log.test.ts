@@ -19,4 +19,20 @@ describe('diagnostic logs', () => {
     expect(log).not.toContain('nvapi-abcdef');
     expect(log).not.toContain('sk-secret-value');
   });
+
+  it('records a failed turn reported as a plain message', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-log-'));
+    homes.push(home);
+
+    // The agent loop reports a failure as a status plus an error event, so the
+    // caller logs a message rather than an Error instance.
+    writeDiagnosticLog('chat.turn', 'rate_limited: Gateway rejected mrd_abcdef for Bearer abc.def', home);
+
+    const log = fs.readFileSync(path.join(home, '.moderado', 'logs', 'moderado.jsonl'), 'utf8');
+    expect(log).toContain('"command":"chat.turn"');
+    expect(log).toContain('rate_limited');
+    expect(log).toContain('[redacted Moderado key]');
+    expect(log).not.toContain('mrd_abcdef');
+    expect(log).not.toContain('Bearer abc.def');
+  });
 });

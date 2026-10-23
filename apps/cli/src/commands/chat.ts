@@ -19,6 +19,7 @@ import { listFiles } from '@moderado/tools';
 import { exitCleanly, promptInteractiveTurn, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows } from '../ui/welcome.js';
 import type { WelcomeLayoutOptions } from '../ui/welcome.js';
 import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
+import { writeDiagnosticLog } from '../diagnostic_log.js';
 import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
 import { layerPromptBox, renderBoxLines, selectConfirmPopup, selectListPopup } from '../ui/popup.js';
 import { askModalChoice } from '../ui/prompt.js';
@@ -1868,6 +1869,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         ? formatDirectWebSearchAnswer(liveSearch, true)
         : undefined;
       const hasSearchFallback = searchFallback !== undefined && searchFallback !== 'Web search returned no readable content.';
+      // A turn can fail without throwing: the loop reports a status plus an error
+      // event, the session stays alive, and nothing reached the diagnostic log —
+      // so a provider or Gateway failure left no evidence to report. A cancelled
+      // turn is user intent, not a failure, and stays out of the log.
+      if (result.status === 'failed' && !hasSearchFallback) {
+        writeDiagnosticLog(
+          'chat.turn',
+          `${lastErrorEvent?.code ? `${lastErrorEvent.code}: ` : ''}${lastErrorEvent?.message ?? 'turn failed without an error event'}`,
+        );
+      }
       lastAnswer = hasSearchFallback ? searchFallback : resolution.answer;
       if (budgetStopped) {
         const note = `Token budget reached (${tokenBudget?.toLocaleString()} per task). Task stopped; usage may exceed the limit because providers report in chunks.`;
@@ -1920,6 +1931,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       removeGenerationListener?.();
       redrawChatFrame();
     } catch (err: any) {
+      writeDiagnosticLog('chat.turn', err);
       if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
       removeGenerationListener?.();
       recordTurnUsage();

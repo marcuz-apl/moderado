@@ -64,7 +64,7 @@ Before performing any filesystem I/O:
 ### 2.3 Sensitive File Blacklist
 Even within the workspace, access to certain sensitive infrastructure files is restricted:
 - **Git Metadata**: Access to `.git/` is prohibited for general read/write/edit tools. Git operations must use `git_diff` or approved `run_command ["git", ...]`.
-- **Environment & Secrets**: Files matching `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa*`, `*secret*`, or `*credential*` are blocked from automated reads to prevent exfiltration into remote model prompts.
+- **Environment & Secrets**: Files matching `.env`, `.env.*`, `*.pem`, `*.key`, `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519` (with an optional suffix such as `.pub`), or `credentials.json` are blocked from automated reads to prevent exfiltration into remote model prompts. The match is exact per path segment, so an ordinary file such as `id_notes.md` stays readable.
 
 ---
 

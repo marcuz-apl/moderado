@@ -15,6 +15,17 @@ v0.4.28 (Help organization and interrupted-chat resilience)
 
 ## Milestone Change Log Details
 
+### [Unreleased] — 2026-10-23 (hardening pass)
+**Fix: the `@` completion list, protected-path precision, and evidence for failed turns**
+
+- **Type**: `fix` / `patch-level`
+- **Scope**: `apps/cli` composer and diagnostic logs, `packages/tools` jail, docs
+- **Key Deliverables**:
+  - **`@` completion works again**: the interactive composer maintained a mention selection and reserved rows for it, but never passed `mentionFiles`/`mentionSelection` to the card, so the list was never painted and `Up`/`Down`/`Tab` operated on an invisible list. Both fields are now part of the composer options, and `welcome.test.ts` asserts the list is painted and the caret stays on the input row.
+  - **Protected paths are exact**: the blacklist matched any segment starting with `id_`, so a legitimate `id_notes.md` could not be read or written at all. It now matches the SSH key names (`id_rsa`, `id_dsa`, `id_ecdsa`, `id_ed25519`, with an optional suffix such as `.pub`). `docs/SECURITY.md` no longer claims `*secret*`/`*credential*` matching the code never had.
+  - **Failed turns leave evidence**: a turn that fails without throwing — the loop reports a status plus an `error` event — reached neither the diagnostic log nor any support report. `chat` and `run` now append a redacted record to `~/.moderado/logs/moderado.jsonl`; a cancelled turn is user intent and is not logged.
+  - **Measured, not assumed**: `resolveInJail` re-canonicalizes the jail root on every call (13.7 µs per call, 6.5 µs of it canonicalization). Call sites are one or two per tool invocation and directory walks do not call it per entry, so the saving is noise — a cache on the security boundary was deliberately not added.
+
 ### [Unreleased] — 2026-10-23
 **Fix: end-of-turn report, contained answer area, and a Moderado connect flow that stops interrogating**
 
