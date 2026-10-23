@@ -96,7 +96,11 @@ describe('TerminalRenderer', () => {
       timestamp: Date.now(),
     });
 
-    expect(captured).toContain('Processing task… Step 1/10');
+    expect(captured).toContain('⠋ Thinking');
+    // The step counter is gone: it described the engine's loop, not the work.
+    expect(captured).not.toContain('Step 1/10');
+    // The model id belongs in the header, not in the status line.
+    expect(captured).not.toContain('z-ai/glm-5.3-flash');
     expect(captured).not.toContain('Analyzing user inquiry...');
     expect(captured).toContain('Here is the answer.');
   });
@@ -136,7 +140,7 @@ describe('TerminalRenderer', () => {
     expect(captured).not.toContain('✔ Done');
   });
 
-  it('shows a plain Processing task line when a delegation has no step budget', () => {
+  it('names the phase instead of a step counter when a delegation has no budget', () => {
     let captured = '';
     const stdout = new Writable({
       write(chunk, _encoding, callback) {
@@ -149,8 +153,9 @@ describe('TerminalRenderer', () => {
     renderer.handleEvent({ type: 'progress', step: 1, maxSteps: 10, status: 'Inferring...', timestamp: 0 });
     renderer.handleEvent({ type: 'progress', step: -1, status: 'Delegating sub-task: inspect tests...', timestamp: 0 } as any);
 
-    expect(captured).toContain('Processing task…');
+    expect(captured).toContain('⠋ Delegating a sub-task');
     expect(captured).not.toContain('Step -1');
+    expect(captured).not.toContain('Processing task…');
   });
 
   it('does not write agent events outside the chat frame in chat mode', () => {

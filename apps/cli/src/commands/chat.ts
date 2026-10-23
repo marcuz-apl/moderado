@@ -16,7 +16,7 @@ import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthCon
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
-import { exitCleanly, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity } from '../ui/welcome.js';
+import { exitCleanly, renderChatAnswerWindow, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity, describeToolActivity } from '../ui/welcome.js';
 import type { WelcomeLayoutOptions } from '../ui/welcome.js';
 import { promptInteractiveTurn } from '../ui/composer.js';
 import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
@@ -1198,9 +1198,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       lastAnswer = '';
       lastAnswerReplayable = false;
       lastTurnDone = false;
-      let taskStep: { step: number; maxSteps: number } | undefined;
       let activityLabel: string | undefined;
       let activityFrame = 0;
+      /** Last event of any kind, so the row can admit a long silent wait. */
+      let lastEventAt = Date.now();
       let turnActive = true;
       let outputTokenRate: number | undefined;
       let budgetWarningIssued = false;
@@ -1232,13 +1233,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         if (thinkingTimer) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
       };
       const paintActivity = (glyph: string, label: string): void => {
-        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, taskStep, process.stdout.columns, { glyph, label, reasoning: label === 'Thinking' ? reasoningTail : undefined }, layout.statusRow));
+        // The reasoning tail belongs to the thinking phases, including the long
+        // wait that follows them — that is when it is most useful.
+        const thinking = label === 'Thinking' || label === 'Waiting on the model';
+        process.stdout.write(renderChatThoughtTimeUpdate((Date.now() - startedAt) / 1000, process.stdout.columns, { glyph, label, reasoning: thinking ? reasoningTail : undefined }, layout.statusRow));
       };
       const startActivity = (): void => {
         stopActivity();
         if (!turnActive) return;
         activityLabel = undefined;
         thinkingTimer = setInterval(() => {
+          // A single inference can run for minutes with no event of any kind.
+          // Saying so is honest and reassures more than a frozen `Thinking`.
+          if (activityLabel === 'Thinking' && Date.now() - lastEventAt >= 20_000) activityLabel = 'Waiting on the model';
           paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
         }, 200);
       };
@@ -1391,14 +1398,16 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
           recorder.record(event);
+          lastEventAt = Date.now();
           if (event.type === 'model_change') usedModels.add(event.newModelId);
           if (event.type === 'progress') {
-            taskStep = { step: event.step, maxSteps: event.maxSteps ?? 0 };
             activityLabel = describeActivity(event.status);
             paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel);
           }
           if (event.type === 'tool_call_initiated') {
-            activityLabel = `Running ${event.toolName}`;
+            // Name the target, not the tool: `Reading src/ui/welcome.ts` tells the
+            // person what is happening, `Running read_file` does not.
+            activityLabel = describeToolActivity(event.toolName, event.parameters);
             paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel);
           }
           if (event.type === 'tool_result') {
@@ -1409,6 +1418,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
           }
           // The approval prompt owns the screen until the tool result arrives.
           if (event.type === 'approval_request') stopActivity();
+          // The prompt is written straight to stdout, so without a repaint it
+          // stays on top of the chat frame — which is what made a large diff look
+          // like content spilling out of the workspace.
+          if (event.type === 'approval_resolved') redrawChatFrame();
           if (event.type === 'gateway_status') process.stdout.write(renderGatewayFallbackUpdate(event, process.stdout.columns || 80));
           if (event.type === 'usage') {
             turnUsage = event;
@@ -1507,7 +1520,6 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
       stopActivity();
       process.stdout.write(renderChatThoughtTimeUpdate(
         (Date.now() - startedAt) / 1000,
-        undefined,
         process.stdout.columns,
         {
           glyph: result.status === 'completed' ? '✔' : '✖',

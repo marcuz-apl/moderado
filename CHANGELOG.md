@@ -17,17 +17,33 @@ v0.4.28 (Help organization and interrupted-chat resilience)
 
 ## Milestone Change Log Details
 
+### [Unreleased] — 2026-10-23 (three field fixes)
+**Fix: wide text, oversized approval prompts, and approvals denied by Enter**
+
+- **Type**: `fix` / `patch-level`
+- **Scope**: `apps/cli` status row, box renderer, approval prompt
+- **Key Deliverables**:
+  - **Status row overflowed the card with CJK text.** The row clipped with `String#slice`, which counts UTF-16 units; a Chinese reasoning tail is two cells per glyph, so the line reached 109 cells in a 98-cell card, wrapped, and landed left of the frame. `sliceToWidth` / `sliceTailToWidth` / `truncateToWidth` in `ui/box.ts` clamp by terminal cells and copy ANSI sequences without counting them, and `elideMiddle` now measures cells too.
+  - **The permission box grew past the workspace.** `renderBox` had no width ceiling: one long diff line widened the box past the terminal, wrapping the whole prompt. It now takes `maxWidth` (the whole box, borders included), truncates content to fit while re-asserting the colour reset, and keeps borders aligned. `TerminalApprovalHandler` passes the terminal width, caps the preview at 10 lines, and replaces the rest with `+N -M, K more lines` / `… K more lines not shown`.
+  - **The box also stayed painted over the frame.** The prompt writes straight to stdout, so it used to sit on top of the chat card until the next answer paint; `chat.ts` now repaints the frame on `approval_resolved`.
+  - **Enter denied the action.** The box advertised a capitalised default (`[y/A/n/q]`) while the code fell through to `denied` on empty input — which is how an ordinary `npx tailwindcss init -p` looked like a permissions bug. Enter now approves once (matching the advertised default), `a` still means always, `n` denies, and an unrecognised key re-asks instead of denying silently.
+  - **Fails closed on a closed stream.** A stream that ends without a newline resolves like a bare Enter, so `prompt` reports it distinctly and the handler aborts rather than auto-approving an unattended session.
+  - **Coverage**: `box.test.ts` (cell-based clamping, `maxWidth` at 40/50/60/80, aligned borders), `terminal_approval.test.ts` (Enter approves, EOF aborts, typo re-asks, box fits a 50-column terminal with a 40-line diff), `welcome.test.ts` (CJK reasoning stays inside the card at three widths).
+
 ### [Unreleased] — 2026-10-23 (live status row)
-**Feature: the status row shows what the agent is thinking**
+**Feature: the status row shows what the agent is doing, not its step counter**
 
 - **Type**: `feat` / `patch-level`
-- **Scope**: `apps/cli` chat status row
+- **Scope**: `apps/cli` chat status row and terminal renderer
 - **Key Deliverables**:
-  - **Symptom**: with reasoning hidden, a running turn printed `Step 1/25` and then sat still until text streamed. Nothing on screen changed for the length of a long inference, so the CLI looked hung.
-  - **Phase label**: `describeActivity` collapses the engine's progress sentence into a short phase — `Step 2/25: Inferring next action with a-model...` becomes `Thinking`, and model discovery, retries and sub-task delegation each get their own name. The renderer also strips a leading `Step n/m:` so the counter no longer prints twice beside the same text.
-  - **Reasoning preview**: `reasoning_delta` keeps a bounded 240-character tail and repaints the row at most every 100ms. The row shows the newest words and truncates from the left, so the part still moving stays visible.
-  - **Phase progression**: `Thinking` → `Writing` → `Running <tool>` → `Reviewing`, with the reasoning tail cleared the moment the answer starts streaming, so the row never competes with the answer area.
-  - **Not a transcript**: the reasoning is never accumulated for display or written to the transcript — one dim line, clipped to the card width.
+  - **Symptom**: with reasoning hidden, a running turn printed `Step 1/25` and then sat still until text streamed. The counter read `Step 1/25` for minutes at a time while one inference ran, so it described the engine's loop rather than anything the reader could act on.
+  - **The counter is gone.** `renderChatThoughtTimeUpdate` no longer takes a step budget, and `TerminalRenderer.paintTaskStatus` no longer prints `Processing task… Step N/M`.
+  - **Tool targets instead of tool names**: `describeToolActivity` reads the call's parameters and names the work — `Reading apps/cli/src/chat.ts`, `Editing 3 files`, `Running npm test`, `Searching "renderChat"`, `Listing src/ui`. Unknown and MCP tools keep their own name rather than inventing a verb.
+  - **Elapsed time in human units**: `8s`, `1m 04s`, `12m 30s`. The timer is reserved before the label gets any room, and a deep path is elided in the middle, so the verb, the filename and the clock all survive on one row.
+  - **Honest long-wait state**: after 20 seconds with no event at all the phase becomes `Waiting on the model` instead of a frozen `Thinking`, and the reasoning tail stays visible through it.
+  - **Reasoning preview**: `reasoning_delta` keeps a bounded 240-character tail and repaints the row at most every 100ms; the row keeps the newest words and truncates from the left. Cleared the moment the answer starts streaming, so it never competes with the answer area.
+  - **Not a transcript**: reasoning is never accumulated for display and is not written to the conversation — one dim line, clipped to the card width.
+  - **Coverage**: `welcome.test.ts` pins the phase map, the tool-target map, elapsed formatting, middle elision and card-width clipping; `renderer.test.ts` pins that the headless renderer shows the phase and no counter.
   - **Coverage**: `welcome.test.ts` pins the phase mapping, the de-duplicated step counter, the left-truncating tail and that the painted row stays inside the card.
 
 ### [Unreleased] — 2026-10-23 (repeat-question fix)

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { renderBox, stripAnsi, getVisibleWidth, displayWidth } from '../src/ui/box.js';
+import {
+  renderBox,
+  stripAnsi,
+  getVisibleWidth,
+  displayWidth,
+  truncateToWidth,
+  sliceToWidth,
+  sliceTailToWidth,
+} from '../src/ui/box.js';
 
 describe('Box UI Utility', () => {
   it('strips ANSI color codes accurately', () => {
@@ -42,6 +50,35 @@ describe('Box UI Utility', () => {
     const expectedWidth = visualLengths[0];
     for (const len of visualLengths) {
       expect(len).toBe(expectedWidth);
+    }
+  });
+
+  it('clamps strings by terminal cells, not code units', () => {
+    // `slice` would keep 4 CJK glyphs here and paint 8 cells.
+    expect(displayWidth(sliceToWidth('项目目录内容', 4))).toBe(4);
+    expect(sliceToWidth('abcdef', 3)).toBe('abc');
+    // A truncated string still has to announce itself, and fit.
+    expect(truncateToWidth('abcdef', 4)).toBe('abc…');
+    expect(displayWidth(truncateToWidth('中文目录内容', 5))).toBeLessThanOrEqual(5);
+    // The tail keeps the end of the string, which is the part still moving.
+    expect(sliceTailToWidth('abcdef', 3)).toBe('def');
+    expect(displayWidth(sliceTailToWidth('中文目录内容', 4))).toBe(4);
+    // Escape sequences are copied without being counted as cells.
+    expect(truncateToWidth('\x1b[32mabcdef\x1b[0m', 4)).toContain('\x1b[32m');
+    expect(displayWidth(truncateToWidth('\x1b[32mabcdef\x1b[0m', 4))).toBe(4);
+  });
+
+  it('never renders wider than maxWidth, whatever the content', () => {
+    const longLine = `+${'const value = compute(); '.repeat(20)}`;
+    for (const maxWidth of [40, 50, 60, 80]) {
+      const box = renderBox(
+        ['Target File   src/components/WeatherCard.tsx', '---', longLine, '---', '[Y] Approve (Enter)'],
+        { title: '⚠️ Permission Required: write_file', minWidth: 58, maxWidth },
+      );
+      const widths = stripAnsi(box).split('\n').filter(Boolean).map((line) => displayWidth(line));
+      expect(widths.every((width) => width <= maxWidth)).toBe(true);
+      // Borders still line up, so the frame stays rectangular.
+      expect(new Set(widths).size).toBe(1);
     }
   });
 });

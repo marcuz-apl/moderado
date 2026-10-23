@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import type { GatewayStatusEvent, UsageEvent } from '@moderado/contracts';
-import { displayWidth } from './box.js';
+import { displayWidth, sliceTailToWidth, sliceToWidth, truncateToWidth } from './box.js';
 import { closeHttpConnections } from '../http_shutdown.js';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
 import { getHelpCommandGroups } from './help_content.js';
@@ -546,7 +546,7 @@ export function navigateQuestionHistory(history: string[], direction: -1 | 1, in
 export interface ChatActivity {
   /** Leading glyph: a spinner frame while the turn runs, a check when it settles. */
   glyph: string;
-  /** What the agent is doing right now, for example `Running run_command`. */
+  /** What the agent is doing right now, for example `Editing src/app.ts`. */
   label: string;
   /**
    * The newest reasoning text, already collapsed to one line. Only the tail is
@@ -554,6 +554,37 @@ export interface ChatActivity {
    * turning the status row into a transcript.
    */
   reasoning?: string;
+}
+
+/**
+ * Elapsed time as a short label: `8s`, `1m 04s`.
+ *
+ * This replaced the step counter. `Step 1/25` was true for minutes at a time
+ * while one inference ran, so it measured the engine's internal loop rather
+ * than anything the person waiting could act on.
+ */
+export function formatElapsed(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return '0s';
+  if (seconds < 1) return '<1s';
+  const total = Math.round(seconds);
+  if (total < 60) return `${total}s`;
+  const minutes = Math.floor(total / 60);
+  return `${minutes}m ${String(total % 60).padStart(2, '0')}s`;
+}
+
+/**
+ * Shorten the middle of a label, keeping the head (the verb) and the tail (the
+ * filename, which is the part a person actually reads). Measured in terminal
+ * cells, not code units, so a CJK path cannot overflow the card.
+ */
+export function elideMiddle(text: string, max: number): string {
+  if (max <= 0) return '';
+  if (displayWidth(text) <= max) return text;
+  if (max <= 3) return truncateToWidth(text, max);
+  const budget = max - 1;
+  const head = Math.ceil(budget / 2);
+  const tail = budget - head;
+  return `${sliceToWidth(text, head)}…${sliceTailToWidth(text, tail)}`;
 }
 
 /**
@@ -569,11 +600,70 @@ export function describeActivity(status: string): string {
     .replace(/^step\s+\d+\s*\/\s*\d+\s*:\s*/i, '')
     .replace(/\s*\.{3}$/, '')
     .trim();
-  if (/^inferring next action/i.test(text)) return 'Thinking';
+  if (/^inferring\b/i.test(text)) return 'Thinking';
   if (/^discovering and selecting models/i.test(text)) return 'Selecting model';
   if (/^retrying\b/i.test(text)) return 'Retrying request';
   if (/^delegating sub-task/i.test(text)) return 'Delegating a sub-task';
   return text || 'Working';
+}
+
+const TOOL_VERBS: Record<string, string> = {
+  read_file: 'Reading',
+  write_file: 'Writing',
+  edit_file: 'Editing',
+  apply_patch: 'Editing',
+  list_files: 'Listing',
+  search_files: 'Searching',
+  run_command: 'Running',
+  run_diagnostics: 'Running',
+};
+
+/**
+ * Name the work a tool call is about to do, from its parameters.
+ *
+ * `Running read_file` told the person nothing they could not already see; the
+ * path does. This is the part of the status row that keeps moving during a long
+ * coding turn, so it carries the real target.
+ */
+export function describeToolActivity(toolName: string, parameters: Record<string, unknown> = {}): string {
+  const text = (key: string): string | undefined => {
+    const value = parameters[key];
+    return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+  };
+  if (toolName === 'apply_patch') {
+    const edits = Array.isArray(parameters.edits) ? parameters.edits : [];
+    if (edits.length > 1) return `Editing ${edits.length} files`;
+    const first = edits[0] as { path?: unknown } | undefined;
+    const path = typeof first?.path === 'string' ? first.path : undefined;
+    return path ? `Editing ${path}` : 'Editing files';
+  }
+  if (toolName === 'run_command') {
+    const command = text('command');
+    if (!command) return 'Running a command';
+    const args = Array.isArray(parameters.args)
+      ? parameters.args.filter((arg): arg is string => typeof arg === 'string')
+      : [];
+    return `Running ${[command, ...args].join(' ')}`;
+  }
+  if (toolName === 'search_files') {
+    const query = text('query');
+    return query ? `Searching "${query}"` : 'Searching the workspace';
+  }
+  if (toolName === 'list_files') {
+    const subpath = text('subpath');
+    return subpath && subpath !== '.' ? `Listing ${subpath}` : 'Listing the workspace';
+  }
+  if (toolName === 'run_diagnostics') {
+    const script = text('script');
+    return script ? `Running ${script}` : 'Running diagnostics';
+  }
+  if (toolName === 'web_search') return 'Searching the web';
+  if (toolName === 'git_diff') return 'Checking changes';
+  const verb = TOOL_VERBS[toolName];
+  const path = text('path');
+  if (verb && path) return `${verb} ${path}`;
+  if (verb) return verb;
+  return `Running ${toolName}`;
 }
 
 /**
@@ -583,38 +673,33 @@ export function describeActivity(status: string): string {
  */
 export function renderChatThoughtTimeUpdate(
   thoughtTime: number,
-  taskStep?: { step: number; maxSteps: number },
   width?: number,
   activity?: ChatActivity,
   row = 13,
 ): string {
   const area = getChatAnswerArea(width);
-  const label = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
-  const stepText = taskStep && taskStep.maxSteps > 0 && taskStep.step >= 0
-    ? `Step ${taskStep.step}/${taskStep.maxSteps}`
-    : undefined;
-  // The engine's sentence often already carries the step ("Step 2/8: Inferring
-  // next action..."), which would otherwise print twice beside `stepText`.
-  const activityText = activity
-    ? `${activity.glyph} ${activity.label.replace(/^step\s+\d+\s*\/\s*\d+\s*:\s*/i, '')}`
-    : undefined;
-  const trailing = [stepText, label].filter(Boolean).join(' · ');
-  const reasoning = activity?.reasoning?.replace(/\s+/g, ' ').trim() ?? '';
-  let status: string;
-  if (activityText && reasoning) {
-    // Keep the newest words: the tail is the part that is still moving, so the
-    // excerpt shrinks from the left as the row fills up.
-    const room = area.cardWidth - activityText.length - trailing.length - 6;
-    const tail = room > 8
-      ? (reasoning.length > room ? `…${reasoning.slice(-(room - 1))}` : reasoning)
-      : '';
-    status = tail ? `${activityText} · ${tail} · ${trailing}` : `${activityText} · ${trailing}`;
-  } else if (activityText) {
-    status = `${activityText} · ${trailing}`;
-  } else {
-    status = stepText ? `Processing task… ${stepText} · ${label}` : `Thought for ${label}`;
-  }
-  return `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${status.slice(0, area.cardWidth)}\x1b[0m\x1b8`;
+  const elapsed = formatElapsed(thoughtTime);
+  const paint = (status: string): string =>
+    `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${truncateToWidth(status, area.cardWidth)}\x1b[0m\x1b8`;
+  if (!activity) return paint(`Thought for ${elapsed}`);
+  // The timer is reserved before the label gets any room, so a long path can
+  // never push the elapsed time off the row.
+  const timer = ` · ${elapsed}`;
+  const timerCells = displayWidth(timer);
+  const label = elideMiddle(
+    // The engine's sentence often carries its own step prefix; the row no longer
+    // prints a counter, so drop it rather than showing engine internals.
+    `${activity.glyph} ${activity.label.replace(/^step\s+\d+\s*\/\s*\d+\s*:\s*/i, '')}`,
+    Math.max(12, area.cardWidth - timerCells - 2),
+  );
+  const reasoning = activity.reasoning?.replace(/\s+/g, ' ').trim() ?? '';
+  // Everything here is measured in cells: a CJK reasoning tail is twice as wide
+  // as its length suggests, and the overflow used to wrap outside the card.
+  const room = area.cardWidth - displayWidth(label) - timerCells - 3;
+  const excerpt = reasoning && room > 8
+    ? (displayWidth(reasoning) > room ? `…${sliceTailToWidth(reasoning, room - 1)}` : reasoning)
+    : '';
+  return paint(excerpt ? `${label} · ${excerpt}${timer}` : `${label}${timer}`);
 }
 
 /**
@@ -810,7 +895,7 @@ export function renderGatewayFallbackUpdate(event: GatewayStatusEvent, width = p
   const area = getChatAnswerArea(width);
   const destination = event.toProvider ? `${event.toProvider}/${event.toModel}` : event.toModel;
   const reason = event.reason === 'rate_limited_or_unavailable' ? 'after an upstream route was rate limited or unavailable' : 'after a fallback';
-  const text = `Gateway route changed to ${destination} ${reason}`.slice(0, area.cardWidth);
+  const text = truncateToWidth(`Gateway route changed to ${destination} ${reason}`, area.cardWidth);
   const row = renderModeradoHeader().split('\n').length + 3;
   return `\x1b7\x1b[${row};${area.startColumn}H\x1b[K\x1b[38;5;244m${text}\x1b[0m\x1b8`;
 }

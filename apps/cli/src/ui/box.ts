@@ -43,9 +43,72 @@ export function getVisibleWidth(text: string): number {
   return displayWidth(text);
 }
 
+/** Match an ANSI escape sequence at the start of `text`, if any. */
+const ANSI_AT_START = /^\x1b\[[0-9;?]*[a-zA-Z]/;
+
+/**
+ * Keep the first `max` terminal cells of `text`.
+ *
+ * `String#slice` counts UTF-16 units, so a CJK or emoji line looks short to it
+ * while occupying twice the cells — which is how a status line used to spill
+ * past the card and wrap onto the row below. Escape sequences are copied
+ * through without being counted.
+ */
+export function sliceToWidth(text: string, max: number): string {
+  if (max <= 0) return '';
+  let width = 0;
+  let out = '';
+  for (let i = 0; i < text.length;) {
+    if (text[i] === '\x1b') {
+      const escape = ANSI_AT_START.exec(text.slice(i));
+      if (escape) {
+        out += escape[0];
+        i += escape[0].length;
+        continue;
+      }
+    }
+    const char = String.fromCodePoint(text.codePointAt(i) ?? 0);
+    const cells = displayWidth(char);
+    if (width + cells > max) break;
+    width += cells;
+    out += char;
+    i += char.length;
+  }
+  return out;
+}
+
+/** Keep the last `max` terminal cells of `text`. */
+export function sliceTailToWidth(text: string, max: number): string {
+  if (max <= 0) return '';
+  let width = 0;
+  let out = '';
+  const chars = [...stripAnsi(text)];
+  for (let i = chars.length - 1; i >= 0; i -= 1) {
+    const cells = displayWidth(chars[i]);
+    if (width + cells > max) break;
+    width += cells;
+    out = chars[i] + out;
+  }
+  return out;
+}
+
+/** Clamp to `max` cells, appending an ellipsis when anything was cut. */
+export function truncateToWidth(text: string, max: number): string {
+  if (max <= 0) return '';
+  if (displayWidth(text) <= max) return text;
+  if (max === 1) return '…';
+  return `${sliceToWidth(text, max - 1)}…`;
+}
+
 export interface BoxOptions {
   title?: string;
   minWidth?: number;
+  /**
+   * Hard cap in terminal cells, borders included. Content wider than the cap is
+   * truncated, so a single long diff line can no longer widen the box past the
+   * terminal and wrap the whole frame out of alignment.
+   */
+  maxWidth?: number;
   borderColor?: string;
   titleColor?: string;
 }
@@ -59,9 +122,22 @@ export function renderBox(lines: string[], options: BoxOptions = {}): string {
   const reset = '\x1b[0m';
   const titleColor = options.titleColor ?? '\x1b[1;38;5;75m';
 
+  // `maxWidth` is the whole box, borders included; `innerWidth` counts only the
+  // cells between them, which is what the border and padding arithmetic uses.
+  const innerCap = options.maxWidth ? Math.max(20, options.maxWidth - 2) : Number.POSITIVE_INFINITY;
+  // Content budget: two cells of padding on each content line.
+  const contentCap = innerCap - 4;
+  const clamp = (line: string): string => {
+    if (line === '---' || getVisibleWidth(line) <= contentCap) return line;
+    // Re-assert the reset: truncation can cut a line before its own `\x1b[0m`.
+    return `${truncateToWidth(line, contentCap)}${reset}`;
+  };
+  const shown = lines.map(clamp);
+  const title = options.title ? truncateToWidth(options.title, Math.max(10, contentCap - 4)) : undefined;
+
   // Calculate required width
-  let maxContentWidth = options.title ? getVisibleWidth(options.title) + 4 : 0;
-  for (const line of lines) {
+  let maxContentWidth = title ? getVisibleWidth(title) + 4 : 0;
+  for (const line of shown) {
     if (line !== '---') {
       const w = getVisibleWidth(line);
       if (w > maxContentWidth) {
@@ -70,21 +146,22 @@ export function renderBox(lines: string[], options: BoxOptions = {}): string {
     }
   }
 
-  const innerWidth = Math.max(maxContentWidth + 4, options.minWidth ?? 60);
+  const requested = Math.max(maxContentWidth + 4, options.minWidth ?? 60);
+  const innerWidth = Math.min(requested, innerCap);
 
   let output = '';
 
   // 1. Top border
-  if (options.title) {
-    const titleVis = getVisibleWidth(options.title);
+  if (title) {
+    const titleVis = getVisibleWidth(title);
     const rightDashes = innerWidth - titleVis - 3;
-    output += `${border}╭─ ${titleColor}${options.title}${reset}${border} ${'─'.repeat(Math.max(0, rightDashes))}╮${reset}\n`;
+    output += `${border}╭─ ${titleColor}${title}${reset}${border} ${'─'.repeat(Math.max(0, rightDashes))}╮${reset}\n`;
   } else {
     output += `${border}╭${'─'.repeat(innerWidth)}╮${reset}\n`;
   }
 
   // 2. Content lines
-  for (const line of lines) {
+  for (const line of shown) {
     if (line === '---') {
       output += `${border}├${'─'.repeat(innerWidth)}┤${reset}\n`;
       continue;

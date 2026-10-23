@@ -3,6 +3,7 @@ import readline from 'node:readline';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { displayWidth } from '../src/ui/box.js';
 import {
   renderModeradoHeader,
   renderCenteredWelcomeScreen,
@@ -11,6 +12,8 @@ import {
   renderChatAnswerWindow,
   renderChatThoughtTimeUpdate,
   describeActivity,
+  describeToolActivity,
+  formatElapsed,
   navigateQuestionHistory,
   renderWelcomePopupLayer,
   renderFullWelcomeScreen,
@@ -523,40 +526,49 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(renderChatComposerCursor({ width: 100 }, 0)).toBe('\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[3C');
     expect(renderChatThoughtTimeUpdate(2.2)).toContain('Thought for 2s');
     const thoughtArea = getChatAnswerArea(100);
-    expect(renderChatThoughtTimeUpdate(2.2, undefined, 100)).toMatch(new RegExp(`^\\x1b7\\x1b\\[13;${thoughtArea.startColumn}H`));
+    expect(renderChatThoughtTimeUpdate(2.2, 100)).toMatch(new RegExp(`^\\x1b7\\x1b\\[13;${thoughtArea.startColumn}H`));
     expect(renderChatThoughtTimeUpdate(2.2)).toMatch(/\x1b8$/);
-    expect(renderChatThoughtTimeUpdate(2.2, { step: 2, maxSteps: 8 })).toContain('Processing task… Step 2/8 · 2s');
-    expect(renderChatThoughtTimeUpdate(2.2, { step: -1, maxSteps: 0 })).toContain('Thought for 2s');
     // A live activity row proves the turn is still running after text streams.
-    expect(renderChatThoughtTimeUpdate(14.2, { step: 2, maxSteps: 8 }, 100, { glyph: '⠹', label: 'Running run_command' }))
-      .toContain('⠹ Running run_command · Step 2/8 · 14s');
-    expect(renderChatThoughtTimeUpdate(14.2, undefined, 100, { glyph: '⠹', label: 'Working' }))
+    expect(renderChatThoughtTimeUpdate(14.2, 100, { glyph: '⠹', label: 'Running npm test' }))
+      .toContain('⠹ Running npm test · 14s');
+    expect(renderChatThoughtTimeUpdate(14.2, 100, { glyph: '⠹', label: 'Working' }))
       .toContain('⠹ Working · 14s');
-    expect(renderChatThoughtTimeUpdate(14.2, undefined, 100, { glyph: '✔', label: 'Done' }))
+    expect(renderChatThoughtTimeUpdate(14.2, 100, { glyph: '✔', label: 'Done' }))
       .toContain('✔ Done · 14s');
-    // The engine's status sentence already carries the step; it must not print twice.
-    const deduped = stripAnsi(renderChatThoughtTimeUpdate(12, { step: 1, maxSteps: 25 }, 120, { glyph: '⠋', label: 'Step 1/25: Inferring next action with a-model' }));
-    expect(deduped).toContain('⠋ Inferring next action with a-model · Step 1/25 · 12s');
-    expect(deduped.match(/Step 1\/25/g)).toHaveLength(1);
+    // The engine's step counter is gone: it was `Step 1/25` for minutes at a
+    // time while one inference ran, and it told the reader nothing.
+    const deduped = stripAnsi(renderChatThoughtTimeUpdate(12, 120, { glyph: '⠋', label: 'Step 1/25: Inferring next action with a-model' }));
+    expect(deduped).toContain('⠋ Inferring next action with a-model · 12s');
+    expect(deduped).not.toContain('Step');
 
     // While the model thinks, one dim line of the newest reasoning shows the turn
     // is alive without turning the row into a transcript.
     const paintedWidth = (sequence: string): number => stripAnsi(sequence).replace(/\x1b[78]/g, '').length;
     const cardWidth = getChatAnswerArea(120).cardWidth;
-    const thinking = stripAnsi(renderChatThoughtTimeUpdate(12, { step: 1, maxSteps: 25 }, 120, {
+    const thinking = stripAnsi(renderChatThoughtTimeUpdate(12, 120, {
       glyph: '⠋', label: 'Thinking', reasoning: 'checking whether the cache key includes the model',
     }));
     expect(thinking).toContain('⠋ Thinking · checking whether');
-    expect(thinking).toContain('Step 1/25 · 12s');
+    expect(thinking).toContain('· 12s');
     expect(paintedWidth(thinking)).toBeLessThanOrEqual(cardWidth);
 
     // A long thought keeps its newest words, truncates from the left, and stays in the card.
-    const longThought = renderChatThoughtTimeUpdate(12, undefined, 120, {
+    const longThought = renderChatThoughtTimeUpdate(12, 120, {
       glyph: '⠋', label: 'Thinking', reasoning: `${'filler '.repeat(60)}NEWEST-WORDS`,
     });
     expect(stripAnsi(longThought)).toContain('⠋ Thinking · …');
     expect(stripAnsi(longThought)).toContain('NEWEST-WORDS');
     expect(paintedWidth(longThought)).toBeLessThanOrEqual(cardWidth);
+
+    // A deep path is elided in the middle, so the verb, the filename and the
+    // timer all survive on one row.
+    const longPathLabel = `Editing ${'deep/'.repeat(40)}apply_patch.ts`;
+    const longPath = stripAnsi(renderChatThoughtTimeUpdate(75, 120, { glyph: '⠼', label: longPathLabel }));
+    expect(longPath).toContain('Editing deep/');
+    expect(longPath).toContain('…');
+    expect(longPath).toContain('apply_patch.ts');
+    expect(longPath).toContain('1m 15s');
+    expect(paintedWidth(longPath)).toBeLessThanOrEqual(cardWidth);
     const answerLayout = getChatLayout(100, 30, 'Who are you?');
     const answerWindow = renderChatAnswerWindow('Hi', answerLayout);
     expect(answerWindow.startsWith('\x1b7')).toBe(true);
@@ -581,6 +593,52 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(describeActivity('   ')).toBe('Working');
   });
 
+  it('names the file or command a tool is working on, not just the tool', () => {
+    expect(describeToolActivity('read_file', { path: 'apps/cli/src/chat.ts' })).toBe('Reading apps/cli/src/chat.ts');
+    expect(describeToolActivity('write_file', { path: 'src/new.ts' })).toBe('Writing src/new.ts');
+    expect(describeToolActivity('edit_file', { path: 'src/app.ts' })).toBe('Editing src/app.ts');
+    expect(describeToolActivity('apply_patch', { edits: [{ path: 'a.ts' }] })).toBe('Editing a.ts');
+    expect(describeToolActivity('apply_patch', { edits: [{ path: 'a.ts' }, { path: 'b.ts' }, { path: 'c.ts' }] }))
+      .toBe('Editing 3 files');
+    expect(describeToolActivity('run_command', { command: 'npm', args: ['test'] })).toBe('Running npm test');
+    expect(describeToolActivity('run_command', {})).toBe('Running a command');
+    expect(describeToolActivity('run_diagnostics', { script: 'typecheck' })).toBe('Running typecheck');
+    expect(describeToolActivity('search_files', { query: 'renderChat' })).toBe('Searching "renderChat"');
+    expect(describeToolActivity('list_files', { subpath: 'src/ui' })).toBe('Listing src/ui');
+    expect(describeToolActivity('list_files', { subpath: '.' })).toBe('Listing the workspace');
+    expect(describeToolActivity('web_search', {})).toBe('Searching the web');
+    expect(describeToolActivity('git_diff', {})).toBe('Checking changes');
+    // Unknown and MCP tools keep their name rather than inventing a verb.
+    expect(describeToolActivity('mcp__github__create_issue', {})).toBe('Running mcp__github__create_issue');
+    // A path that is not a string must not become `Reading undefined`.
+    expect(describeToolActivity('read_file', { path: 42 })).toBe('Reading');
+  });
+
+  it('keeps wide-character reasoning inside the card', () => {
+    // A CJK tail is twice as wide as its length suggests; measuring with
+    // `String#length` let the row overflow and wrap outside the frame.
+    for (const width of [60, 80, 120]) {
+      const cardWidth = getChatAnswerArea(width).cardWidth;
+      const painted = stripAnsi(renderChatThoughtTimeUpdate(42, width, {
+        glyph: '⠋',
+        label: 'Thinking',
+        reasoning: '检查缓存键是否包含模型标识'.repeat(4),
+      })).replace(/\x1b[78]/g, '');
+      expect(displayWidth(painted)).toBeLessThanOrEqual(cardWidth);
+      // The clock is reserved first, so it survives the clip.
+      expect(painted).toContain('42s');
+    }
+  });
+
+  it('formats elapsed time so a long turn does not read as a bare second count', () => {
+    expect(formatElapsed(0)).toBe('0s');
+    expect(formatElapsed(0.4)).toBe('<1s');
+    expect(formatElapsed(8)).toBe('8s');
+    expect(formatElapsed(59.6)).toBe('1m 00s');
+    expect(formatElapsed(64)).toBe('1m 04s');
+    expect(formatElapsed(750)).toBe('12m 30s');
+  });
+
   it('keeps temporary status rows inside the chat card columns while the turn runs', () => {
     const width = 200;
     const cardWidth = getWelcomeCardWidth(width);
@@ -591,7 +649,7 @@ describe('OpenCode-style Welcome TUI', () => {
     const startsAtCard = (sequence: string): boolean => sequence.includes(`;${startColumn}H`);
 
     // Thinking / task-step timer shares the left edge of header, question and composer.
-    const thought = renderChatThoughtTimeUpdate(2.2, { step: 2, maxSteps: 8 }, width);
+    const thought = renderChatThoughtTimeUpdate(2.2, width);
     expect(startsAtCard(thought)).toBe(true);
     expect(painted(thought).length).toBeLessThanOrEqual(cardWidth);
 

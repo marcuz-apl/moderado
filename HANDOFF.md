@@ -1,13 +1,105 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-23 (live status row after cdcbe2a)
+Updated: 2026-10-23 (three field fixes after 1b3a86f)
 Branch: master (tracking origin/master)
 Status: three reported glitches, the hardening pass, the jail canonicalization
-split, the module decomposition, the repeat-question fix and the live status row
-are all committed and pushed. The tracked tree is clean; the remaining known
-items are cosmetic and listed per session.
+split, the module decomposition, the repeat-question fix and the status row work
+are committed. **Two change sets are in the working tree, uncommitted**: the
+status row v2 and the three field fixes below — the Security Center blocks git's
+index write.
 
-## Session 2026-10-23 — live status row
+## Session 2026-10-23 — three field fixes (from a real weather-app run)
+
+Reported after building a React/Tailwind/OpenStreetMap app with the CLI.
+
+### 1. Wide text escaped the frame
+
+The status row clipped with `String#slice`, which counts UTF-16 units. A CJK
+reasoning tail is two cells per glyph: measured 109 cells in a 98-cell card, so
+the terminal wrapped it onto the next row, left of the card.
+
+- `sliceToWidth` / `sliceTailToWidth` / `truncateToWidth` in `ui/box.ts` clamp by
+  cells and pass ANSI sequences through uncounted.
+- `elideMiddle` and the status row now measure cells; the timer width is still
+  reserved first, so the clock survives the clip.
+
+### 2. The permission prompt overflowed the workspace
+
+- `renderBox` gained `maxWidth` — the whole box, borders included. Content is
+  truncated to fit with the colour reset re-asserted, so borders stay aligned.
+- `TerminalApprovalHandler` passes the terminal width (capped at 100), shows at
+  most 10 diff lines, and summarises the rest as `+N -M, K more lines`.
+- The prompt writes straight to stdout and used to sit on top of the chat card;
+  `chat.ts` now repaints the frame on `approval_resolved`.
+
+### 3. `npx tailwindcss init -p` was denied
+
+The box advertised `[y/A/n/q]` — a capitalised default — but the code fell
+through to `denied` on empty input, so a bare Enter denied the command.
+
+- Enter now approves once, `a` = always, `n` = deny, `q` = quit.
+- An unrecognised key re-asks instead of denying silently.
+- A closed stdin resolves like a bare Enter, so `prompt` reports `NO_INPUT`
+  separately and the handler aborts — an unattended session must not become an
+  auto-approver.
+
+### Verification
+
+`tsc -b --force` clean; `apps/cli/tests` **41 files / 437 tests, 0 failures**.
+`packages/*` were not re-run: this change touches only `apps/cli`.
+
+## Session 2026-10-23 — status row v2
+
+### Summary
+
+Reported, after the first pass: the row still showed `1/25 steps`, which is
+plain and gives a waiting user nothing to read. Removed the counter entirely and
+replaced it with the work itself.
+
+### Completed
+
+- **Step counter removed**: `renderChatThoughtTimeUpdate` no longer takes a
+  step budget, and `TerminalRenderer.paintTaskStatus` no longer prints
+  `Processing task… Step N/M`. `Step 1/25` was true for minutes at a time while
+  one inference ran, so it measured the engine's loop, not the user's wait.
+- **Tool targets**: `describeToolActivity(toolName, parameters)` names the work
+  — `Reading apps/cli/src/chat.ts`, `Editing 3 files`, `Running npm test`,
+  `Searching "renderChat"`, `Listing src/ui`. Unknown and MCP tools keep their
+  name rather than inventing a verb.
+- **Elapsed in human units**: `8s`, `1m 04s`, `12m 30s` (`formatElapsed`). The
+  timer width is reserved before the label gets room, and a deep path is elided
+  in the middle (`elideMiddle`), so verb + filename + clock all survive.
+- **Honest long wait**: after 20s with no event, the phase becomes
+  `Waiting on the model` instead of a frozen `Thinking`, and the reasoning tail
+  stays visible through it.
+- **Reasoning preview** (unchanged in spirit): 240-character tail, repaint at
+  most every 100ms, cleared on the first `assistant_delta`.
+
+Example rows at width 100:
+
+```text
+⠋ Thinking · 3s
+⠋ Waiting on the model · 22s
+⠼ Reading apps/cli/src/ui/welcome.ts · 41s
+⠴ Running npm test · 1m 15s
+⠦ Editing 3 files · 1m 34s
+⠇ Thinking · …e key may not include the model id, so a retry could replay… · 2m 08s
+✔ Done · 2m 20s
+```
+
+### Verification
+
+`tsc -b --force` clean. `apps/cli/tests` **41 files / 430 tests, 0 failures**.
+The `packages/*` suites were not re-run because this change touches only
+`apps/cli`; run the full suite once before a release.
+
+### Notes
+
+- The build counter in `VERSION` is hexadecimal and is stamped by
+  `.githooks/pre-commit` + `commit-msg`; a subject typed as `+2610240` is
+  rewritten to `+261023a`. Let the hooks stamp it rather than computing it.
+
+## Session 2026-10-23 — live status row (first pass)
 
 ### Summary
 

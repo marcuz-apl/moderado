@@ -1,4 +1,4 @@
-import { formatTokenUsage } from './welcome.js';
+import { formatTokenUsage, describeActivity } from './welcome.js';
 import { AgentEvent, UsageEvent } from '@moderado/contracts';
 
 export interface TerminalRendererOptions {
@@ -13,9 +13,8 @@ export class TerminalRenderer {
   private readonly isChatMode: boolean;
   private isStreamingAssistant = false;
   private hasTransientProgress = false;
-  /** Step counter from progress events; -1 marks a delegation with no step budget. */
-  private taskStep = 0;
-  private taskMaxSteps = 0;
+  /** Latest progress sentence from the engine, shown as a short phase label. */
+  private taskStatus = '';
   private sawTaskProgress = false;
   private latestUsage?: UsageEvent;
   private hasUsageTitle = false;
@@ -74,8 +73,7 @@ export class TerminalRenderer {
           this.clearTransientProgress();
           this.stdout.write(`\x1b[38;5;244m◇ ${event.status}\x1b[0m\n`);
         } else {
-          this.taskStep = event.step;
-          this.taskMaxSteps = event.maxSteps ?? 0;
+          this.taskStatus = event.status;
           this.sawTaskProgress = true;
           this.paintTaskStatus();
         }
@@ -148,8 +146,7 @@ export class TerminalRenderer {
           this.stdout.write(`\x1b[38;5;114m✔ Done (${event.totalSteps} ${event.totalSteps === 1 ? 'step' : 'steps'})\x1b[0m\n`);
         }
         this.sawTaskProgress = false;
-        this.taskStep = 0;
-        this.taskMaxSteps = 0;
+        this.taskStatus = '';
 
         const bannerColor =
           event.status === 'completed'
@@ -214,11 +211,13 @@ export class TerminalRenderer {
     }
   }
 
-  /** Transient single-line progress: "Processing task… Step N/M" when a step budget is known. */
+  /**
+   * Transient single-line progress. The engine's step counter is deliberately
+   * not printed: `Step 1/25` stayed true for minutes while one inference ran, so
+   * it described the engine's loop rather than anything the reader could use.
+   */
   private paintTaskStatus(): void {
-    const label = this.taskMaxSteps > 0 && this.taskStep >= 0
-      ? `Processing task… Step ${this.taskStep}/${this.taskMaxSteps}`
-      : 'Processing task…';
+    const label = describeActivity(this.taskStatus || 'Working');
     this.stdout.write(`\r\x1b[K\x1b[38;5;245m⠋ ${label}\x1b[0m`);
     this.hasTransientProgress = true;
   }
