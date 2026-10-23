@@ -590,7 +590,10 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let discoveredSkills: UserSkill[] = discoverSkills();
   let enabledSkillNames = getEnabledSkillNames();
   let skills: UserSkill[] = selectEnabledSkills(discoveredSkills, enabledSkillNames);
-  const skillContext = (task: string): string => formatSkillContext(skills, task);
+  const skillContext = (task: string): string => `${formatSkillContext(skills, task)}
+
+CLI CHART OUTPUT:
+When the user explicitly asks for a bar or line graph, output it as a fenced chart block, not an ASCII-art chart or a code sample. Start the block with \`\`\`chart, put JSON on the next line, and close it with \`\`\`; use {"type":"bar"|"line","title":"optional title","data":[{"label":"category","value":number}]}. Use "bar" for category comparisons and "line" for ordered values. Include at most 24 finite numeric values. For other requests, use a chart only when it clearly helps.`;
   const reloadMcpTools = async (): Promise<void> => {
     config = loadConfig();
     tools = await createMcpToolRegistry(config.mcpServers, resolveWebSearchOptions(config));

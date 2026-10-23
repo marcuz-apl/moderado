@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import type { GatewayStatusEvent, UsageEvent } from '@moderado/contracts';
 import { displayWidth, sliceTailToWidth, sliceToWidth, truncateToWidth } from './box.js';
+import { renderChartBlock } from './chart.js';
 import { SUMMARY_FENCE } from '../turn_summary.js';
 import { closeHttpConnections } from '../http_shutdown.js';
 import { overlayCentered, dimLines, shadowUnder } from './popup.js';
@@ -200,8 +201,21 @@ const SUMMARY_MARK = '\u0001';
 export function wrapAnswerLines(text: string, textWidth: number): string[] {
   const lines: string[] = [];
   let inSummary = false;
-  for (const rawLine of text.split('\n')) {
+  const answerLines = text.split('\n');
+  for (let index = 0; index < answerLines.length; index += 1) {
+    const rawLine = answerLines[index];
     const trimmed = rawLine.trim();
+    if (trimmed === '```chart') {
+      const closing = answerLines.findIndex((line, lineIndex) => lineIndex > index && line.trim() === '```');
+      if (closing !== -1) {
+        const chartLines = renderChartBlock(answerLines.slice(index + 1, closing).join('\n'), textWidth);
+        if (chartLines) {
+          lines.push(...chartLines);
+          index = closing;
+          continue;
+        }
+      }
+    }
     if (!inSummary && trimmed === SUMMARY_FENCE) { inSummary = true; continue; }
     if (inSummary && trimmed === '```') { inSummary = false; continue; }
     if (!inSummary) { lines.push(...wrapText(rawLine, textWidth)); continue; }
