@@ -46,7 +46,7 @@ async function animateChatWordmark(stdout: NodeJS.WriteStream): Promise<void> {
     const endColumn = Math.max(1, columns - width + 1);
     const progress = frame / frames;
     const column = Math.round(startColumn + (endColumn - startColumn) * progress);
-    const startRow = Math.max(1, Math.floor(rows / 2) - 4);
+    const startRow = Math.max(1, Math.floor(rows / 2) - 5);
     const row = Math.round(startRow + (1 - startRow) * progress);
     stdout.write(`\x1b[H\x1b[J\x1b[${row};${column}H\x1b[1;38;5;75m${wordmark.slice(0, width)}\x1b[0m`);
     if (frame < frames) await new Promise<void>((resolve) => setTimeout(resolve, 30));
