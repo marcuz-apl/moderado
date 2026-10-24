@@ -20,6 +20,8 @@ export interface WelcomeLayoutOptions {
   input?: string;
   inputCaret?: number;
   width?: number;
+  /** Input rows the composer may paint before it scrolls; defaults to the terminal height. */
+  maxInputRows?: number;
   /** When set, render the full chat window (question row 1 + answer) instead of the logo header. */
   chatQuestion?: string;
   chatAnswer?: string;
@@ -77,10 +79,156 @@ export const MOUSE_REPORT_PATTERN = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
 export const MOUSE_REPORT_ON = '\x1b[?1000h\x1b[?1006h';
 export const MOUSE_REPORT_OFF = '\x1b[?1000l\x1b[?1006l';
 
-export function composerInputWindow(input: string, caret: number, width: number): { text: string; caretColumn: number } {
-  const capacity = Math.max(1, width - 3);
-  const start = Math.max(0, Math.min(caret, input.length - capacity));
-  return { text: input.slice(start, start + capacity), caretColumn: caret - start };
+/**
+ * Ask the terminal to report keys whose legacy encoding is ambiguous
+ * (XTMODKEYS level 1), which is the only way Shift+Enter can be told apart from
+ * Enter. Level 1 leaves unambiguous keys — plain Ctrl+C, Shift+Tab, shifted
+ * letters — on their legacy bytes, so nothing else changes behaviour.
+ */
+export const KEY_MODIFIER_REPORT_ON = '\x1b[>4;1m';
+export const KEY_MODIFIER_REPORT_OFF = '\x1b[>4;0m';
+
+/**
+ * One visual row of the composer input, as a slice of the raw text. Keeping the
+ * offsets means the caret, a click, and a repaint all address the same string
+ * instead of a re-flowed copy of it.
+ */
+export interface ComposerRow {
+  text: string;
+  /** Index in the raw input where the row starts. */
+  start: number;
+  /** Index where the row ends (exclusive). */
+  end: number;
+}
+
+/**
+ * Cells a composer row spends on its `❯ ` marker, plus one spare so a full row
+ * never reaches the last column (a terminal that wraps on the final cell would
+ * push the whole card down a row).
+ */
+const COMPOSER_ROW_OVERHEAD = 3;
+
+/** Split the composer text into the rows the card paints, wrapping at words. */
+export function wrapComposerInput(input: string, width: number): ComposerRow[] {
+  const capacity = Math.max(1, width - COMPOSER_ROW_OVERHEAD);
+  const rows: ComposerRow[] = [];
+  let segmentStart = 0;
+  for (;;) {
+    const newline = input.indexOf('\n', segmentStart);
+    const segmentEnd = newline === -1 ? input.length : newline;
+    if (segmentStart === segmentEnd) {
+      // An empty line (a bare line feed, or the tail after a trailing one) is
+      // still a row: the caret has to have somewhere to sit.
+      rows.push({ text: '', start: segmentStart, end: segmentStart });
+    } else {
+      let cursor = segmentStart;
+      while (cursor < segmentEnd) {
+        let end = cursor;
+        let cells = 0;
+        let lastSpace = -1;
+        while (end < segmentEnd) {
+          const char = String.fromCodePoint(input.codePointAt(end) as number);
+          const charWidth = displayWidth(char);
+          if (cells + charWidth > capacity) break;
+          cells += charWidth;
+          end += char.length;
+          if (char === ' ') lastSpace = end;
+        }
+        if (end >= segmentEnd) {
+          rows.push({ text: input.slice(cursor, segmentEnd), start: cursor, end: segmentEnd });
+          break;
+        }
+        // Break after the last space so words stay whole; the space itself is
+        // swallowed by the break rather than trailing the row. A row that would
+        // come out empty (a space at the wrap point) falls through to a hard
+        // break instead of emitting a blank row.
+        if (lastSpace - 1 > cursor) {
+          rows.push({ text: input.slice(cursor, lastSpace - 1), start: cursor, end: lastSpace - 1 });
+          cursor = lastSpace;
+        } else {
+          rows.push({ text: input.slice(cursor, end), start: cursor, end });
+          cursor = end;
+        }
+      }
+    }
+    if (newline === -1) return rows;
+    segmentStart = newline + 1;
+  }
+}
+
+export interface ComposerView {
+  /** Rows to paint, already windowed to the rows the terminal can spare. */
+  rows: ComposerRow[];
+  /** Row index of the caret inside `rows`. */
+  caretRow: number;
+  /** Cell offset of the caret inside its row, 0 being the first text cell. */
+  caretColumn: number;
+  /** Rows scrolled out of view above and below the window. */
+  hiddenAbove: number;
+  hiddenBelow: number;
+}
+
+/**
+ * Resolve the composer text into painted rows plus the caret's place in them.
+ * The window follows the caret, so a long prompt scrolls inside the box instead
+ * of growing the card past the bottom of the terminal.
+ */
+export function composerView(
+  input: string,
+  caret: number,
+  width: number,
+  maxRows: number = Number.POSITIVE_INFINITY,
+): ComposerView {
+  const all = wrapComposerInput(input, width);
+  const clampedCaret = Math.max(0, Math.min(caret, input.length));
+  // The last row whose slice contains the caret: at a hard wrap the caret
+  // belongs to the row that starts there, at a swallowed space to the row that
+  // ends there.
+  let caretRow = 0;
+  for (let index = 0; index < all.length; index += 1) {
+    if (all[index].start <= clampedCaret && clampedCaret <= all[index].end) caretRow = index;
+  }
+  const limit = Math.max(1, Math.floor(maxRows));
+  const start = Math.max(0, Math.min(caretRow - limit + 1, all.length - limit));
+  const rows = all.slice(start, start + limit);
+  const row = all[caretRow];
+  return {
+    rows,
+    caretRow: caretRow - start,
+    caretColumn: Math.min(
+      Math.max(1, width - COMPOSER_ROW_OVERHEAD),
+      displayWidth(input.slice(row.start, clampedCaret)),
+    ),
+    hiddenAbove: start,
+    hiddenBelow: all.length - start - rows.length,
+  };
+}
+
+/** Caret index for a click `cells` into a painted row. */
+export function composerCaretIndex(input: string, rows: ComposerRow[], rowOffset: number, cells: number): number {
+  const row = rows[Math.max(0, Math.min(rows.length - 1, rowOffset))];
+  let index = row.start;
+  let used = 0;
+  while (index < row.end) {
+    const char = String.fromCodePoint(input.codePointAt(index) as number);
+    const charWidth = displayWidth(char);
+    if (used + charWidth > cells) break;
+    used += charWidth;
+    index += char.length;
+  }
+  return index;
+}
+
+/**
+ * Input rows the composer may show before it scrolls in place.
+ *
+ * The chat frame needs eight rows above the card (header, question, status,
+ * answer) and the card keeps four rows of its own furniture, so anything taller
+ * than this would scroll the composer off the screen.
+ */
+export function getComposerInputMaxRows(height?: number): number {
+  const terminalHeight = height ?? process.stdout.rows ?? 24;
+  return Math.max(1, terminalHeight - 13);
 }
 
 /** Card width: nearly full terminal width, like OpenCode/Cline. */
@@ -317,13 +465,20 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
     : getChatCardWidth(options.width);
   const indent = ' '.repeat(getWelcomeIndent(width, options.width));
 
-  const displayInput =
-    options.input && options.input.length > 0
-      ? composerInputWindow(options.input, options.inputCaret ?? options.input.length, width).text
-      : '\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m';
+  const inputText = options.input ?? '';
+  const inputView = composerView(
+    inputText,
+    options.inputCaret ?? inputText.length,
+    width,
+    options.maxInputRows ?? getComposerInputMaxRows(),
+  );
+  // The placeholder owns the first row only; a typed prompt is wrapped into as
+  // many rows as it needs, so the box grows instead of scrolling sideways.
+  const inputRows = inputText.length > 0
+    ? inputView.rows.map((row) => row.text)
+    : ['\x1b[38;5;242mAsk anything, I am all ears...\x1b[0m'];
 
   const promptMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
-  const textBox = `${promptMarker} ${displayInput}`;
   const surface = '\x1b[48;5;236m';
   const surfaceLine = (content: string = '') => {
     const preserved = content.replace(/\x1b\[0m/g, '\x1b[0;48;5;236m');
@@ -419,7 +574,9 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
 
   cardLines.push(
     indent + surfaceLine(),
-    indent + surfaceLine(textBox),
+    // Continuation rows keep the marker's two cells, so wrapped text lines up
+    // under the first row's text instead of under the ❯.
+    ...inputRows.map((rowText, index) => indent + surfaceLine(`${index === 0 ? promptMarker : '  '} ${rowText}`)),
     indent + surfaceLine(),
     indent + line4,
     indent + line5,
@@ -608,7 +765,10 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   // The composer is measured before the layout: a queued-commands box or a
   // mention box makes the card taller, and the answer area must give up those
   // rows instead of pushing the card past the bottom of the viewport.
-  const composer = renderWelcomeCard(options).split('\n');
+  const cardOptions = options.maxInputRows === undefined
+    ? { ...options, maxInputRows: getComposerInputMaxRows(terminalHeight) }
+    : options;
+  const composer = renderWelcomeCard(cardOptions).split('\n');
   const layout = getChatLayout(terminalWidth, terminalHeight, question, composer.length);
   const area = layout.area;
   const indent = ' '.repeat(area.indent);
@@ -683,16 +843,22 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
 }
 
 /**
- * Place the terminal cursor on the input row. Passing the layout's
- * `composerTop` addresses the row absolutely, which stays correct when a
- * queued-commands box grows the card; the relative form is the legacy path.
+ * Place the terminal cursor on the caret's row inside the input box. Passing
+ * the layout's `composerTop` addresses the row absolutely, which stays correct
+ * when the card grows (a queued-commands box or a wrapped prompt); the relative
+ * form is the legacy path.
  */
-export function renderChatComposerCursor(options: Pick<WelcomeLayoutOptions, 'width'>, inputLength: number, composerTop?: number): string {
+export function renderChatComposerCursor(
+  options: Pick<WelcomeLayoutOptions, 'width'>,
+  input: string,
+  composerTop?: number,
+): string {
   const width = getChatCardWidth(options.width);
   const indent = getWelcomeIndent(width, options.width);
-  const caretColumn = indent + 3 + Math.min(inputLength, Math.max(0, width - 3));
-  if (composerTop !== undefined) return `\x1b[1 q\x1b[?25h\x1b[${composerTop + 1};${caretColumn}H`;
-  return `\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[${indent + 2 + Math.min(inputLength, Math.max(0, width - 3))}C`;
+  const view = composerView(input, input.length, width, getComposerInputMaxRows());
+  const caretColumn = indent + 2 + view.caretColumn;
+  if (composerTop !== undefined) return `\x1b[1 q\x1b[?25h\x1b[${composerTop + 1 + view.caretRow};${caretColumn + 1}H`;
+  return `\x1b[1 q\x1b[?25h\x1b[${4 + view.caretRow}A\r\x1b[${caretColumn}C`;
 }
 
 export function navigateQuestionHistory(history: string[], direction: -1 | 1, index: number, draft: string): { input: string; index: number; draft: string } {
@@ -1121,6 +1287,7 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1;38;5;114mKeyboard Shortcuts:\x1b[0m',
     '\x1b[1mTab\x1b[0m          Toggle between [Plan] and [Execute] mode',
     '\x1b[1mShift+Tab\x1b[0m    Toggle Auto-approval on / off for actions',
+    '\x1b[1mShift+Enter\x1b[0m  Insert a line break (Ctrl+J works everywhere)',
     '\x1b[1mCtrl+C\x1b[0m       Cancel active inference or exit session',
     '\x1b[1mEsc\x1b[0m          Stop the active task',
     '\x1b[1mLeft/Right\x1b[0m   Move the caret inside the bottom input line',
@@ -1179,7 +1346,7 @@ export async function exitCleanly(message: string): Promise<never> {
   notifyCleanExit();
   const stdout = process.stdout;
   const payload = stdout.isTTY
-    ? MOUSE_REPORT_OFF + '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + renderExitMessage(message)
+    ? KEY_MODIFIER_REPORT_OFF + MOUSE_REPORT_OFF + '\x1b[?25h\x1b[?1049l\x1b[0 q\x1b[0m\x1b[2J\x1b[3J\x1b[H' + renderExitMessage(message)
     : renderExitMessage(message);
   try { fs.writeSync(1, payload); } catch { stdout.write(payload); }
   const stdin = process.stdin;

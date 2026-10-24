@@ -684,7 +684,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
     const layout = layoutFor(options);
     process.stdout.write('\x1b[H\x1b[J');
     process.stdout.write(renderFullWelcomeScreen(options, process.stdout.rows));
-    process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, (options.input ?? '').length, layout.composerTop));
+    process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, options.input ?? '', layout.composerTop));
   };
 
   while (!signal?.aborted) {
@@ -1337,7 +1337,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
         layout = layoutFor(options);
         process.stdout.write('\x1b[H\x1b[J');
         process.stdout.write(renderFullWelcomeScreen(options, process.stdout.rows));
-        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft.length, layout.composerTop));
+        process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, commandQueue.currentDraft, layout.composerTop));
         // The frame paints a static status; keep the live row authoritative while the turn runs.
         if (thinkingTimer) paintActivity(ACTIVITY_SPINNER_FRAMES[activityFrame++ % ACTIVITY_SPINNER_FRAMES.length], activityLabel ?? 'Working');
       };

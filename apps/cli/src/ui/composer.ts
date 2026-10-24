@@ -9,14 +9,18 @@ import { spawnSync } from 'node:child_process';
 import type { UsageEvent } from '@moderado/contracts';
 import { activeMentionToken, filterMentionCandidates } from './file_mentions.js';
 import {
+  KEY_MODIFIER_REPORT_OFF,
+  KEY_MODIFIER_REPORT_ON,
   MOUSE_REPORT_OFF,
   MOUSE_REPORT_ON,
   MOUSE_REPORT_PATTERN,
-  composerInputWindow,
+  composerCaretIndex,
+  composerView,
   exitCleanly,
   getChatComposerRows,
   getChatLayout,
   getChatCardWidth,
+  getComposerInputMaxRows,
   getMatchingCommands,
   getWelcomeBottomPadding,
   getWelcomeCardWidth,
@@ -149,6 +153,26 @@ function isMcpCommandInput(value: string): boolean {
   return command === '/mcp' || command.startsWith('/mcp ');
 }
 
+/**
+ * Modified keys the terminal reports as escape sequences once XTMODKEYS is on:
+ * `CSI 27;modifier;key~` (xterm family) or `CSI key;modifier u` (kitty
+ * protocol). readline decodes those byte by byte, so the raw chunk is matched
+ * here instead and the derived keypresses are dropped.
+ */
+const MODIFIED_KEY_PATTERN = /\x1b\[(?:27;(\d+);(\d+)~|(\d+);(\d+)u)/;
+
+function decodeModifiedKey(text: string): 'newline' | 'toggle-auto-approve' | 'cancel' | undefined {
+  const match = MODIFIED_KEY_PATTERN.exec(text);
+  if (!match) return undefined;
+  const modifier = Number(match[1] ?? match[4]);
+  const keyCode = Number(match[2] ?? match[3]);
+  const bits = modifier - 1; // 1 = Shift, 2 = Alt, 4 = Ctrl
+  if (keyCode === 13 && (bits & 1)) return 'newline';
+  if (keyCode === 9 && (bits & 1)) return 'toggle-auto-approve';
+  if (keyCode === 99 && (bits & 4)) return 'cancel';
+  return undefined;
+}
+
 export async function promptInteractiveTurn(
   options: PromptInteractiveTurnOptions
 ): Promise<InteractiveTurnResult> {
@@ -257,24 +281,30 @@ export async function promptInteractiveTurn(
 
   const getExtraLines = () => mentionFiles.length > 0 ? mentionFiles.length + 2 : 0;
 
-  /** Rows between the painted composer line and the terminal's last row. */
-  const getComposerOffset = (): number => getWelcomeBottomPadding(getOptions(), getRows()) + 4 + getExtraLines();
+  /** Columns of the card the input is painted in. */
+  const getCardWidth = (): number => getOptions().chatQuestion !== undefined
+    ? getChatCardWidth(stdout.columns)
+    : getWelcomeCardWidth(stdout.columns);
 
-  /** Screen row and 1-based column of the composer's first text cell. */
-  const getComposerAnchor = (): { row: number; column: number } => {
+  /** Painted rows of the input box plus where the caret sits in them. */
+  const getInputView = () => composerView(input, caret, getCardWidth(), getComposerInputMaxRows(getRows()));
+
+  /** Rows between the input's first row and the terminal's last row. */
+  const getComposerOffset = (): number =>
+    getWelcomeBottomPadding(getOptions(), getRows()) + 3 + getInputView().rows.length + getExtraLines();
+
+  /** Screen row and 1-based column of the caret's cell in the input box. */
+  const getComposerAnchor = (caretRow = getInputView().caretRow): { row: number; column: number } => {
     const options = getOptions();
-    const cardWidth = options.chatQuestion !== undefined
-      ? getChatCardWidth(stdout.columns)
-      : getWelcomeCardWidth(stdout.columns);
-    const column = getWelcomeIndent(cardWidth, stdout.columns) + 3;
+    const column = getWelcomeIndent(getCardWidth(), stdout.columns) + 3;
     if (options.chatQuestion !== undefined) {
       // Chat frames place the composer at a computed row. Measure the card that
-      // is actually painted — a queued-commands or mention box makes it taller —
-      // so the caret never lands on the mode row or inside the box.
+      // is actually painted — a queued-commands box or a wrapped prompt makes it
+      // taller — so the caret never lands on the mode row or inside the box.
       const layout = getChatLayout(stdout.columns, getRows(), options.chatQuestion, getChatComposerRows(options));
-      return { row: layout.composerTop + 1, column };
+      return { row: layout.composerTop + 1 + caretRow, column };
     }
-    return { row: getRows() - getComposerOffset(), column };
+    return { row: getRows() - getComposerOffset() + caretRow, column };
   };
 
 
@@ -285,12 +315,9 @@ export async function promptInteractiveTurn(
    * pressed repeatedly, e.g. browsing history with Left/Right.
    */
   const positionCursorOnInput = () => {
-    const { row, column } = getComposerAnchor();
-    const cardWidth = getOptions().chatQuestion !== undefined
-      ? getChatCardWidth(stdout.columns)
-      : getWelcomeCardWidth(stdout.columns);
-    const { caretColumn } = composerInputWindow(input, caret, cardWidth);
-    stdout.write(`\x1b[1 q\x1b[?25h\x1b[${row};${column + caretColumn}H`);
+    const view = getInputView();
+    const { row, column } = getComposerAnchor(view.caretRow);
+    stdout.write(`\x1b[1 q\x1b[?25h\x1b[${row};${column + view.caretColumn}H`);
   };
 
   /** Full-screen redraw: clear everything, repaint welcome TUI, reposition cursor. */
@@ -356,13 +383,43 @@ export async function promptInteractiveTurn(
   /** One page is one screenful of answer rows, minus the overflow note. */
   const answerPage = (): number => Math.max(1, currentChatLayout().answerRows - 1);
 
+  /** Insert a line break at the caret — Shift+Enter and Ctrl+J land here. */
+  const insertLineFeed = (): void => {
+    input = input.slice(0, caret) + '\n' + input.slice(caret);
+    caret += 1;
+    commandSelection = 0;
+    questionHistoryIndex = questionHistory.length;
+    updateMentions();
+    redrawCard();
+  };
+
+  /** Toggle Plan/Execute; kept callable from a decoded escape sequence too. */
+  const toggleMode = (): void => {
+    currentMode = currentMode === 'Plan' ? 'Execute' : 'Plan';
+    redrawCard();
+  };
+
   /**
-   * Place the caret where the user clicked on the composer line. Only a primary
+   * Cancel the session from a decoded escape sequence (Ctrl+C reported as a
+   * modified key). Assigned once the cleanup path exists.
+   */
+  let cancelSession = (): void => {};
+
+  /**
+   * Place the caret where the user clicked inside the input box. Only a primary
    * press is honoured; releases, drags, wheel and other buttons are ignored.
    */
-  const onMouseData = (chunk: string | Buffer): void => {
+  const onComposerData = (chunk: string | Buffer): void => {
     const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     let reported = false;
+    // Shift+Enter arrives as one of these sequences once the terminal reports
+    // modified keys; readline would otherwise type it out as literal garbage.
+    const modified = decodeModifiedKey(text);
+    if (modified === 'newline') insertLineFeed();
+    else if (modified === 'toggle-auto-approve') toggleMode();
+    else if (modified === 'cancel') cancelSession();
+    if (modified) reported = true;
+
     for (const report of text.matchAll(MOUSE_REPORT_PATTERN)) {
       reported = true;
       // Wheel up (64) / down (65): three rows a notch, like every other pager.
@@ -371,9 +428,11 @@ export async function promptInteractiveTurn(
         continue;
       }
       if (report[4] !== 'M' || Number(report[1]) !== 0) continue;
-      const { row, column } = getComposerAnchor();
-      if (Number(report[3]) !== row) continue;
-      caret = Math.max(0, Math.min(input.length, Number(report[2]) - column));
+      const view = getInputView();
+      const { row, column } = getComposerAnchor(0);
+      const rowOffset = Number(report[3]) - row;
+      if (rowOffset < 0 || rowOffset >= view.rows.length) continue;
+      caret = composerCaretIndex(input, view.rows, rowOffset, Number(report[2]) - column);
       positionCursorOnInput();
     }
     if (reported) {
@@ -384,7 +443,7 @@ export async function promptInteractiveTurn(
   };
   // Registered before readline's decoder so a report is consumed before it is
   // mistaken for typed text.
-  stdin.prependListener('data', onMouseData);
+  stdin.prependListener('data', onComposerData);
   stdout.on('resize', onResize);
 
   // Initial paint
@@ -401,13 +460,18 @@ export async function promptInteractiveTurn(
   return new Promise((resolve) => {
     const cleanup = () => {
       unbindComposerInput();
-      stdin.removeListener('data', onMouseData);
+      stdin.removeListener('data', onComposerData);
       stdout.removeListener('resize', onResize);
-      stdout.write(`${MOUSE_REPORT_OFF}\x1b[0 q\x1b[?25h`);
+      stdout.write(`${KEY_MODIFIER_REPORT_OFF}${MOUSE_REPORT_OFF}\x1b[0 q\x1b[?25h`);
       if (stdin.isTTY) {
         try { stdin.setRawMode(false); } catch { /* ignore */ }
       }
       try { stdin.pause(); } catch { /* ignore */ }
+    };
+
+    cancelSession = () => {
+      cleanup();
+      void exitCleanly('\x1b[33mSession cancelled.\x1b[0m');
     };
 
     const onAbort = () => {
@@ -428,6 +492,12 @@ export async function promptInteractiveTurn(
 
         // Keystrokes decoded from a mouse report were already handled above.
         if (ignoreComposerKeypress) return;
+
+        // Enter submits; a line feed (Ctrl+J, or Shift+Enter where the terminal
+        // reports it) breaks the line instead.
+        const isEnter = Boolean(key) && (key.name === 'return' || key.name === 'enter');
+        const isLineFeed = isEnter && (key.name === 'enter' || key.shift === true || key.meta === true);
+        const isSubmit = isEnter && !isLineFeed;
 
         if (options.signal?.aborted) {
           cleanup();
@@ -453,7 +523,7 @@ export async function promptInteractiveTurn(
         // ── /help overlay popup ───────────────────────────────────────────────
         // Triggered when Enter is pressed with "/help" already in the input box.
         // We keep the main TUI as background and layer the help box on top.
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/help') {
+        if (isSubmit && input.trim() === '/help') {
           setInput('');
           unbindComposerInput(); // pause main handler
 
@@ -502,7 +572,7 @@ export async function promptInteractiveTurn(
         // layer on top of it (Cline/OpenCode style) — the popup never scrolls
         // the background because every step redraws the whole frame.
         // After it returns, we repaint the full welcome TUI and reposition cursor.
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/model') {
+        if (isSubmit && input.trim() === '/model') {
           setInput('');
           unbindComposerInput(); // pause main handler
 
@@ -536,7 +606,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/connect') {
+        if (isSubmit && input.trim() === '/connect') {
           setInput('');
           unbindComposerInput();
 
@@ -560,7 +630,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/transcript') {
+        if (isSubmit && input.trim() === '/transcript') {
           setInput('');
           unbindComposerInput();
           stdout.write('\x1b[H\x1b[J');
@@ -586,7 +656,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/session')) {
+        if (isSubmit && input.trim().startsWith('/session')) {
           const command = input.trim();
           setInput('');
           unbindComposerInput();
@@ -613,7 +683,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/queue')) {
+        if (isSubmit && input.trim().startsWith('/queue')) {
           const command = input.trim();
           setInput('');
           unbindComposerInput();
@@ -645,7 +715,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/btw')) {
+        if (isSubmit && input.trim().startsWith('/btw')) {
           const command = input.trim();
           setInput('');
           unbindComposerInput();
@@ -691,7 +761,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && isMcpCommandInput(input)) {
+        if (isSubmit && isMcpCommandInput(input)) {
           const command = input.trim();
           setInput('');
           unbindComposerInput();
@@ -710,7 +780,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/init') {
+        if (isSubmit && input.trim() === '/init') {
           setInput('');
           unbindComposerInput();
           if (options.onInit) {
@@ -728,7 +798,7 @@ export async function promptInteractiveTurn(
           return;
         }
 
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim().startsWith('/workflow')) {
+        if (isSubmit && input.trim().startsWith('/workflow')) {
           const command = input.trim(); setInput(''); unbindComposerInput();
           const action = options.onWorkflow ? await options.onWorkflow(command, (popupLines) => { stdout.write('\x1b[H\x1b[J'); stdout.write(renderWelcomePopupLayer(getOptions(), popupLines, stdout.columns, stdout.rows)); }) : undefined;
           if (action === 'build') { cleanup(); resolve({ text: '', mode: 'Execute', autoApprove: currentAutoApprove, workflowAction: 'build' }); return; }
@@ -737,7 +807,7 @@ export async function promptInteractiveTurn(
 
 
         // ── /clear ────────────────────────────────────────────────────────────
-        if (key && (key.name === 'return' || key.name === 'enter') && input.trim() === '/clear') {
+        if (isSubmit && input.trim() === '/clear') {
           setInput('');
           options.onClear?.();
           redrawFull();
@@ -745,7 +815,7 @@ export async function promptInteractiveTurn(
         }
 
         // ── /exit ─────────────────────────────────────────────────────────────
-        if (key && (key.name === 'return' || key.name === 'enter') &&
+        if (isSubmit &&
             (input.trim() === '/exit' || input.trim() === '/quit')) {
           cleanup();
           if (options.signal) options.signal.removeEventListener('abort', onAbort);
@@ -823,7 +893,12 @@ export async function promptInteractiveTurn(
         }
 
         // Enter — submit real user message
-        if (key.name === 'return' || key.name === 'enter') {
+        if (isLineFeed) {
+          insertLineFeed();
+          return;
+        }
+
+        if (isSubmit) {
           const matching = getMatchingCommands(input);
           if (input.startsWith('/') && matching.length > 0 && !matching.some((command) => command.name === input.trim())) {
             setInput(matching[Math.min(commandSelection, matching.length - 1)].name);
@@ -836,7 +911,10 @@ export async function promptInteractiveTurn(
           cleanup();
           if (options.signal) options.signal.removeEventListener('abort', onAbort);
           if (animateFirstChat) await animateChatWordmark(stdout as NodeJS.WriteStream);
-          const moveDown = 4 + getExtraLines();
+          // Move past the rows below the caret's row, so the frame that follows
+          // starts under the card however tall the input box grew.
+          const inputView = getInputView();
+          const moveDown = (inputView.rows.length - 1 - inputView.caretRow) + 4 + getExtraLines();
           stdout.write(`\x1b[${moveDown}B\r\n\x1b[0 q\x1b[?25h`);
           resolve({ text: trimmed, mode: currentMode, autoApprove: currentAutoApprove });
           return;
@@ -893,12 +971,14 @@ export async function promptInteractiveTurn(
      * normal text selection, and clicks never leak into their filter fields.
      */
     const bindComposerInput = (): void => {
-      stdout.write(MOUSE_REPORT_ON);
+      stdout.write(MOUSE_REPORT_ON + KEY_MODIFIER_REPORT_ON);
       stdin.on('keypress', onKeypress);
     };
     const unbindComposerInput = (): void => {
       stdin.removeListener('keypress', onKeypress);
-      stdout.write(MOUSE_REPORT_OFF);
+      // Key-modifier reporting is scoped to the composer: popups read plain
+      // legacy keys, and leaving XTMODKEYS on would change what they receive.
+      stdout.write(KEY_MODIFIER_REPORT_OFF + MOUSE_REPORT_OFF);
     };
 
     bindComposerInput();

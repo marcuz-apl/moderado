@@ -37,6 +37,10 @@ import {
   getChatAnswerArea,
   getChatLayout,
   getChatComposerRows,
+  getComposerInputMaxRows,
+  wrapComposerInput,
+  composerView,
+  composerCaretIndex,
   wrapAnswerLines,
   windowChatAnswerAt,
   buildChatTranscriptRows,
@@ -532,7 +536,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
     expect(stripAnsi(rendered)).not.toContain('Thinking');
     expect(stripAnsi(rendered)).not.toContain('Thought for <1s');
-    expect(renderChatComposerCursor({ width: 100 }, 0)).toBe('\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[3C');
+    expect(renderChatComposerCursor({ width: 100 }, '')).toBe('\x1b[1 q\x1b[?25h\x1b[4A\r\x1b[3C');
     expect(renderChatThoughtTimeUpdate(2.2)).toContain('Thought for 2s');
     const thoughtArea = getChatAnswerArea(100);
     expect(renderChatThoughtTimeUpdate(2.2, 100)).toMatch(new RegExp(`^\\x1b7\\x1b\\[13;${thoughtArea.startColumn}H`));
@@ -1665,4 +1669,115 @@ it('targets the exact usage row in the chat frame', async () => {
   const screen = stripAnsi(renderChatScreen({ model: 'test', tokens: 0, cost: '$0', workspace: '.', mode: 'Plan', autoApprove: false, chatQuestion: 'Hi', chatAnswer: 'Hello', tokenUsage: usageSnapshot, width: 80 }, 30));
   const row = screen.split('\n').findIndex(line => line.includes('[Plan] / Execute (Tab)')) + 1;
   expect(renderChatUsageUpdate(usageSnapshot, 80, undefined, undefined, 30)).toContain(`\x1b[${row};${getChatAnswerArea(80).startColumn}H`);
+});
+
+describe('Multi-line composer', () => {
+  const baseCard = {
+    model: 'test-model', tokens: 0, cost: '$0.00', workspace: 'd:\\test',
+    mode: 'Execute' as const, autoApprove: true, width: 80,
+  };
+
+  it('wraps a long prompt at word boundaries without losing text', () => {
+    const input = 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu';
+    const rows = wrapComposerInput(input, 40);
+    expect(rows.length).toBeGreaterThan(1);
+    for (const row of rows) expect(displayWidth(row.text)).toBeLessThanOrEqual(37);
+    expect(rows.map((row) => row.text).join(' ')).toBe(input);
+  });
+
+  it('hard-breaks a word that cannot fit on a row', () => {
+    const input = 'x'.repeat(90);
+    const rows = wrapComposerInput(input, 40);
+    for (const row of rows) expect(displayWidth(row.text)).toBeLessThanOrEqual(37);
+    expect(rows.map((row) => row.text).join('')).toBe(input);
+  });
+
+  it('keeps explicit line feeds as their own rows', () => {
+    expect(wrapComposerInput('one\ntwo\n\nthree', 80).map((row) => row.text)).toEqual(['one', 'two', '', 'three']);
+  });
+
+  it('tracks the caret onto the row it belongs to', () => {
+    const input = 'first\nsecond';
+    const view = composerView(input, input.length, 80);
+    expect(view.caretRow).toBe(1);
+    expect(view.caretColumn).toBe(6);
+    expect(composerCaretIndex(input, view.rows, 0, 3)).toBe(3);
+    expect(composerCaretIndex(input, view.rows, 1, 2)).toBe(8);
+  });
+
+  it('scrolls the input rows inside the box once the prompt is taller than the terminal', () => {
+    const input = Array.from({ length: 30 }, (_, index) => `line ${index}`).join('\n');
+    const view = composerView(input, input.length, 80, 5);
+    expect(view.rows).toHaveLength(5);
+    expect(view.hiddenAbove).toBe(25);
+    expect(view.rows[view.caretRow].text).toBe('line 29');
+    expect(getComposerInputMaxRows(24)).toBe(11);
+  });
+
+  it('grows the card by one row per wrapped line and stays inside the terminal', () => {
+    expect(renderWelcomeCard({ ...baseCard, input: 'hello' }).split('\n')).toHaveLength(5);
+    const card = renderWelcomeCard({ ...baseCard, input: 'one\ntwo\nthree' }).split('\n');
+    expect(card).toHaveLength(7);
+    for (const line of card) expect(displayWidth(stripAnsi(line))).toBeLessThanOrEqual(80);
+    const tall = Array.from({ length: 60 }, (_, index) => `line ${index}`).join('\n');
+    const frame = stripAnsi(renderChatScreen({ ...baseCard, chatQuestion: 'q', chatAnswer: 'a', input: tall, inputCaret: tall.length }, 24)).split('\n');
+    expect(frame.length).toBeLessThanOrEqual(24);
+  });
+
+  it('gives the answer area up to a taller composer instead of pushing the card off screen', () => {
+    const short = getChatLayout(80, 24, 'q', 5);
+    const tall = getChatLayout(80, 24, 'q', 9);
+    expect(tall.composerTop).toBe(15);
+    expect(tall.answerRows).toBeLessThan(short.answerRows);
+  });
+
+  it('line-feeds on Shift+Enter instead of submitting', async () => {
+    const result = await runComposerTurn(async (stdin) => {
+      for (const character of 'first') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\r', { name: 'return', shift: true });
+      for (const character of 'second') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('first\nsecond');
+  });
+
+  it('line-feeds on Ctrl+J and moves the caret to the new row', async () => {
+    const chatQuestion = 'hi';
+    const result = await runComposerTurn(async (stdin, context) => {
+      for (const character of 'ab') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\n', { name: 'enter' });
+      for (const character of 'cd') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      const layout = getChatLayout(80, 24, chatQuestion, getChatComposerRows({ ...baseCard, chatQuestion, input: 'ab\ncd' }));
+      expect(lastComposerWrite(context.writes).row).toBe(layout.composerTop + 2);
+      stdin.emit('keypress', '\r', { name: 'return' });
+    }, { chatQuestion });
+    expect(result).toBe('ab\ncd');
+  });
+
+  it('line-feeds when the terminal reports Shift+Enter as a modified key', async () => {
+    const result = await runComposerTurn(async (stdin) => {
+      for (const character of 'one') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('data', '\x1b[27;2;13~');
+      await new Promise((resolve) => setImmediate(resolve));
+      for (const character of 'two') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('one\ntwo');
+  });
+
+  it('places the caret on the clicked row of a wrapped prompt', async () => {
+    const chatQuestion = 'hi';
+    const result = await runComposerTurn(async (stdin) => {
+      for (const character of 'first') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\n', { name: 'enter' });
+      for (const character of 'second') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      const layout = getChatLayout(80, 24, chatQuestion, getChatComposerRows({ ...baseCard, chatQuestion, input: 'first\nsecond' }));
+      // First text cell of the second input row.
+      stdin.emit('data', `\x1b[<0;${getChatAnswerArea(80).startColumn + 2};${layout.composerTop + 2}M`);
+      await new Promise((resolve) => setImmediate(resolve));
+      stdin.emit('keypress', 'X', { name: 'x', ctrl: false, meta: false });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    }, { chatQuestion });
+    expect(result).toBe('first\nXsecond');
+  });
 });
