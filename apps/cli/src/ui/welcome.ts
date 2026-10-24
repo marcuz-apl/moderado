@@ -49,7 +49,7 @@ export interface WelcomeLayoutOptions {
 
 export const MODERADO_ASCII_LOGO = [
   '\x1b[38;5;75m    __  _______  ____  __________  ___    ____  ____ \x1b[0m',
-  '\x1b[38;5;75m   /  |/  / __ \\/ __ \\/ ____/ __ \\/   |  / __ \\/ __ \\\x1b[0m',
+  '\x1b[38;5;75m   /  |/  / __ \\/ __ \\/ ____/ __ \\/   |  / __ \\/ __ \\x1b[0m',
   '\x1b[38;5;81m  / /|_/ / / / / / / / __/ / /_/ / /| | / / / / / / /\x1b[0m',
   '\x1b[38;5;81m / /  / / /_/ / /_/ / /___/ _, _/ ___ |/ /_/ / /_/ / \x1b[0m',
   '\x1b[38;5;87m/_/  /_/\\____/_____/_____/_/ |_/_/  |_/_____/\\____/  \x1b[0m',
@@ -1267,7 +1267,7 @@ export function renderWelcomePopupLayer(
   return background + shadowUnder(lightPopup, cols, rows) + overlayCentered(lightPopup, cols, rows);
 }
 
-export function renderHelpPopupBox(version: string, workspace: string, width?: number): string[] {
+export function renderHelpPopupBox(_version: string, workspace: string, width?: number): string[] {
   const terminalWidth = width ?? (process.stdout.columns || 80);
   const targetWidth = 82;
   const boxWidth = Math.max(76, Math.min(terminalWidth, targetWidth));
@@ -1295,7 +1295,6 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     '\x1b[1mMouse click\x1b[0m  Place the caret on the input line',
     '',
     `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,
-    `\x1b[38;5;245mVersion:\x1b[0m    \x1b[1;38;5;75m${version}\x1b[0m`,
     '',
     '\x1b[38;5;244mPress \x1b[1;38;5;75m[Esc]\x1b[0;38;5;244m or \x1b[1;38;5;75m[Enter]\x1b[0;38;5;244m to close\x1b[0m',
   ];
@@ -1311,6 +1310,32 @@ export function renderHelpPopupBox(version: string, workspace: string, width?: n
     const displayPlain = displayItem.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
     const spaces = Math.max(0, innerW - displayPlain.length);
     lines.push('\x1b[38;5;240m│\x1b[0m  ' + displayItem + ' '.repeat(spaces) + '\x1b[38;5;240m│\x1b[0m');
+  }
+  lines.push('\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
+  return lines;
+}
+
+/** Render a centered "About" popup with version and copyright info. */
+export function renderAboutPopupBox(version: string): string[] {
+  const boxWidth = 52;
+  const innerW = boxWidth - 4;
+  const titleStr = 'About Moderado';
+  const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
+
+  const content: string[] = [
+    'Moderado CLI',
+    `v${version}`,
+    '',
+    'Copyright (c) 2026, Moderado AI, Alfazen Inc, All roghts reserved',
+  ];
+
+  const lines: string[] = [];
+  lines.push('\x1b[38;5;240m╭─ \x1b[1;38;5;75m' + titleStr + '\x1b[0;38;5;240m ' + '─'.repeat(remainingDashes) + '╮\x1b[0m');
+  for (const item of content) {
+    const plain = item.replace(/\x1b\\[[0-9;]*[a-zA-Z]/g, '');
+    const leftPad = Math.max(0, Math.floor((innerW - plain.length) / 2));
+    const rightPad = Math.max(0, innerW - plain.length - leftPad);
+    lines.push('\x1b[38;5;240m│\x1b[0m' + ' '.repeat(leftPad) + item + ' '.repeat(rightPad) + '\x1b[38;5;240m│\x1b[0m');
   }
   lines.push('\x1b[38;5;240m╰' + '─'.repeat(boxWidth - 2) + '╯\x1b[0m');
   return lines;

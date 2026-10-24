@@ -29,6 +29,7 @@ import {
   renderCenteredWelcomeScreen,
   renderFullWelcomeScreen,
   renderHelpPopupBox,
+  renderAboutPopupBox,
   renderWelcomePopupLayer,
   windowChatTranscriptAt,
   buildChatTranscriptRows,
@@ -580,6 +581,43 @@ export async function promptInteractiveTurn(
           positionCursorOnInput();
 
           bindComposerInput(); // re-attach main handler
+          return;
+        }
+
+        // ── /about overlay popup ──────────────────────────────────────────────
+        // Triggered when Enter is pressed with "/about" already in the input box.
+        if (isSubmit && input.trim() === '/about') {
+          setInput('');
+          unbindComposerInput();
+
+          const aboutLines = renderAboutPopupBox(options.version ?? 'v0.1');
+          const paintAbout = (): void => {
+            stdout.write('\x1b[H\x1b[J');
+            stdout.write(renderWelcomePopupLayer(getOptions(), aboutLines, stdout.columns, stdout.rows));
+          };
+          const onAboutResize = (): void => paintAbout();
+          stdout.on('resize', onAboutResize);
+          paintAbout();
+
+          await new Promise<void>((dismissResolve) => {
+            const onDismiss = (s: string, k: any) => {
+              if (
+                (k && (k.name === 'escape' || k.name === 'return' || k.name === 'enter')) ||
+                s === 'q' || s === 'Q' ||
+                (k && k.ctrl && k.name === 'c')
+              ) {
+                stdin.removeListener('keypress', onDismiss);
+                stdout.removeListener('resize', onAboutResize);
+                dismissResolve();
+              }
+            };
+            stdin.on('keypress', onDismiss);
+          });
+
+          stdout.write('\x1b[H\x1b[J');
+          stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
+          positionCursorOnInput();
+          bindComposerInput();
           return;
         }
 

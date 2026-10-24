@@ -22,6 +22,7 @@ export const STANDARD_SLASH_COMMANDS = [
   '/skills',
   '/clear',
   '/help',
+  '/about',
   '/exit',
   '/quit',
 ] as const;

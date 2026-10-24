@@ -22,7 +22,8 @@ describe('organized help commands', () => {
       '  /workflow    - Inspect Git, build plans, or undo agent changes',
       'Help',
       '  /clear       - Reset conversation memory',
-      '  /help        - Display commands, shortcuts & version',
+      '  /help        - Display commands & shortcuts',
+      '  /about       - Show version and copyright info',
       '  /exit        - Exit Moderado',
     ]);
   });
