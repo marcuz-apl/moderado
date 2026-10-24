@@ -609,7 +609,8 @@ export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/budget', desc: 'Set a per-task token limit' },
   { name: '/skills', desc: 'List skills; enable or disable user skills' },
   { name: '/clear', desc: 'Reset conversation memory' },
-  { name: '/help', desc: 'Display commands, shortcuts & version' },
+  { name: '/about', desc: 'Show version and copyright info' },
+  { name: '/help', desc: 'Display commands & shortcuts' },
   { name: '/exit', desc: 'Exit Moderado' },
 ];
 
