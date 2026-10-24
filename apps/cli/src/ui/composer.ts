@@ -493,10 +493,29 @@ export async function promptInteractiveTurn(
         // Keystrokes decoded from a mouse report were already handled above.
         if (ignoreComposerKeypress) return;
 
+        // Intercept XTMODKEYS modified keys that readline cannot decode.
+        // The raw byte chunk `str` carries the escape sequence (e.g. CSI 27;1;13~
+        // for Shift+Enter); readline decodes those byte-by-byte and drops them,
+        // so we match the pattern directly and derive the keypress ourselves.
+        const modified = decodeModifiedKey(str);
+        if (modified === 'newline') {
+          insertLineFeed();
+          return;
+        }
+        if (modified === 'toggle-auto-approve') {
+          currentAutoApprove = !currentAutoApprove;
+          redrawCard();
+          return;
+        }
+        if (modified === 'cancel') {
+          cleanup();
+          return await exitCleanly('\\x1b[33mSession cancelled.\\x1b[0m');
+        }
+
         // Enter submits; a line feed (Ctrl+J, or Shift+Enter where the terminal
         // reports it) breaks the line instead.
         const isEnter = Boolean(key) && (key.name === 'return' || key.name === 'enter');
-        const isLineFeed = isEnter && (key.name === 'enter' || key.shift === true || key.meta === true);
+        const isLineFeed = isEnter && (key.shift === true || key.meta === true || key.ctrl === true);
         const isSubmit = isEnter && !isLineFeed;
 
         if (options.signal?.aborted) {

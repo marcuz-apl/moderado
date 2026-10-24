@@ -1745,7 +1745,7 @@ describe('Multi-line composer', () => {
     const chatQuestion = 'hi';
     const result = await runComposerTurn(async (stdin, context) => {
       for (const character of 'ab') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
-      stdin.emit('keypress', '\n', { name: 'enter' });
+      stdin.emit('keypress', '\n', { name: 'enter', ctrl: true });
       for (const character of 'cd') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
       const layout = getChatLayout(80, 24, chatQuestion, getChatComposerRows({ ...baseCard, chatQuestion, input: 'ab\ncd' }));
       expect(lastComposerWrite(context.writes).row).toBe(layout.composerTop + 2);
@@ -1769,7 +1769,7 @@ describe('Multi-line composer', () => {
     const chatQuestion = 'hi';
     const result = await runComposerTurn(async (stdin) => {
       for (const character of 'first') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
-      stdin.emit('keypress', '\n', { name: 'enter' });
+      stdin.emit('keypress', '\n', { name: 'enter', shift: true });
       for (const character of 'second') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
       const layout = getChatLayout(80, 24, chatQuestion, getChatComposerRows({ ...baseCard, chatQuestion, input: 'first\nsecond' }));
       // First text cell of the second input row.
