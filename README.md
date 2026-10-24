@@ -63,7 +63,8 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.46** | Current release | Responsive chat workspace with a scrollable activity and answer transcript, improved local model selection, popups that adapt to terminal resizing, and colorized inline charts. Also includes safer approvals, clearer turn reports, and a more direct Moderado Gateway connection flow. |
+| **0.4.50** | Current release | Adds `/about` slash command showing version and copyright info in a centered popup; removes version from `/help`; positions the MODERADO wordmark one row higher on first render; wires up XTMODKEYS Shift+Enter decoding so Shift+Enter reliably inserts a line feed instead of submitting. |
+| **0.4.46** | Previous release | Responsive chat workspace with a scrollable activity and answer transcript, improved local model selection, popups that adapt to terminal resizing, and colorized inline charts. Also includes safer approvals, clearer turn reports, and a more direct Moderado Gateway connection flow. |
 | **0.4.34** | Previous release | Frozen-CLI fix: Ctrl+C always has a way out — popups cancel on the first press, a stalled turn escapes on the second press, and hard exits drain undici safely so Node 24 never hits the libuv `UV_HANDLE_CLOSING` assertion. |
 | **0.4.33** | Previous release | Restores the approval boundary in `moderado run` (prompts unless `-y`), fixes `@file` mention replacement, aligns boxes and wrapped text for CJK/emoji, and makes the full offline suite deterministic on Windows. Also ships the `modr` command alias, Gateway authorization recovery with key re-entry, a live progress row, and the canonical `moderado` provider identity. |
 | **0.4.28** | Previous release | Organized `/help` command groups, interrupted-chat resume, and consistent help and shortcut layout. |

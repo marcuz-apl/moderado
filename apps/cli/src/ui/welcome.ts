@@ -1322,11 +1322,14 @@ export function renderAboutPopupBox(version: string): string[] {
   const titleStr = 'About Moderado';
   const remainingDashes = Math.max(0, boxWidth - titleStr.length - 5);
 
+  // Strip the Alfazen build suffix (`+261024h`) so only `v<major.minor.patch>` shows.
+  const semverOnly = version.split('+')[0];
+
   const content: string[] = [
     'Moderado CLI',
-    `v${version}`,
+    semverOnly,
     '',
-    'Copyright (c) 2026, Moderado AI, Alfazen Inc, All roghts reserved',
+    '(c) 2026 Moderado AI, an Alfazen Product',
   ];
 
   const lines: string[] = [];

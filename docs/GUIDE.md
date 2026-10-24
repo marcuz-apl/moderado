@@ -154,6 +154,8 @@ as the full cost. Free models with known zero pricing show `$0.00`.
   `@path`. It closes as soon as the token ends, for example on a space.
 - Type `/` for slash commands; `Up`/`Down` browses them and `Tab` completes the
   highlighted command.
+- `/about` shows version and copyright info in a centered popup; press
+  `Esc`/`Enter`/`q` to close.
 - `Tab` with neither list open toggles Plan/Execute.
 
 ### Provider presets and custom providers

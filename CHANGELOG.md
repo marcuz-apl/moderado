@@ -1,5 +1,17 @@
 # Changelog
 
+### [v0.4.50] — 2026-10-24 (`/about` slash command popup; Shift+Enter line feed fix)
+
+**Feature: add `/about` slash command showing version & copyright in a centered popup**
+
+- **Type**: `feat` / `patch-level`
+- **Scope**: `apps/cli` TUI slash commands, composer key handling, UI popups
+- **Key Deliverables**:
+  - **New `/about` slash command:** Displays a centered popup with `Moderado CLI`, the version (`v0.4.50`, Alfazen build suffix stripped), and `(c) 2026 Moderado AI, an Alfazen Product`. All text lines are horizontally centered. Dismiss with `Esc`, `Enter`, or `q`.
+  - **Removed version from `/help`:** The `/help` overlay no longer shows a `Version:` line; version info moved to `/about`.
+  - **Shift+Enter line feed fix:** Wired up `decodeModifiedKey()` to intercept XTMODKEYS escape sequences (e.g. `CSI 27;1;13~`) that Node.js `readline` cannot decode. Shift+Enter now reliably inserts a line feed instead of submitting the message. Fixed `isLineFeed` to only trigger on Shift/Meta/Ctrl modifiers — plain Enter always submits.
+  - **Wordmark repositioned:** The `MODERADO` animated wordmark starts one row higher on first render (from `-4` to `-5` above vertical center).
+
 ### [v0.4.46] — 2026-10-23 (inline chart color gradients)
 **Feature: inline bar and line charts use a blue-to-red color transition**
 
@@ -30,6 +42,10 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                                                        one scrollable turn transcript,
                                                        /model lists local-provider catalogs,
                                                        popups repaint on terminal resize)
+                                        └─► v0.4.47 (Shift+Enter via XTMODKEYS, refactor composer input rendering)
+                                               └─► v0.4.48 (Wire up XTMODKEYS Shift+Enter decoding; fix isLineFeed logic)
+                                                      └─► v0.4.49 (Position MODERADO wordmark one row higher on first render)
+                                                             └─► v0.4.50 (Add /about slash command popup; remove version from /help)
 ```
 
 ## Milestone Change Log Details
