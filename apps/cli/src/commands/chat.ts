@@ -17,7 +17,7 @@ import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
 import { exitCleanly, renderChatTranscriptWindow, renderChatTranscriptHeader, renderChatComposerCursor, renderChatThoughtTimeUpdate, renderChatUsageUpdate, renderGatewayFallbackUpdate, renderFullWelcomeScreen, renderWelcomePopupLayer, terminalCleanExitDone, wrapText, getChatLayout, getChatComposerRows, describeActivity, describeToolActivity, describeWait } from '../ui/welcome.js';
-import type { ActivityEntry, ChatActivityBlock } from '../ui/welcome.js';
+import type { ActivityEntry, ChatActivityBlock, ChatHistoryTurn } from '../ui/welcome.js';
 import type { WelcomeLayoutOptions } from '../ui/welcome.js';
 import { promptInteractiveTurn } from '../ui/composer.js';
 import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
@@ -133,6 +133,21 @@ function restoreLastSessionTurn(messages: ChatMessage[]): { question: string; an
     }
   }
   return { question, answer: messages[assistantIndex].content ?? '' };
+}
+
+export function getPriorChatTurns(messages: readonly ChatMessage[], currentQuestion: string, currentAnswer: string): ChatHistoryTurn[] {
+  const turns: ChatHistoryTurn[] = [];
+  let question = '';
+  for (const message of messages) {
+    if (message.role === 'user') question = message.content;
+    else if (message.role === 'assistant' && question && message.content?.trim()) {
+      turns.push({ question, answer: message.content });
+      question = '';
+    }
+  }
+  const latest = turns.at(-1);
+  if (latest && currentAnswer && latest.question === currentQuestion) turns.pop();
+  return turns;
 }
 
 export class TurnCommandQueue {
@@ -665,6 +680,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
     autoApprove: activeAutoApprove,
     chatQuestion: lastQuestion,
     chatAnswer: lastAnswer,
+    chatHistory: getPriorChatTurns(conversationHistory, lastQuestion, lastAnswer),
     // Scroll position mirrored from the composer, so a full frame repaint lands
     // on the same rows the reader is looking at.
     chatAnswerOffset: answerOffset,
@@ -698,7 +714,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
       const turn = await promptInteractiveTurn({
         getProviderName: () => getProviderStatusName(activeConnection),
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatHistory: getPriorChatTurns(conversationHistory, lastQuestion, lastAnswer), chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
         takeAutoContinuePrompt: () => {
           if (!autoContinueRequested) return undefined;
@@ -1259,7 +1275,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
         if (!force && now - lastAnswerPaint < 40) return;
         lastAnswerPaint = now;
         if (!streamedAnswer) return;
-        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset));
+        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset, getPriorChatTurns(conversationHistory, trimmed, '')));
       };
       let lastErrorEvent: { code?: string; message: string } | undefined;
       /** Tail of the model's reasoning, shown as one dim line while it thinks. */
@@ -1297,7 +1313,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
           history: activityHistory,
         };
         process.stdout.write(renderChatTranscriptHeader(currentActivity, layout, thoughtTime));
-        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset));
+        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset, getPriorChatTurns(conversationHistory, trimmed, '')));
       };
       const startActivity = (): void => {
         stopActivity();
@@ -1322,6 +1338,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
         tokens: Math.round(sessionTokens + (usageRecorded ? 0 : turnUsage?.usage.totalTokens ?? 0)),
         chatQuestion: trimmed,
         chatAnswer: streamedAnswer || lastAnswer,
+        chatHistory: getPriorChatTurns(conversationHistory, trimmed, turnActive ? '' : lastAnswer),
         // The live activity rides along with the frame, so a full repaint (a
         // resize, a keystroke in the composer) shows the same transcript the
         // incremental paints do instead of an empty answer area.

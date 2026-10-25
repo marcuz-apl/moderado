@@ -114,11 +114,12 @@ a finished coding task always states what changed and what is still open.
 
 ### Chat answer area
 
-The chat window reserves a fixed answer area between the status row and the
-composer. A long answer scrolls inside that area — the newest lines stay
-visible, older lines are replaced by a `… +N earlier lines hidden` marker — so
-a large model output never paints over the input card, the mode row, or the
-workspace row. The full text is always available through `/session export`.
+The chat window reserves a fixed transcript area between the status row and the
+composer. Press Page Up/Page Down or use the mouse wheel to browse earlier
+questions and answers in the session. The newest lines stay visible by default;
+`… +N earlier lines hidden` shows when more is above the viewport. The current
+question and input stay in place while you scroll. The full text is also
+available through `/session export`.
 
 The composer is measured before the frame is laid out, so anything that makes
 the card taller — a queued-commands box from `/queue`, an `@` mention list, the

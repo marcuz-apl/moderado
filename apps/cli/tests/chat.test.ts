@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import * as chatCommands from '../src/commands/chat.js';
+
 import {
   buildSearchAnswerTask,
   createAgentTask,
@@ -10,6 +11,7 @@ import {
   createConnectionProvider,
   decideApproval,
   formatDirectWebSearchAnswer,
+  getPriorChatTurns,
   getProviderStatusName,
   handleChatSession,
   handleGenerationKeypress,
@@ -41,6 +43,29 @@ import { CliParsedArgs } from '../src/args.js';
 import { getActiveConnection, loadConfig, saveConfig, saveConnection, saveMcpServer } from '../src/config.js';
 import { ApprovalRequest, ChatMessage } from '@moderado/contracts';
 import { createSession } from '../src/sessions.js';
+
+it('keeps earlier completed exchanges and skips the pinned current exchange', () => {
+  const messages = [
+    { role: 'user' as const, content: 'First question' },
+    { role: 'assistant' as const, content: 'First answer' },
+    { role: 'tool' as const, toolCallId: 't', name: 'read_file', content: 'tool output', status: 'success' as const },
+    { role: 'user' as const, content: 'Second question' },
+    { role: 'assistant' as const, content: 'Second answer' },
+  ];
+  expect(getPriorChatTurns(messages, 'Second question', 'Second answer')).toEqual([
+    { question: 'First question', answer: 'First answer' },
+  ]);
+  expect(getPriorChatTurns(messages, 'Third question', '')).toEqual([
+    { question: 'First question', answer: 'First answer' },
+    { question: 'Second question', answer: 'Second answer' },
+  ]);
+  expect(getPriorChatTurns(messages, 'Second question', 'Second answer with local task summary')).toEqual([
+    { question: 'First question', answer: 'First answer' },
+  ]);
+  expect(getPriorChatTurns(messages, 'Second question', 'Display-filtered answer')).toEqual([
+    { question: 'First question', answer: 'First answer' },
+  ]);
+});
 
 describe('session exit summary', () => {
   it('shows saved usage and a resume hint', () => {

@@ -34,7 +34,7 @@ import {
   windowChatTranscriptAt,
   buildChatTranscriptRows,
 } from './welcome.js';
-import type { ChatActivityBlock, WelcomeLayoutOptions } from './welcome.js';
+import type { ChatActivityBlock, ChatHistoryTurn, WelcomeLayoutOptions } from './welcome.js';
 
 async function animateChatWordmark(stdout: NodeJS.WriteStream): Promise<void> {
   const wordmark = 'MODERADO';
@@ -92,6 +92,7 @@ export interface PromptInteractiveTurnOptions {
   /** Previous turn's question/answer — when question is set, render the full chat window (no logo). */
   chatQuestion?: string;
   chatAnswer?: string;
+  chatHistory?: readonly ChatHistoryTurn[];
   chatThoughtTime?: number;
   chatTaskDone?: boolean;
   outputTokenRate?: number;
@@ -243,6 +244,7 @@ export async function promptInteractiveTurn(
     commandSelection,
     chatQuestion: options.chatQuestion,
     chatAnswer: options.chatAnswer,
+    chatHistory: options.chatHistory,
     chatAnswerOffset: answerOffset,
     // Live activity for the running turn, so a composer-driven repaint shows
     // the transcript the loop is painting rather than an empty answer area.
@@ -357,7 +359,7 @@ export async function promptInteractiveTurn(
     const layout = currentChatLayout();
     if (layout.answerRows <= 0) return 0;
     return windowChatTranscriptAt(
-      buildChatTranscriptRows(activity, answer ?? '', layout.area.textWidth).rows,
+      buildChatTranscriptRows(activity, answer ?? '', layout.area.textWidth, options.chatHistory).rows,
       layout.answerRows,
       0,
     ).hiddenAbove;

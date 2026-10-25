@@ -25,6 +25,8 @@ export interface WelcomeLayoutOptions {
   /** When set, render the full chat window (question row 1 + answer) instead of the logo header. */
   chatQuestion?: string;
   chatAnswer?: string;
+  /** Completed exchanges before the question pinned at the top of this frame. */
+  chatHistory?: readonly ChatHistoryTurn[];
   /** Rows the answer is scrolled up from its tail; 0 is the live view. */
   chatAnswerOffset?: number;
   /**
@@ -794,7 +796,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   // The activity log and the answer are one list, so both the scroll position
   // and the window are computed over the merged rows.
   const transcriptWidth = getChatTranscriptWidth(layout);
-  const transcript = buildChatTranscriptRows(options.chatActivity, answerText, transcriptWidth);
+  const transcript = buildChatTranscriptRows(options.chatActivity, answerText, transcriptWidth, options.chatHistory);
   // While the reader is scrolled up, the status row belongs to the scroll
   // position: the turn clock is not what they are looking for.
   const scrollWindow = transcript.rows.length > 0 && layout.answerRows > 0 && answerOffset > 0
@@ -809,7 +811,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   const scrolled = scrollWindow !== undefined
     && (scrollWindow.hiddenAbove > 0 || scrollWindow.hiddenBelow > 0);
   const chatStatus = scrolled
-    ? `${scrollWindow.hiddenAbove === 0 ? 'Top of the turn' : `↑ ${scrollWindow.hiddenAbove} above`} · ↓ ${scrollWindow.hiddenBelow} below · PgUp/PgDn`
+    ? `${scrollWindow.hiddenAbove === 0 ? (options.chatHistory?.length ? 'Top of history' : 'Top of the turn') : `↑ ${scrollWindow.hiddenAbove} above`} · ↓ ${scrollWindow.hiddenBelow} below · PgUp/PgDn`
     : options.chatActivity
     ? truncateToWidth(`${options.chatActivity.glyph} ${options.chatActivity.label} · ${activityElapsed}`, transcriptWidth)
     : !answerText.trim()
@@ -1085,6 +1087,11 @@ export interface ChatActivityBlock {
   history?: ActivityEntry[];
 }
 
+export interface ChatHistoryTurn {
+  question: string;
+  answer: string;
+}
+
 
 /**
  * Invisible prefix marking a rendered row as part of the live activity log.
@@ -1126,8 +1133,14 @@ export function buildChatTranscriptRows(
   activity: ChatActivityBlock | undefined,
   answer: string,
   textWidth: number,
+  history: readonly ChatHistoryTurn[] = [],
 ): { rows: string[]; answerStart: number } {
   const rows: string[] = [];
+  for (const turn of history) {
+    rows.push(...wrapText(`❯ ${turn.question}`, textWidth).map((line) => LOG_MARK + line));
+    rows.push(...wrapAnswerLines(turn.answer.trimEnd(), textWidth));
+    rows.push('');
+  }
   for (const entry of activity?.history ?? []) {
     rows.push(LOG_MARK + `${entry.glyph} ${entry.label}`);
   }
@@ -1203,10 +1216,11 @@ export function renderChatTranscriptWindow(
   answer: string,
   layout: ChatLayout,
   offsetFromBottom = 0,
+  history: readonly ChatHistoryTurn[] = [],
 ): string {
   const { area } = layout;
   const cells = getChatTranscriptWidth(layout);
-  const { rows } = buildChatTranscriptRows(activity, answer, cells);
+  const { rows } = buildChatTranscriptRows(activity, answer, cells, history);
   const { lines, hiddenAbove } = windowChatTranscriptAt(rows, layout.answerRows, offsetFromBottom);
   const visible = hiddenAbove > 0
     ? [`\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), cells)}\x1b[0m`, ...lines.map((line) => renderAnswerLine(line, cells))]
@@ -1293,6 +1307,7 @@ export function renderHelpPopupBox(_version: string, workspace: string, width?: 
     '\x1b[1mEsc\x1b[0m          Stop the active task',
     '\x1b[1mLeft/Right\x1b[0m   Move the caret inside the bottom input line',
     '\x1b[1mUp/Down\x1b[0m       Browse slash commands after "/", else recall history',
+    '\x1b[1mPgUp/PgDn\x1b[0m     Browse earlier chat; the mouse wheel also scrolls',
     '\x1b[1mMouse click\x1b[0m  Place the caret on the input line',
     '',
     `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,

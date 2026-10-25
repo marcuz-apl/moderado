@@ -720,6 +720,26 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(top).toContain('Reading src/component1.tsx');
   });
 
+  it('reaches earlier questions and answers through the chat transcript', () => {
+    const base = {
+      workspace: '/w', mode: 'Execute' as const, autoApprove: true, model: 'm', tokens: 0, cost: '$0',
+      chatQuestion: 'Third question', chatAnswer: 'Third answer', width: 100,
+      chatHistory: [
+        { question: 'First question', answer: 'First answer' },
+        { question: 'Second question', answer: 'Second answer' },
+      ],
+    };
+    const latest = stripAnsi(renderChatScreen(base, 18));
+    expect(latest).toContain('Third answer');
+    expect(latest).toContain('earlier lines hidden');
+
+    const oldest = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 100 }, 18));
+    expect(oldest).toContain('First question');
+    expect(oldest).toContain('First answer');
+    expect(oldest).toContain('Top of history');
+    expect(oldest).toContain('Third question');
+  });
+
   it('never lets the transcript overflow the card or reach the composer', () => {
     // Every terminal width and height the CLI can meet, with a 20-entry log and
     // CJK reasoning plus a long answer: the widest glyphs and the longest
