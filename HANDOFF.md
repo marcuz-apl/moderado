@@ -1,50 +1,44 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-25 11:58 UTC
+Updated: 2026-10-25 12:02 UTC
 Branch: master
-Commit: d1ea5de (v0.4.51)
+Commit: 458ab14 (v0.4.51)
 Status: ready for review
 
 ## Summary
 
-The chat transcript includes earlier question and answer pairs with an
-in-workspace scroll track. The newest correction places the current question
-heading inside the transcript before its answer and separates completed turns
-with a horizontal line. The fixed current-question header stays visible above
-long answers.
+The chat transcript shows question and answer pairs in chronological order.
+The current question now follows earlier exchanges inside the scrollable area,
+so a new turn pushes prior turns upward. The composer stays fixed at the bottom.
 
 ## Completed
 
-- Added a current-question heading in full and incremental transcript paints.
-- Added horizontal dividers after completed answers.
-- Preserved answer visibility in a one-row transcript viewport.
-- Added renderer and two-turn session regression tests.
+- Removed the duplicate fixed current-question row from the chat layout.
+- Kept the current question heading with its answer in the scrollable transcript.
+- Updated layout tests for chronological turn order and scrolling.
 - Updated docs/GUIDE.md.
 
 ## In progress
 
-- Review the turn-boundary fix. The separate cross-client config coordination
+- Review the chronological chat layout. The separate cross-client config coordination
   plan remains in docs/superpowers/plans/2026-10-23-cross-client-config-coordination.md.
 
 ## Working tree
 
-- Modified at this checkpoint: apps/cli/src/commands/chat.ts,
-  apps/cli/src/ui/composer.ts, apps/cli/src/ui/welcome.ts,
-  apps/cli/tests/chat_replay.test.ts, apps/cli/tests/welcome.test.ts,
-  docs/GUIDE.md, HANDOFF.md.
+- Modified at this checkpoint: apps/cli/src/ui/welcome.ts,
+  apps/cli/tests/welcome.test.ts, docs/GUIDE.md, HANDOFF.md.
 
 ## Checks
 
-- npm test -- --reporter=dot — PASS (72 files, 726 passed, 1 skipped)
+- npm test -- --reporter=dot — PASS (72 files, 727 passed, 1 skipped)
 - npm run build — PASS
 - git diff --check — PASS
 
 ## Decisions and context
 
-- The current question was formerly only a pinned header, which left previous
-  answers adjacent to the current answer in the scrollable transcript.
-- The current heading is now also in the transcript; the pinned header remains
-  visible when the answer is long. No new runtime dependency was added.
+- The top row now carries only the app header. Questions and answers share one
+  chronological transcript; Page Up, Page Down, wheel, and the in-workspace
+  scroll track remain available. No new runtime dependency was added.
 
 ## Blockers
 
@@ -52,4 +46,4 @@ None.
 
 ## Next action
 
-1. Try a new question after several saved turns and inspect the turn dividers.
+1. Try a new question after several saved turns and scroll up to review them.

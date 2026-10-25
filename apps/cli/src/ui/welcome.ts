@@ -282,8 +282,6 @@ export const CHAT_COMPOSER_ROWS = 5;
 
 export interface ChatLayout {
   area: ReturnType<typeof getChatAnswerArea>;
-  questionTop: number;
-  questionRows: number;
   statusRow: number;
   answerTop: number;
   answerRows: number;
@@ -297,32 +295,23 @@ export interface ChatLayout {
  * composer: a long answer is windowed instead of pushing the input card, the
  * mode row, and the workspace row off screen (or painting over them).
  */
-export function getChatLayout(width?: number, height?: number, question = '', composerRows = CHAT_COMPOSER_ROWS): ChatLayout {
+export function getChatLayout(width?: number, height?: number, _question = '', composerRows = CHAT_COMPOSER_ROWS): ChatLayout {
   const terminalWidth = width ?? (process.stdout.columns || 80);
   // Honor the real viewport: a hard floor here would emit a frame taller than a
   // short terminal and scroll the composer away. A very short terminal simply
   // shows fewer sections (the composer always wins — see renderChatScreen).
   const terminalHeight = Math.max(2, height ?? (process.stdout.rows || 24));
   const area = getChatAnswerArea(terminalWidth);
-  const wrappedQuestion = wrapText(question, Math.max(1, area.textWidth - 2)).length;
-  const questionTop = CHAT_HEADER_ROWS + 2;
-  // Rows above the answer: header, blank, question rows, status, blank.
-  const answerTopOffset = CHAT_HEADER_ROWS + 4;
   // The frame has to end on the second-to-last row: a trailing newline written
   // on the bottom row scrolls the viewport and drags the composer out of place.
   // So the composer is pinned to the viewport bottom and keeps every row it
   // needs — a queued-commands box makes it taller, and the answer area gives up
   // those rows instead of pushing the card off screen.
   const composerTop = Math.max(2, terminalHeight - Math.max(CHAT_COMPOSER_ROWS, composerRows));
-  // A pathological question must never starve the answer or the composer; when
-  // a tall composer leaves no room at all the question is dropped, not the card.
-  const questionRows = Math.max(0, Math.min(wrappedQuestion, composerTop - answerTopOffset - 2));
-  const statusRow = questionTop + questionRows;
+  const statusRow = CHAT_HEADER_ROWS + 2;
   const answerTop = statusRow + 2;
   return {
     area,
-    questionTop,
-    questionRows,
     statusRow,
     answerTop,
     answerRows: Math.max(0, composerTop - 1 - answerTop),
@@ -757,9 +746,7 @@ export function wrapText(text: string, maxWidth: number): string[] {
 }
 
 /**
- * Full chat window (after a question is submitted): no logo — the question is
- * displayed on the first row, the multi-line model answer below it, then the
- * same input card as the welcome window at the bottom.
+ * Full chat window: the transcript scrolls above a fixed input card.
  */
 export function renderChatScreen(options: WelcomeLayoutOptions, height?: number): string {
   const terminalWidth = options.width ?? (process.stdout.columns || 80);
@@ -778,17 +765,6 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   const lines: string[] = [];
   lines.push(renderChatHeader(terminalWidth));
   lines.push('');
-  // Row 1: the user's question, wrapped onto the same columns as the composer card.
-  const questionMarker = '\x1b[1;38;5;75m' + String.fromCodePoint(0x276F) + '\x1b[0;48;5;236m';
-  const questionLines = wrapText(question, Math.max(1, area.textWidth - 2));
-  const visibleQuestion = questionLines.slice(0, layout.questionRows);
-  for (const [index, questionLine] of visibleQuestion.entries()) {
-    const clipped = index === layout.questionRows - 1 && questionLines.length > layout.questionRows
-      ? `${questionLine.slice(0, Math.max(0, area.textWidth - 3))}…`
-      : questionLine;
-    const questionText = `${index === 0 ? questionMarker : '  '} ${clipped}`;
-    lines.push(indent + String.fromCharCode(27) + '[48;5;236m' + questionText + ' '.repeat(Math.max(0, area.cardWidth - visibleLen(questionText))) + String.fromCharCode(27) + '[0m');
-  }
   const thoughtTime = options.chatThoughtTime ?? 0;
   const thoughtTimeLabel = thoughtTime > 0 && thoughtTime < 1 ? '<1s' : `${Math.round(thoughtTime)}s`;
   const answerText = options.chatAnswer ?? '';

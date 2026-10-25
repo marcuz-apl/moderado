@@ -417,7 +417,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(plain).toContain('Auto-approve off (Shift+Tab)');
   });
 
-  it('keeps the chat title bar, question row, and answer inside the input card width when maximized', () => {
+  it('keeps the chat title bar, transcript question, and answer inside the input card width when maximized', () => {
     const width = 220;
     const cardWidth = getChatAnswerArea(width).cardWidth;
     const indent = getChatAnswerArea(width).indent;
@@ -436,11 +436,11 @@ describe('OpenCode-style Welcome TUI', () => {
       expect(line.length).toBeLessThanOrEqual(width);
     }
 
-    // The question row starts on the card indent and wraps instead of running off the card.
-    const questionRows = lines.slice(2, 2 + getChatLayout(width, 50, 'Q'.repeat(400)).questionRows);
+    // The question wraps inside the transcript instead of occupying a fixed top row.
+    const questionRows = lines.filter((line) => line.includes('Q'.repeat(20)));
     expect(questionRows.length).toBeGreaterThan(1);
     expect(questionRows[0].search(/\S/)).toBe(indent);
-    for (const row of questionRows) expect(row.length).toBe(indent + cardWidth);
+    for (const row of questionRows) expect(row.length).toBeLessThanOrEqual(indent + cardWidth);
 
     // The answer wraps to the card width, on the same indent.
     const answerRows = lines.filter((line) => line.includes('word'));
@@ -756,13 +756,14 @@ describe('OpenCode-style Welcome TUI', () => {
     };
     const latest = stripAnsi(renderChatScreen(base, 18));
     expect(latest).toContain('Third answer');
+    expect(latest).toContain('Third question');
     expect(latest).toContain('earlier lines hidden');
 
     const oldest = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 100 }, 18));
     expect(oldest).toContain('First question');
     expect(oldest).toContain('First answer');
     expect(oldest).toContain('Top of history');
-    expect(oldest).toContain('Third question');
+    expect(oldest).not.toContain('Third question');
   });
 
   it('places each question above its answer and divides completed turns', () => {
@@ -778,6 +779,24 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(visible.slice(previousAnswer + 1, currentQuestion)).toContain('─'.repeat(40));
     expect(currentAnswer).toBe(currentQuestion + 1);
     expect(visible[currentAnswer + 1]).toBe('─'.repeat(40));
+  });
+
+  it('places the current question after past exchanges inside the scrollable transcript', () => {
+    const frame = stripAnsi(renderChatScreen({
+      workspace: '/w', mode: 'Execute', autoApprove: true, model: 'm', tokens: 0, cost: '$0', width: 80,
+      chatQuestion: 'Current question', chatAnswer: 'Current answer', isTurnSettled: true,
+      chatHistory: [
+        { question: 'First question', answer: 'First answer' },
+        { question: 'Second question', answer: 'Second answer' },
+      ],
+    }, 30));
+    const lines = frame.split('\n');
+    expect(lines[2]).not.toContain('Current question');
+    expect(lines.filter((line) => line.includes('Current question'))).toHaveLength(1);
+    const positions = ['First question', 'First answer', 'Second question', 'Second answer', 'Current question', 'Current answer']
+      .map((text) => frame.indexOf(text));
+    expect(positions.every((position) => position >= 0)).toBe(true);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
   });
 
   it('shows a workspace scrollbar when a long answer hides earlier exchanges', () => {
@@ -1729,7 +1748,7 @@ describe('token usage display', () => {
     expect(lines[modeRow]).toContain('Input ~100 | Output ~20 | Total … | 1500 tokens / $0.42');
     expect(lines[modeRow].length).toBeLessThanOrEqual(79);
     const questionRow = lines.findIndex(line => line.includes('❯ Hi'));
-    expect(lines[questionRow + 1]?.trim()).toBe('');
+    expect(lines[questionRow + 1]).toContain('Hello');
     expect(screen).not.toContain('Thought for');
   });
 });

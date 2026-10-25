@@ -120,8 +120,9 @@ questions and answers in the session. When the transcript is longer than the
 chat area, a scroll track appears at its right edge; click near the top to jump
 to earlier exchanges. The newest lines stay visible by default;
 `… +N earlier lines hidden` shows when more is above the viewport. The current
-question and input stay in place while you scroll. The full text is also
-available through `/session export`.
+question follows earlier exchanges in the scrollable transcript, and new turns
+push older turns upward. The input stays in place while you scroll. The full
+text is also available through `/session export`.
 
 Each exchange in the transcript shows its question above the answer. A horizontal
 line marks the end of a completed answer, so the next exchange stays distinct.
