@@ -796,7 +796,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   // The activity log and the answer are one list, so both the scroll position
   // and the window are computed over the merged rows.
   const transcriptWidth = getChatTranscriptWidth(layout);
-  const transcript = buildChatTranscriptRows(options.chatActivity, answerText, transcriptWidth, options.chatHistory);
+  const transcript = buildChatTranscriptRows(options.chatActivity, answerText, transcriptWidth, options.chatHistory, question, layout.answerRows > 2 && (options.isTurnSettled ?? !options.chatActivity));
   // While the reader is scrolled up, the status row belongs to the scroll
   // position: the turn clock is not what they are looking for.
   const scrollWindow = transcript.rows.length > 0 && layout.answerRows > 0 && answerOffset > 0
@@ -1130,13 +1130,17 @@ export function buildChatTranscriptRows(
   answer: string,
   textWidth: number,
   history: readonly ChatHistoryTurn[] = [],
+  question = '',
+  settled = false,
 ): { rows: string[]; answerStart: number } {
   const rows: string[] = [];
+  const divider = LOG_MARK + '─'.repeat(Math.max(1, textWidth));
   for (const turn of history) {
     rows.push(...wrapText(`❯ ${turn.question}`, textWidth).map((line) => LOG_MARK + line));
     rows.push(...wrapAnswerLines(turn.answer.trimEnd(), textWidth));
-    rows.push('');
+    rows.push(divider);
   }
+  if (question) rows.push(...wrapText(`❯ ${question}`, textWidth).map((line) => LOG_MARK + line));
   for (const entry of activity?.history ?? []) {
     rows.push(LOG_MARK + `${entry.glyph} ${entry.label}`);
   }
@@ -1148,6 +1152,7 @@ export function buildChatTranscriptRows(
   }
   const answerStart = rows.length;
   if (answer.trim().length > 0) rows.push(...wrapAnswerLines(answer.trimEnd(), textWidth));
+  if (settled && answer.trim()) rows.push(divider);
   return { rows, answerStart };
 }
 
@@ -1164,7 +1169,7 @@ export function windowChatTranscriptAt(
   if (rows.length <= maxRows) return { lines: [...rows], hiddenAbove: 0, hiddenBelow: 0 };
   // The note costs a row, so the content capacity is one row smaller — and the
   // maximum offset follows from that capacity, not from the raw row count.
-  const capacity = Math.max(1, maxRows - 1);
+  const capacity = Math.max(1, maxRows - (maxRows > 1 ? 1 : 0));
   const maxOffset = Math.max(0, rows.length - capacity);
   const offset = Math.max(0, Math.min(Math.round(offsetFromBottom), maxOffset));
   const end = rows.length - offset;
@@ -1181,7 +1186,7 @@ export function chatTranscriptOffsetForRow(totalRows: number, visibleRows: numbe
 function renderTranscriptRows(rows: readonly string[], layout: ChatLayout, offset: number): string[] {
   const cells = getChatTranscriptWidth(layout);
   const { lines, hiddenAbove, hiddenBelow } = windowChatTranscriptAt(rows, layout.answerRows, offset);
-  const visible = hiddenAbove > 0
+  const visible = hiddenAbove > 0 && layout.answerRows > 1
     ? [`\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), cells)}\x1b[0m`, ...lines.map((line) => renderAnswerLine(line, cells))]
     : lines.map((line) => renderAnswerLine(line, cells));
   const overflowing = rows.length > layout.answerRows && layout.answerRows > 0;
@@ -1237,9 +1242,11 @@ export function renderChatTranscriptWindow(
   layout: ChatLayout,
   offsetFromBottom = 0,
   history: readonly ChatHistoryTurn[] = [],
+  question = '',
+  settled = false,
 ): string {
   const { area } = layout;
-  const { rows } = buildChatTranscriptRows(activity, answer, getChatTranscriptWidth(layout), history);
+  const { rows } = buildChatTranscriptRows(activity, answer, getChatTranscriptWidth(layout), history, question, settled && layout.answerRows > 2);
   const visible = renderTranscriptRows(rows, layout, offsetFromBottom);
   let sequence = '\x1b7';
   for (let index = 0; index < layout.answerRows; index++) {

@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 /** Wire a session against a fake provider and capture everything written to the terminal. */
-function runSession(home: string, question: string, turns: number): { output: () => string; controller: AbortController } {
+function runSession(home: string, question: string | string[], turns: number): { output: () => string; rawOutput: () => string; controller: AbortController } {
   originalExitListeners = process.listeners('exit');
   vi.spyOn(os, 'homedir').mockReturnValue(home);
   vi.spyOn(config, 'loadConfig').mockReturnValue({});
@@ -46,15 +46,37 @@ function runSession(home: string, question: string, turns: number): { output: ()
     promptCount++;
     // Ask the same question `turns` times, then stop the session.
     if (promptCount > turns) controller.abort();
-    return { text: promptCount <= turns ? question : '', mode: 'Execute', autoApprove: false };
+    return { text: promptCount <= turns ? (Array.isArray(question) ? question[promptCount - 1] : question) : '', mode: 'Execute', autoApprove: false };
   });
   let output = '';
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => {
     output += String(chunk);
     return true;
   });
-  return { output: () => stripAnsi(output), controller };
+  return { output: () => stripAnsi(output), rawOutput: () => output, controller };
 }
+
+it('shows the next question above its answer and separates completed exchanges', async () => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-turn-boundary-'));
+  homes.push(home);
+  const { rawOutput, controller } = runSession(home, ['First question', 'Second question'], 2);
+  let calls = 0;
+  vi.spyOn(NvidiaAdapter.prototype, 'streamChat').mockImplementation(async function* () {
+    yield { contentDelta: ++calls === 1 ? 'First answer' : 'Second answer' };
+  });
+
+  await handleChatSession(parseCliArgs(['--workspace', home, '--model', 'z-ai/glm-5']), '0.4.51', controller.signal);
+
+  const finalFrame = stripAnsi(rawOutput().split('\x1b[H\x1b[J').at(-1) ?? '');
+  const firstAnswer = finalFrame.indexOf('First answer');
+  const currentQuestion = finalFrame.lastIndexOf('Second question');
+  const currentAnswer = finalFrame.indexOf('Second answer');
+  expect(firstAnswer).toBeGreaterThan(0);
+  expect(currentQuestion).toBeGreaterThan(firstAnswer);
+  expect(currentAnswer).toBeGreaterThan(currentQuestion);
+  expect(finalFrame.slice(firstAnswer, currentQuestion)).toContain('───');
+  expect(finalFrame.slice(currentAnswer)).toContain('───');
+});
 
 it('re-asks the model after a failed turn instead of replaying the error', async () => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-replay-failed-'));

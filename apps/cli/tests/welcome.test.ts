@@ -437,7 +437,7 @@ describe('OpenCode-style Welcome TUI', () => {
     }
 
     // The question row starts on the card indent and wraps instead of running off the card.
-    const questionRows = lines.filter((line) => line.includes('Q'.repeat(20)));
+    const questionRows = lines.slice(2, 2 + getChatLayout(width, 50, 'Q'.repeat(400)).questionRows);
     expect(questionRows.length).toBeGreaterThan(1);
     expect(questionRows[0].search(/\S/)).toBe(indent);
     for (const row of questionRows) expect(row.length).toBe(indent + cardWidth);
@@ -763,6 +763,21 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(oldest).toContain('First answer');
     expect(oldest).toContain('Top of history');
     expect(oldest).toContain('Third question');
+  });
+
+  it('places each question above its answer and divides completed turns', () => {
+    const { rows } = buildChatTranscriptRows(undefined, 'Current answer', 40, [
+      { question: 'Previous question', answer: 'Previous answer' },
+    ], 'Current question', true);
+    const visible = rows.map((row) => stripAnsi(renderAnswerLine(row, 40)));
+    const previousAnswer = visible.indexOf('Previous answer');
+    const currentQuestion = visible.indexOf('❯ Current question');
+    const currentAnswer = visible.indexOf('Current answer');
+    expect(previousAnswer).toBeGreaterThan(0);
+    expect(currentQuestion).toBeGreaterThan(previousAnswer);
+    expect(visible.slice(previousAnswer + 1, currentQuestion)).toContain('─'.repeat(40));
+    expect(currentAnswer).toBe(currentQuestion + 1);
+    expect(visible[currentAnswer + 1]).toBe('─'.repeat(40));
   });
 
   it('shows a workspace scrollbar when a long answer hides earlier exchanges', () => {

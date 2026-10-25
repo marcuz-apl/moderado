@@ -123,6 +123,9 @@ to earlier exchanges. The newest lines stay visible by default;
 question and input stay in place while you scroll. The full text is also
 available through `/session export`.
 
+Each exchange in the transcript shows its question above the answer. A horizontal
+line marks the end of a completed answer, so the next exchange stays distinct.
+
 The composer is measured before the frame is laid out, so anything that makes
 the card taller — a queued-commands box from `/queue`, an `@` mention list, the
 slash-command suggestions — takes its rows from the answer area instead of

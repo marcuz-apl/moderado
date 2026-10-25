@@ -361,7 +361,7 @@ export async function promptInteractiveTurn(
     const layout = currentChatLayout();
     if (layout.answerRows <= 0) return 0;
     return windowChatTranscriptAt(
-      buildChatTranscriptRows(activity, answer ?? '', getChatTranscriptWidth(layout), options.chatHistory).rows,
+      buildChatTranscriptRows(activity, answer ?? '', getChatTranscriptWidth(layout), options.chatHistory, options.chatQuestion, layout.answerRows > 2).rows,
       layout.answerRows,
       0,
     ).hiddenAbove;
@@ -387,7 +387,7 @@ export async function promptInteractiveTurn(
 
   const jumpAnswerToRow = (row: number): void => {
     const layout = currentChatLayout();
-    const rows = buildChatTranscriptRows(options.getChatActivity?.(), options.chatAnswer ?? '', getChatTranscriptWidth(layout), options.chatHistory).rows;
+    const rows = buildChatTranscriptRows(options.getChatActivity?.(), options.chatAnswer ?? '', getChatTranscriptWidth(layout), options.chatHistory, options.chatQuestion, layout.answerRows > 2).rows;
     if (rows.length <= layout.answerRows) return;
     const next = chatTranscriptOffsetForRow(rows.length, layout.answerRows, row);
     if (next === answerOffset) return;

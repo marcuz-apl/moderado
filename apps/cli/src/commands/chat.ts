@@ -681,6 +681,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
     chatQuestion: lastQuestion,
     chatAnswer: lastAnswer,
     chatHistory: getPriorChatTurns(conversationHistory, lastQuestion, lastAnswer),
+    isTurnSettled: true,
     // Scroll position mirrored from the composer, so a full frame repaint lands
     // on the same rows the reader is looking at.
     chatAnswerOffset: answerOffset,
@@ -1275,7 +1276,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
         if (!force && now - lastAnswerPaint < 40) return;
         lastAnswerPaint = now;
         if (!streamedAnswer) return;
-        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset, getPriorChatTurns(conversationHistory, trimmed, '')));
+        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset, getPriorChatTurns(conversationHistory, trimmed, ''), trimmed));
       };
       let lastErrorEvent: { code?: string; message: string } | undefined;
       /** Tail of the model's reasoning, shown as one dim line while it thinks. */
@@ -1313,7 +1314,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
           history: activityHistory,
         };
         process.stdout.write(renderChatTranscriptHeader(currentActivity, layout, thoughtTime));
-        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset, getPriorChatTurns(conversationHistory, trimmed, '')));
+        process.stdout.write(renderChatTranscriptWindow(currentActivity, streamedAnswer, layout, answerOffset, getPriorChatTurns(conversationHistory, trimmed, ''), trimmed));
       };
       const startActivity = (): void => {
         stopActivity();
@@ -1339,6 +1340,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
         chatQuestion: trimmed,
         chatAnswer: streamedAnswer || lastAnswer,
         chatHistory: getPriorChatTurns(conversationHistory, trimmed, turnActive ? '' : lastAnswer),
+        isTurnSettled: !turnActive,
         // The live activity rides along with the frame, so a full repaint (a
         // resize, a keystroke in the composer) shows the same transcript the
         // incremental paints do instead of an empty answer area.
