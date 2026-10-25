@@ -164,6 +164,14 @@ function isMcpCommandInput(value: string): boolean {
  * here instead and the derived keypresses are dropped.
  */
 const MODIFIED_KEY_PATTERN = /\x1b\[(?:27;(\d+);(\d+)~|(\d+);(\d+)u)/;
+const WIN32_KEY_PATTERN = /\x1b\[(\d+);\d+;(\d+);([01]);(\d+);(\d+)_/g;
+const WIN32_INPUT_ON = '\x1b[?9001h';
+const WIN32_INPUT_OFF = '\x1b[?9001l';
+const WIN32_KEY_NAMES: Record<number, string> = {
+  8: 'backspace', 9: 'tab', 13: 'return', 27: 'escape',
+  33: 'pageup', 34: 'pagedown', 37: 'left', 38: 'up',
+  39: 'right', 40: 'down', 46: 'delete',
+};
 
 function decodeModifiedKey(text: string): 'newline' | 'toggle-auto-approve' | 'cancel' | undefined {
   const match = MODIFIED_KEY_PATTERN.exec(text);
@@ -191,6 +199,10 @@ export async function promptInteractiveTurn(
   let caret = 0;
   /** True while keypress events derived from a mouse report are being dropped. */
   let ignoreComposerKeypress = false;
+  const useWin32Input = process.platform === 'win32' && Boolean(process.env.WT_SESSION);
+  let win32InputBound = false;
+  let pendingWin32Key = '';
+  let handleWin32Keypress: (str: string, key: { name: string; shift: boolean; ctrl: boolean; meta: boolean }) => void = () => {};
   /** Terminal height, with the same fallback the renderer uses. */
   const getRows = (): number => stdout.rows || 24;
   let commandSelection = 0;
@@ -327,12 +339,13 @@ export async function promptInteractiveTurn(
 
   /** Full-screen redraw: clear everything, repaint welcome TUI, reposition cursor. */
   const redrawFull = () => {
+    stdout.write('\x1b[?2026h');
     stdout.write('\x1b[H\x1b[J');
     stdout.write(renderCenteredWelcomeScreen(getOptions(), stdout.rows));
     positionCursorOnInput();
+    stdout.write('\x1b[?2026l');
   };
 
-  /** Repaint the welcome view so it remains centered after every edit or resize. */
   const redrawCard = () => {
     redrawFull();
   };
@@ -428,6 +441,28 @@ export async function promptInteractiveTurn(
   const onComposerData = (chunk: string | Buffer): void => {
     const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8');
     let reported = false;
+    // Windows Terminal's Win32 input mode reports every key as a record.
+    // Translate those records through the same composer handler as legacy keys.
+    if (win32InputBound) {
+      const keyData = pendingWin32Key + text;
+      const records = [...keyData.matchAll(WIN32_KEY_PATTERN)];
+      pendingWin32Key = /\x1b\[[0-9;]*$/.exec(keyData)?.[0] ?? '';
+      if (records.length || pendingWin32Key) reported = true;
+      for (const record of records) {
+        if (record[3] !== '1') continue;
+        const virtualKey = Number(record[1]);
+        const unicode = Number(record[2]);
+        const state = Number(record[4]);
+        const repeat = Number(record[5]);
+        if (unicode > 65535 || repeat < 1 || repeat > 256) continue;
+        const char = unicode ? String.fromCharCode(unicode) : '';
+        const name = WIN32_KEY_NAMES[virtualKey] ?? (virtualKey >= 65 && virtualKey <= 90 ? String.fromCharCode(virtualKey).toLowerCase() : char.toLowerCase());
+        if (!name) continue;
+        const altGr = Boolean((state & 1) && (state & 8) && unicode >= 32);
+        const key = { name, shift: Boolean(state & 16), ctrl: Boolean(state & 12) && !altGr, meta: Boolean(state & 3) && !altGr };
+        for (let index = 0; index < repeat; index++) handleWin32Keypress(virtualKey === 13 ? '\r' : char, key);
+      }
+    }
     // Shift+Enter arrives as one of these sequences once the terminal reports
     // modified keys; readline would otherwise type it out as literal garbage.
     const modified = decodeModifiedKey(text);
@@ -512,11 +547,11 @@ export async function promptInteractiveTurn(
     // Using a void async IIFE so we can await async operations (model selector)
     // inside a synchronous event listener.  For any async branch we first
     // remove ourselves from stdin so no duplicate events fire during the await.
-    const onKeypress = (str: string, key: any) => {
+    const onKeypress = (str: string, key: any, fromWin32 = false) => {
       void (async () => {
 
         // Keystrokes decoded from a mouse report were already handled above.
-        if (ignoreComposerKeypress) return;
+        if (!fromWin32 && ignoreComposerKeypress) return;
 
         // Intercept XTMODKEYS modified keys that readline cannot decode.
         // The raw byte chunk `str` carries the escape sequence (e.g. CSI 27;1;13~
@@ -540,7 +575,7 @@ export async function promptInteractiveTurn(
         // Enter submits; a line feed (Ctrl+J, or Shift+Enter where the terminal
         // reports it) breaks the line instead.
         const isEnter = Boolean(key) && (key.name === 'return' || key.name === 'enter');
-        const isLineFeed = isEnter && (key.shift === true || key.meta === true || key.ctrl === true);
+        const isLineFeed = isEnter && (str === '\n' || key.shift === true || key.meta === true || key.ctrl === true);
         const isSubmit = isEnter && !isLineFeed;
 
         if (options.signal?.aborted) {
@@ -1044,6 +1079,7 @@ export async function promptInteractiveTurn(
 
       })();
     };
+    handleWin32Keypress = (str, key) => onKeypress(str, key, true);
 
     /**
      * Mouse reporting is only useful while the composer owns the keyboard: a
@@ -1052,14 +1088,17 @@ export async function promptInteractiveTurn(
      * normal text selection, and clicks never leak into their filter fields.
      */
     const bindComposerInput = (): void => {
-      stdout.write(MOUSE_REPORT_ON + KEY_MODIFIER_REPORT_ON);
+      win32InputBound = useWin32Input;
+      stdout.write(MOUSE_REPORT_ON + KEY_MODIFIER_REPORT_ON + (useWin32Input ? WIN32_INPUT_ON : ''));
       stdin.on('keypress', onKeypress);
     };
     const unbindComposerInput = (): void => {
+      win32InputBound = false;
+      pendingWin32Key = '';
       stdin.removeListener('keypress', onKeypress);
       // Key-modifier reporting is scoped to the composer: popups read plain
       // legacy keys, and leaving XTMODKEYS on would change what they receive.
-      stdout.write(KEY_MODIFIER_REPORT_OFF + MOUSE_REPORT_OFF);
+      stdout.write((useWin32Input ? WIN32_INPUT_OFF : '') + KEY_MODIFIER_REPORT_OFF + MOUSE_REPORT_OFF);
     };
 
     bindComposerInput();

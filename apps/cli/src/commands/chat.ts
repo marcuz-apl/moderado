@@ -699,9 +699,11 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
   const paintStaticChatFrame = (overrides: Partial<WelcomeLayoutOptions> = {}): void => {
     const options = chatFrameOptions(overrides);
     const layout = layoutFor(options);
+    process.stdout.write('\x1b[?2026h');
     process.stdout.write('\x1b[H\x1b[J');
     process.stdout.write(renderFullWelcomeScreen(options, process.stdout.rows));
     process.stdout.write(renderChatComposerCursor({ width: process.stdout.columns }, options.input ?? '', layout.composerTop));
+    process.stdout.write('\x1b[?2026l');
   };
 
   while (!signal?.aborted) {

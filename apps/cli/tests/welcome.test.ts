@@ -874,7 +874,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(summaryLines.filter((line) => line.includes('a very long action')).length).toBeGreaterThan(1);
 
     const band = renderAnswerLine(summaryLines[0], 40);
-    expect(band).toContain('\x1b[48;5;114m');
+    expect(band).toContain('\x1b[48;2;35;44;37m');
     expect(band).toContain('▍');
     // Exactly the card's text column: the tint reaches the right edge, no further.
     expect(displayWidth(stripAnsi(band))).toBe(40);
@@ -885,7 +885,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
     // Prose outside the fence is untouched.
     const prose = renderAnswerLine(lines[0], 40);
-    expect(prose).not.toContain('48;5;114');
+    expect(prose).not.toContain('48;2;35;44;37');
     expect(prose).toContain('Prose above the report.');
   });
 
@@ -1846,6 +1846,17 @@ describe('Multi-line composer', () => {
     expect(result).toBe('ab\ncd');
   });
 
+  it('line-feeds on a raw LF byte (Ctrl+J on Windows terminals)', async () => {
+    const result = await runComposerTurn(async (stdin) => {
+      for (const character of 'ab') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\n', { name: 'enter' });
+      for (const character of 'cd') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
+      stdin.emit('keypress', '\r', { name: 'return' });
+    });
+    expect(result).toBe('ab\ncd');
+  });
+
+
   it('line-feeds when the terminal reports Shift+Enter as a modified key', async () => {
     const result = await runComposerTurn(async (stdin) => {
       for (const character of 'one') stdin.emit('keypress', character, { name: character, ctrl: false, meta: false });
@@ -1855,6 +1866,54 @@ describe('Multi-line composer', () => {
       stdin.emit('keypress', '\r', { name: 'return' });
     });
     expect(result).toBe('one\ntwo');
+  });
+
+  it('handles Windows Terminal key records without a terminal keybinding', async () => {
+    const previous = process.env.WT_SESSION;
+    process.env.WT_SESSION = 'test-terminal';
+    try {
+      let writes: string[] = [];
+      const result = await runComposerTurn(async (stdin, context) => {
+        writes = context.writes;
+        expect(context.writes.join('')).toContain('\x1b[?9001h');
+        for (const character of 'one') stdin.emit('data', `\x1b[${character.toUpperCase().charCodeAt(0)};0;${character.charCodeAt(0)};1;0;1_`);
+        stdin.emit('data', '\x1b[88;0;120;1;0;1_');
+        stdin.emit('data', '\x1b[8;0;8;1;0;1_');
+        stdin.emit('data', '\x1b[13;0;13;1;16;1_'.slice(0, 10));
+        stdin.emit('data', '\x1b[13;0;13;1;16;1_'.slice(10));
+        stdin.emit('data', '\x1b[13;0;13;0;16;1_');
+        for (const character of 'two') stdin.emit('data', `\x1b[${character.toUpperCase().charCodeAt(0)};0;${character.charCodeAt(0)};1;0;1_`);
+        stdin.emit('data', '\x1b[13;0;13;1;0;1_');
+      });
+      expect(result).toBe('one\ntwo');
+      expect(writes.join('')).toContain('\x1b[?9001l');
+    } finally {
+      if (previous === undefined) delete process.env.WT_SESSION;
+      else process.env.WT_SESSION = previous;
+    }
+  });
+
+  it('leaves Windows Terminal key-record mode while a popup owns input', async () => {
+    const previous = process.env.WT_SESSION;
+    process.env.WT_SESSION = 'test-terminal';
+    try {
+      const result = await runComposerTurn(async (stdin, context) => {
+        for (const character of '/help') stdin.emit('data', `\x1b[${character.toUpperCase().charCodeAt(0)};0;${character.charCodeAt(0)};1;0;1_`);
+        stdin.emit('data', '\x1b[13;0;13;1;0;1_');
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(context.writes.join('')).toContain('\x1b[?9001l');
+        stdin.emit('keypress', '\r', { name: 'return' });
+        await new Promise((resolve) => setImmediate(resolve));
+        expect(context.writes.join('').split('\x1b[?9001h')).toHaveLength(3);
+        stdin.emit('data', '\x1b[79;0;111;1;0;1_');
+        stdin.emit('data', '\x1b[75;0;107;1;0;1_');
+        stdin.emit('data', '\x1b[13;0;13;1;0;1_');
+      });
+      expect(result).toBe('ok');
+    } finally {
+      if (previous === undefined) delete process.env.WT_SESSION;
+      else process.env.WT_SESSION = previous;
+    }
   });
 
   it('places the caret on the clicked row of a wrapped prompt', async () => {

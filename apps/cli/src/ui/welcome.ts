@@ -406,7 +406,7 @@ export function renderAnswerLine(line: string, textWidth: number): string {
     const text = line.slice(QUESTION_MARK.length);
     const clipped = truncateToWidth(text, textWidth);
     const padding = ' '.repeat(Math.max(0, textWidth - displayWidth(clipped)));
-    return `\x1b[48;5;25m${clipped}${padding}\x1b[0m`;
+    return `\x1b[48;5;24m${clipped}${padding}\x1b[0m`;
   }
   // Activity-log rows share the window with the answer but read as a record of
   // what happened: dim, no rail, no band. One function, two kinds of row.
@@ -423,10 +423,12 @@ export function renderAnswerLine(line: string, textWidth: number): string {
   const heading = body.match(/^#{1,6}\s+(.+)$/);
   const bullet = body.match(/^[-*]\s+(.+)$/);
   const text = heading ? heading[1].trim() : bullet ? `· ${bullet[1].trim()}` : body;
-  const tone = heading ? '1;38;5;222' : '38;5;253';
+  const tone = heading
+    ? text === 'COMPLETED' || text === 'COMPLETED!' ? '1;38;5;40' : '1;38;5;222'
+    : '38;5;253';
   // Pad to the card so the tint is a solid band instead of a ragged highlight.
   const padded = `${text}${' '.repeat(Math.max(0, textWidth - 2 - displayWidth(text)))}`;
-  return `\x1b[48;5;114m\x1b[38;5;75m▍\x1b[0;48;5;114m\x1b[${tone}m ${padded}\x1b[0m`;
+  return `\x1b[48;2;35;44;37m\x1b[38;5;75m▍\x1b[0;48;2;35;44;37m\x1b[${tone}m ${padded}\x1b[0m`;
 }
 
 export function chatAnswerOverflowNote(hidden: number): string {
@@ -711,7 +713,8 @@ export function renderModeradoHeader(width?: number): string {
 export function renderChatHeader(width?: number): string {
   const terminalWidth = width ?? (process.stdout.columns || 80);
   const label = 'MODERADO'.slice(0, Math.max(1, terminalWidth));
-  return ' '.repeat(Math.max(0, terminalWidth - label.length)) + `\x1b[1;38;5;75m${label}\x1b[0m`;
+  const padding = Math.max(0, Math.floor((terminalWidth - label.length) / 2));
+  return ' '.repeat(padding) + `\x1b[1;38;5;75m${label}\x1b[0m`;
 }
 
 /** Word-wrap plain text to `maxWidth` visible columns, hard-breaking long words. */

@@ -1,49 +1,46 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-25 12:02 UTC
+Updated: 2026-10-25 18:32 UTC
 Branch: master
-Commit: 458ab14 (v0.4.51)
+Commit: see the commit containing this checkpoint (parent: 57ad6cd)
 Status: ready for review
 
 ## Summary
 
-The chat transcript shows question and answer pairs in chronological order.
-The current question now follows earlier exchanges inside the scrollable area,
-so a new turn pushes prior turns upward. The composer stays fixed at the bottom.
+Checkpoint of Windows Terminal composer input handling and chat display updates.
+All pending changes are being committed and pushed at the owner's request.
 
 ## Completed
 
-- Removed the duplicate fixed current-question row from the chat layout.
-- Kept the current question heading with its answer in the scrollable transcript.
-- Updated layout tests for chronological turn order and scrolling.
-- Updated docs/GUIDE.md.
-
-## In progress
-
-- Review the chronological chat layout. The separate cross-client config coordination
-  plan remains in docs/superpowers/plans/2026-10-23-cross-client-config-coordination.md.
+- Added Windows Terminal key-record handling, modified Enter support, and popup input-mode cleanup.
+- Batched chat redraws with synchronized terminal output.
+- Centered the chat header and adjusted question and summary colors.
+- Added composer regression tests and updated summary styling expectations.
 
 ## Working tree
 
-- Modified at this checkpoint: apps/cli/src/ui/welcome.ts,
-  apps/cli/tests/welcome.test.ts, docs/GUIDE.md, HANDOFF.md.
+- This checkpoint includes VERSION, chat.ts, composer.ts, welcome.ts,
+  welcome.test.ts, and HANDOFF.md. Git hooks advance the connected build identifier.
 
 ## Checks
 
-- npm test -- --reporter=dot — PASS (72 files, 727 passed, 1 skipped)
-- npm run build — PASS
-- git diff --check — PASS
+- `npm run typecheck` — PASS.
+- `git diff --check` — PASS before this documentation update.
+- `npm test -- --reporter=dot` — could not start: installed dependencies lack
+  `@rollup/rollup-linux-x64-gnu` in this Linux environment.
 
 ## Decisions and context
 
-- The top row now carries only the app header. Questions and answers share one
-  chronological transcript; Page Up, Page Down, wheel, and the in-workspace
-  scroll track remain available. No new runtime dependency was added.
+- No runtime dependencies were added.
+- Preserve the chronological scrollable transcript and fixed composer.
+- The separate cross-client config coordination plan remains in
+  docs/superpowers/plans/2026-10-23-cross-client-config-coordination.md.
 
 ## Blockers
 
-None.
+- Test execution requires a matching Rollup native component for the host platform.
 
 ## Next action
 
-1. Try a new question after several saved turns and scroll up to review them.
+1. Run the test suite with dependencies installed for the host platform, then
+   manually check Windows Terminal modified Enter and popup input behavior.
