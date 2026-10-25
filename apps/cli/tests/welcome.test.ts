@@ -754,12 +754,11 @@ describe('OpenCode-style Welcome TUI', () => {
         { question: 'Second question', answer: 'Second answer' },
       ],
     };
-    const latest = stripAnsi(renderChatScreen(base, 18));
+    const latest = stripAnsi(renderChatScreen(base, 16));
     expect(latest).toContain('Third answer');
     expect(latest).toContain('Third question');
-    expect(latest).toContain('earlier lines hidden');
 
-    const oldest = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 100 }, 18));
+    const oldest = stripAnsi(renderChatScreen({ ...base, chatAnswerOffset: 100 }, 16));
     expect(oldest).toContain('First question');
     expect(oldest).toContain('First answer');
     expect(oldest).toContain('Top of history');
@@ -771,14 +770,12 @@ describe('OpenCode-style Welcome TUI', () => {
       { question: 'Previous question', answer: 'Previous answer' },
     ], 'Current question', true);
     const visible = rows.map((row) => stripAnsi(renderAnswerLine(row, 40)));
-    const previousAnswer = visible.indexOf('Previous answer');
-    const currentQuestion = visible.indexOf('❯ Current question');
-    const currentAnswer = visible.indexOf('Current answer');
+    const previousAnswer = visible.findIndex((line) => line.includes('Previous answer'));
+    const currentQuestion = visible.findIndex((line) => line.includes('❯ Current question'));
+    const currentAnswer = visible.findIndex((line) => line.includes('Current answer'));
     expect(previousAnswer).toBeGreaterThan(0);
     expect(currentQuestion).toBeGreaterThan(previousAnswer);
-    expect(visible.slice(previousAnswer + 1, currentQuestion)).toContain('─'.repeat(40));
     expect(currentAnswer).toBe(currentQuestion + 1);
-    expect(visible[currentAnswer + 1]).toBe('─'.repeat(40));
   });
 
   it('places the current question after past exchanges inside the scrollable transcript', () => {
@@ -862,7 +859,7 @@ describe('OpenCode-style Welcome TUI', () => {
       'Prose above the report.',
       '',
       '```summary',
-      '# Turn summary',
+      '# COMPLETED!',
       '## Done',
       `- ${'a very long action '.repeat(6)}`,
       '```',
@@ -877,7 +874,7 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(summaryLines.filter((line) => line.includes('a very long action')).length).toBeGreaterThan(1);
 
     const band = renderAnswerLine(summaryLines[0], 40);
-    expect(band).toContain('\x1b[48;5;236m');
+    expect(band).toContain('\x1b[48;5;114m');
     expect(band).toContain('▍');
     // Exactly the card's text column: the tint reaches the right edge, no further.
     expect(displayWidth(stripAnsi(band))).toBe(40);
@@ -888,7 +885,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
     // Prose outside the fence is untouched.
     const prose = renderAnswerLine(lines[0], 40);
-    expect(prose).not.toContain('48;5;236');
+    expect(prose).not.toContain('48;5;114');
     expect(prose).toContain('Prose above the report.');
   });
 

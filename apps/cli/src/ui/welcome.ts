@@ -327,6 +327,10 @@ export function getChatComposerRows(options: WelcomeLayoutOptions): number {
 
 /** Invisible prefix that marks a rendered line as part of the turn summary. */
 const SUMMARY_MARK = '\u0001';
+/** Invisible prefix that marks a transcript row as the user's question. */
+const QUESTION_MARK = '\u0003';
+
+
 
 /**
  * Wrap an answer for the card, marking the turn summary as it goes.
@@ -396,6 +400,14 @@ export function windowChatAnswerAt(
  * of thing from the prose above it, rather than three more paragraphs.
  */
 export function renderAnswerLine(line: string, textWidth: number): string {
+  // Question rows get the same surface background as the input box so they stand
+  // out from the answer without altering their text colour.
+  if (line.startsWith(QUESTION_MARK)) {
+    const text = line.slice(QUESTION_MARK.length);
+    const clipped = truncateToWidth(text, textWidth);
+    const padding = ' '.repeat(Math.max(0, textWidth - displayWidth(clipped)));
+    return `\x1b[48;5;25m${clipped}${padding}\x1b[0m`;
+  }
   // Activity-log rows share the window with the answer but read as a record of
   // what happened: dim, no rail, no band. One function, two kinds of row.
   if (line.startsWith(LOG_MARK)) {
@@ -414,7 +426,7 @@ export function renderAnswerLine(line: string, textWidth: number): string {
   const tone = heading ? '1;38;5;222' : '38;5;253';
   // Pad to the card so the tint is a solid band instead of a ragged highlight.
   const padded = `${text}${' '.repeat(Math.max(0, textWidth - 2 - displayWidth(text)))}`;
-  return `\x1b[48;5;236m\x1b[38;5;75m▍\x1b[0;48;5;236m\x1b[${tone}m ${padded}\x1b[0m`;
+  return `\x1b[48;5;114m\x1b[38;5;75m▍\x1b[0;48;5;114m\x1b[${tone}m ${padded}\x1b[0m`;
 }
 
 export function chatAnswerOverflowNote(hidden: number): string {
@@ -772,7 +784,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   // The activity log and the answer are one list, so both the scroll position
   // and the window are computed over the merged rows.
   const transcriptWidth = getChatTranscriptWidth(layout);
-  const transcript = buildChatTranscriptRows(options.chatActivity, answerText, transcriptWidth, options.chatHistory, question, layout.answerRows > 2 && (options.isTurnSettled ?? !options.chatActivity));
+  const transcript = buildChatTranscriptRows(options.chatActivity, answerText, transcriptWidth, options.chatHistory, question);
   // While the reader is scrolled up, the status row belongs to the scroll
   // position: the turn clock is not what they are looking for.
   const scrollWindow = transcript.rows.length > 0 && layout.answerRows > 0 && answerOffset > 0
@@ -1107,16 +1119,13 @@ export function buildChatTranscriptRows(
   textWidth: number,
   history: readonly ChatHistoryTurn[] = [],
   question = '',
-  settled = false,
 ): { rows: string[]; answerStart: number } {
   const rows: string[] = [];
-  const divider = LOG_MARK + '─'.repeat(Math.max(1, textWidth));
   for (const turn of history) {
-    rows.push(...wrapText(`❯ ${turn.question}`, textWidth).map((line) => LOG_MARK + line));
+    rows.push(...wrapText(`❯ ${turn.question}`, textWidth).map((line) => QUESTION_MARK + line));
     rows.push(...wrapAnswerLines(turn.answer.trimEnd(), textWidth));
-    rows.push(divider);
   }
-  if (question) rows.push(...wrapText(`❯ ${question}`, textWidth).map((line) => LOG_MARK + line));
+  if (question) rows.push(...wrapText(`❯ ${question}`, textWidth).map((line) => QUESTION_MARK + line));
   for (const entry of activity?.history ?? []) {
     rows.push(LOG_MARK + `${entry.glyph} ${entry.label}`);
   }
@@ -1128,7 +1137,6 @@ export function buildChatTranscriptRows(
   }
   const answerStart = rows.length;
   if (answer.trim().length > 0) rows.push(...wrapAnswerLines(answer.trimEnd(), textWidth));
-  if (settled && answer.trim()) rows.push(divider);
   return { rows, answerStart };
 }
 
@@ -1219,10 +1227,9 @@ export function renderChatTranscriptWindow(
   offsetFromBottom = 0,
   history: readonly ChatHistoryTurn[] = [],
   question = '',
-  settled = false,
 ): string {
   const { area } = layout;
-  const { rows } = buildChatTranscriptRows(activity, answer, getChatTranscriptWidth(layout), history, question, settled && layout.answerRows > 2);
+  const { rows } = buildChatTranscriptRows(activity, answer, getChatTranscriptWidth(layout), history, question);
   const visible = renderTranscriptRows(rows, layout, offsetFromBottom);
   let sequence = '\x1b7';
   for (let index = 0; index < layout.answerRows; index++) {

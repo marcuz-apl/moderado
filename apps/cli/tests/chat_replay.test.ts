@@ -74,8 +74,6 @@ it('shows the next question above its answer and separates completed exchanges',
   expect(firstAnswer).toBeGreaterThan(0);
   expect(currentQuestion).toBeGreaterThan(firstAnswer);
   expect(currentAnswer).toBeGreaterThan(currentQuestion);
-  expect(finalFrame.slice(firstAnswer, currentQuestion)).toContain('───');
-  expect(finalFrame.slice(currentAnswer)).toContain('───');
 });
 
 it('re-asks the model after a failed turn instead of replaying the error', async () => {

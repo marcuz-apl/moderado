@@ -320,7 +320,7 @@ export function formatTurnSummary(summary: TurnSummary, style: 'chat' | 'termina
   if (changed.length > listed.length) listed.push(`… +${changed.length - listed.length} more actions`);
 
   const sections = [
-    heading('Turn summary', 1),
+    heading('COMPLETED!', 1),
     section('Done', listed.length > 0 ? listed : ['No workspace changes were needed.']),
   ];
 

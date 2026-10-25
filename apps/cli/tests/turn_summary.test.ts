@@ -151,7 +151,7 @@ describe('turn summary formatting', () => {
     // instead of three more paragraphs of prose.
     expect(rendered.startsWith('```summary\n')).toBe(true);
     expect(rendered.endsWith('\n```')).toBe(true);
-    expect(rendered).toContain('# Turn summary');
+    expect(rendered).toContain('# COMPLETED!');
     expect(rendered).toContain('## Done');
     expect(rendered).toContain('- Added `src/new.ts`');
     expect(rendered).toContain('- Updated `src/app.ts`');
