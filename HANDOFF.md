@@ -1,50 +1,40 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-25 18:32 UTC
+Updated: 2026-10-25 18:48 UTC
 Branch: master
-Commit: see the commit containing this checkpoint (parent: 57ad6cd)
-Status: release verification
+Release commit: 2095eda (tag v0.4.51)
+Status: complete
 
 ## Summary
 
-Checkpoint of Windows Terminal composer input handling and chat display updates.
-Version 0.4.51 release notes are prepared. Initial tag verification exposed two
-Windows-only test assumptions on Linux/macOS; both tests now explicitly simulate
-Windows and restore the original platform. Publication follows successful verification.
+Moderado 0.4.51 is published on GitHub with Windows, macOS, and Linux binaries.
+The publish workflow confirmed npm publication of moderado@0.4.51 with tag latest.
 
 ## Completed
 
-- Added Windows Terminal key-record handling, modified Enter support, and popup input-mode cleanup.
-- Batched chat redraws with synchronized terminal output.
-- Centered the chat header and adjusted question and summary colors.
-- Added composer regression tests and updated summary styling expectations.
-
-## Working tree
-
-- This checkpoint includes VERSION, chat.ts, composer.ts, welcome.ts,
-  welcome.test.ts, and HANDOFF.md. Git hooks advance the connected build identifier.
+- Prepared changelog and README release notes.
+- Fixed two Windows Terminal tests to simulate Windows explicitly and restore the host platform.
+- Published v0.4.51 from the verified release commit.
 
 ## Checks
 
-- Focused `welcome.test.ts` suite — PASS (96 tests) on Linux after the test setup fix.
-- Initial GitHub release verification — FAIL on Linux/macOS (two platform assumptions); Windows passed.
-
-- `npm run typecheck` — PASS.
-- `git diff --check` — PASS before this documentation update.
-- `npm test -- --reporter=dot` — could not start: installed dependencies lack
-  `@rollup/rollup-linux-x64-gnu` in this Linux environment.
+- Focused welcome suite on Linux — PASS (96 tests).
+- GitHub verification run 40222605259 — PASS: full tests, npm packaging,
+  Windows/macOS/Linux binaries, checksums, and distribution manifests.
+- GitHub publication run 40222798157 — PASS: npm provenance and GitHub release.
+- GitHub release — public, stable, with 11 downloadable assets.
 
 ## Decisions and context
 
-- No runtime dependencies were added.
-- Preserve the chronological scrollable transcript and fixed composer.
-- The separate cross-client config coordination plan remains in
-  docs/superpowers/plans/2026-10-23-cross-client-config-coordination.md.
+- The unpublished initial tag was replaced after cross-platform test failures.
+- Production input behavior was unchanged by the test portability fix.
+- No project dependency files were changed to repair local platform test binaries.
+- Cross-client coordination plan: docs/superpowers/plans/2026-10-23-cross-client-config-coordination.md.
 
 ## Blockers
 
-- Test execution requires a matching Rollup native component for the host platform.
+None. npm registry caches may take time to reflect the new version.
 
 ## Next action
 
-1. Verify the v0.4.51 tag workflow, then dispatch Publish Moderado release for that tag.
+1. Install moderado@0.4.51 and smoke-test Windows Terminal input and chat scrolling.
