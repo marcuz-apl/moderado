@@ -36,6 +36,7 @@ import {
   getWelcomeIndent,
   getChatAnswerArea,
   getChatLayout,
+  getChatTranscriptWidth,
   getChatComposerRows,
   getComposerInputMaxRows,
   wrapComposerInput,
@@ -123,6 +124,30 @@ const runComposerTurn = async (
     Object.defineProperty(stdout, 'rows', { configurable: true, value: originalRows });
   }
 };
+
+it('clicks the chat scrollbar to reach questions above a long answer', async () => {
+  const layout = getChatLayout(80, 24, 'Fourth question', 5);
+  const column = layout.area.startColumn + getChatTranscriptWidth(layout);
+  await runComposerTurn(async (stdin, context) => {
+    const initial = stripAnsi(context.writes.join(''));
+    expect(initial).toContain('Detail 79');
+    expect(initial).not.toContain('First question');
+
+    stdin.emit('data', Buffer.from(`\x1b[<0;${column};${layout.answerTop}M`));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(stripAnsi(context.writes.join(''))).toContain('First question');
+    expect(stripAnsi(context.writes.join(''))).toContain('Top of history');
+    stdin.emit('keypress', '\r', { name: 'return' });
+  }, {
+    chatQuestion: 'Fourth question',
+    chatAnswer: Array.from({ length: 80 }, (_, i) => `Detail ${i}`).join('\n'),
+    chatHistory: [
+      { question: 'First question', answer: 'First answer' },
+      { question: 'Second question', answer: 'Second answer' },
+      { question: 'Third question', answer: 'Third answer' },
+    ],
+  });
+});
 
 describe('OpenCode-style Welcome TUI', () => {
   it('renders Gateway fallback destination and a safe reason in the chat status row', () => {
@@ -738,6 +763,22 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(oldest).toContain('First answer');
     expect(oldest).toContain('Top of history');
     expect(oldest).toContain('Third question');
+  });
+
+  it('shows a workspace scrollbar when a long answer hides earlier exchanges', () => {
+    const frame = stripAnsi(renderChatScreen({
+      workspace: '/w', mode: 'Execute', autoApprove: true, model: 'm', tokens: 0, cost: '$0',
+      chatQuestion: 'Fourth question', chatAnswer: Array.from({ length: 80 }, (_, i) => `Detail ${i}`).join('\n'),
+      chatHistory: [
+        { question: 'First question', answer: 'First answer' },
+        { question: 'Second question', answer: 'Second answer' },
+        { question: 'Third question', answer: 'Third answer' },
+      ],
+      width: 80,
+    }, 24));
+    expect(frame).toContain('Detail 79');
+    expect(frame).toContain('│');
+    expect(frame).toContain('█');
   });
 
   it('never lets the transcript overflow the card or reach the composer', () => {

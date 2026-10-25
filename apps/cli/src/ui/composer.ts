@@ -33,6 +33,8 @@ import {
   renderWelcomePopupLayer,
   windowChatTranscriptAt,
   buildChatTranscriptRows,
+  chatTranscriptOffsetForRow,
+  getChatTranscriptWidth,
 } from './welcome.js';
 import type { ChatActivityBlock, ChatHistoryTurn, WelcomeLayoutOptions } from './welcome.js';
 
@@ -359,7 +361,7 @@ export async function promptInteractiveTurn(
     const layout = currentChatLayout();
     if (layout.answerRows <= 0) return 0;
     return windowChatTranscriptAt(
-      buildChatTranscriptRows(activity, answer ?? '', layout.area.textWidth, options.chatHistory).rows,
+      buildChatTranscriptRows(activity, answer ?? '', getChatTranscriptWidth(layout), options.chatHistory).rows,
       layout.answerRows,
       0,
     ).hiddenAbove;
@@ -377,6 +379,17 @@ export async function promptInteractiveTurn(
     const limit = answerScrollLimit();
     if (limit <= 0) return;
     const next = Math.max(0, Math.min(limit, answerOffset + delta));
+    if (next === answerOffset) return;
+    answerOffset = next;
+    options.onTranscriptScroll?.(next);
+    redrawFull();
+  };
+
+  const jumpAnswerToRow = (row: number): void => {
+    const layout = currentChatLayout();
+    const rows = buildChatTranscriptRows(options.getChatActivity?.(), options.chatAnswer ?? '', getChatTranscriptWidth(layout), options.chatHistory).rows;
+    if (rows.length <= layout.answerRows) return;
+    const next = chatTranscriptOffsetForRow(rows.length, layout.answerRows, row);
     if (next === answerOffset) return;
     answerOffset = next;
     options.onTranscriptScroll?.(next);
@@ -431,6 +444,15 @@ export async function promptInteractiveTurn(
         continue;
       }
       if (report[4] !== 'M' || Number(report[1]) !== 0) continue;
+      if (options.chatQuestion !== undefined) {
+        const layout = currentChatLayout();
+        const scrollbarColumn = layout.area.startColumn + getChatTranscriptWidth(layout);
+        const clickedRow = Number(report[3]) - layout.answerTop;
+        if (Number(report[2]) === scrollbarColumn && clickedRow >= 0 && clickedRow < layout.answerRows) {
+          jumpAnswerToRow(clickedRow);
+          continue;
+        }
+      }
       const view = getInputView();
       const { row, column } = getComposerAnchor(0);
       const rowOffset = Number(report[3]) - row;

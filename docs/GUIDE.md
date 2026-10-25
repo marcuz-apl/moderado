@@ -116,7 +116,9 @@ a finished coding task always states what changed and what is still open.
 
 The chat window reserves a fixed transcript area between the status row and the
 composer. Press Page Up/Page Down or use the mouse wheel to browse earlier
-questions and answers in the session. The newest lines stay visible by default;
+questions and answers in the session. When the transcript is longer than the
+chat area, a scroll track appears at its right edge; click near the top to jump
+to earlier exchanges. The newest lines stay visible by default;
 `… +N earlier lines hidden` shows when more is above the viewport. The current
 question and input stay in place while you scroll. The full text is also
 available through `/session export`.

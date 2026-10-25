@@ -829,11 +829,7 @@ export function renderChatScreen(options: WelcomeLayoutOptions, height?: number)
   // answer — that trade is what produced the one-line view.
   if (transcript.rows.length > 0 && layout.answerRows > 0) {
     lines.push('');
-    const { lines: transcriptLines, hiddenAbove } = windowChatTranscriptAt(transcript.rows, layout.answerRows, answerOffset);
-    if (hiddenAbove > 0) lines.push(indent + `\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), transcriptWidth)}\x1b[0m`);
-    for (const transcriptLine of transcriptLines) {
-      lines.push(indent + renderAnswerLine(transcriptLine, getChatTranscriptWidth(layout)));
-    }
+    for (const transcriptLine of renderTranscriptRows(transcript.rows, layout, answerOffset)) lines.push(indent + transcriptLine);
   }
   // Hard guarantee: the composer starts at `composerTop` and the frame ends one
   // row above the viewport bottom, whatever the content did. This holds for any
@@ -1176,6 +1172,30 @@ export function windowChatTranscriptAt(
   return { lines: [...rows.slice(start, end)], hiddenAbove: start, hiddenBelow: rows.length - end };
 }
 
+/** A click at the top of the chat scrollbar jumps to the oldest transcript row. */
+export function chatTranscriptOffsetForRow(totalRows: number, visibleRows: number, row: number): number {
+  const maxOffset = Math.max(0, totalRows - Math.max(1, visibleRows - 1));
+  return visibleRows <= 1 ? maxOffset : Math.round(maxOffset * (1 - Math.max(0, Math.min(row, visibleRows - 1)) / (visibleRows - 1)));
+}
+
+function renderTranscriptRows(rows: readonly string[], layout: ChatLayout, offset: number): string[] {
+  const cells = getChatTranscriptWidth(layout);
+  const { lines, hiddenAbove, hiddenBelow } = windowChatTranscriptAt(rows, layout.answerRows, offset);
+  const visible = hiddenAbove > 0
+    ? [`\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), cells)}\x1b[0m`, ...lines.map((line) => renderAnswerLine(line, cells))]
+    : lines.map((line) => renderAnswerLine(line, cells));
+  const overflowing = rows.length > layout.answerRows && layout.answerRows > 0;
+  const offsetFromBottom = hiddenBelow;
+  const maxOffset = Math.max(1, rows.length - Math.max(1, layout.answerRows - 1));
+  const thumbRow = Math.round((1 - offsetFromBottom / maxOffset) * Math.max(0, layout.answerRows - 1));
+  return Array.from({ length: layout.answerRows }, (_, index) => {
+    const line = visible[index] ?? '';
+    if (!overflowing) return line;
+    const glyph = index === thumbRow ? '█' : '│';
+    return `${line}${' '.repeat(Math.max(0, cells - displayWidth(line)))}\x1b[38;5;244m${glyph}\x1b[0m`;
+  });
+}
+
 /** Rows the transcript occupies for a layout; 0 when the viewport is tiny. */
 export function getChatTranscriptRows(layout: ChatLayout): number {
   return Math.max(0, layout.answerRows);
@@ -1219,12 +1239,8 @@ export function renderChatTranscriptWindow(
   history: readonly ChatHistoryTurn[] = [],
 ): string {
   const { area } = layout;
-  const cells = getChatTranscriptWidth(layout);
-  const { rows } = buildChatTranscriptRows(activity, answer, cells, history);
-  const { lines, hiddenAbove } = windowChatTranscriptAt(rows, layout.answerRows, offsetFromBottom);
-  const visible = hiddenAbove > 0
-    ? [`\x1b[38;5;244m${truncateToWidth(chatAnswerOverflowNote(hiddenAbove), cells)}\x1b[0m`, ...lines.map((line) => renderAnswerLine(line, cells))]
-    : lines.map((line) => renderAnswerLine(line, cells));
+  const { rows } = buildChatTranscriptRows(activity, answer, getChatTranscriptWidth(layout), history);
+  const visible = renderTranscriptRows(rows, layout, offsetFromBottom);
   let sequence = '\x1b7';
   for (let index = 0; index < layout.answerRows; index++) {
     const row = layout.answerTop + index;
@@ -1307,7 +1323,7 @@ export function renderHelpPopupBox(_version: string, workspace: string, width?: 
     '\x1b[1mEsc\x1b[0m          Stop the active task',
     '\x1b[1mLeft/Right\x1b[0m   Move the caret inside the bottom input line',
     '\x1b[1mUp/Down\x1b[0m       Browse slash commands after "/", else recall history',
-    '\x1b[1mPgUp/PgDn\x1b[0m     Browse earlier chat; the mouse wheel also scrolls',
+    '\x1b[1mPgUp/PgDn\x1b[0m     Browse chat; click its right-side scroll track to jump',
     '\x1b[1mMouse click\x1b[0m  Place the caret on the input line',
     '',
     `\x1b[38;5;245mWorkspace:\x1b[0m  \x1b[38;5;253m${shortWs}\x1b[0m`,
