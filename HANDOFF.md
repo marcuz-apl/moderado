@@ -3,12 +3,14 @@
 Updated: 2026-10-25 18:32 UTC
 Branch: master
 Commit: see the commit containing this checkpoint (parent: 57ad6cd)
-Status: release preparation
+Status: release verification
 
 ## Summary
 
 Checkpoint of Windows Terminal composer input handling and chat display updates.
-Version 0.4.51 release notes are prepared. Tag verification and publication are next.
+Version 0.4.51 release notes are prepared. Initial tag verification exposed two
+Windows-only test assumptions on Linux/macOS; both tests now explicitly simulate
+Windows and restore the original platform. Publication follows successful verification.
 
 ## Completed
 
@@ -23,6 +25,9 @@ Version 0.4.51 release notes are prepared. Tag verification and publication are 
   welcome.test.ts, and HANDOFF.md. Git hooks advance the connected build identifier.
 
 ## Checks
+
+- Focused `welcome.test.ts` suite — PASS (96 tests) on Linux after the test setup fix.
+- Initial GitHub release verification — FAIL on Linux/macOS (two platform assumptions); Windows passed.
 
 - `npm run typecheck` — PASS.
 - `git diff --check` — PASS before this documentation update.

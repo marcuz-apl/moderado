@@ -1869,6 +1869,8 @@ describe('Multi-line composer', () => {
   });
 
   it('handles Windows Terminal key records without a terminal keybinding', async () => {
+    const previousPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
     const previous = process.env.WT_SESSION;
     process.env.WT_SESSION = 'test-terminal';
     try {
@@ -1888,12 +1890,15 @@ describe('Multi-line composer', () => {
       expect(result).toBe('one\ntwo');
       expect(writes.join('')).toContain('\x1b[?9001l');
     } finally {
+      Object.defineProperty(process, 'platform', { value: previousPlatform });
       if (previous === undefined) delete process.env.WT_SESSION;
       else process.env.WT_SESSION = previous;
     }
   });
 
   it('leaves Windows Terminal key-record mode while a popup owns input', async () => {
+    const previousPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'win32' });
     const previous = process.env.WT_SESSION;
     process.env.WT_SESSION = 'test-terminal';
     try {
@@ -1911,6 +1916,7 @@ describe('Multi-line composer', () => {
       });
       expect(result).toBe('ok');
     } finally {
+      Object.defineProperty(process, 'platform', { value: previousPlatform });
       if (previous === undefined) delete process.env.WT_SESSION;
       else process.env.WT_SESSION = previous;
     }
