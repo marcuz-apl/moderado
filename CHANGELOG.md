@@ -1,5 +1,16 @@
 # Changelog
 
+### [v0.4.51] — 2026-10-25 (scrollable chat history and Windows Terminal input)
+
+**Fix: keep earlier chat turns accessible and improve terminal input**
+
+- **Type**: `fix` / `cli` / `patch-level`
+- **Scope**: chat transcript, composer, terminal rendering
+- **Key Deliverables**:
+  - Earlier question and answer pairs share a chronological, scrollable transcript with a workspace scrollbar; the composer stays fixed at the bottom.
+  - Question headings and restyled summaries distinguish turns, with a centered chat header and synchronized redraw output.
+  - Windows Terminal key records support modified Enter, repeated keys, and input-mode cleanup when popups take focus. Raw Ctrl+J inserts a line feed.
+
 ### [v0.4.50] — 2026-10-24 (`/about` slash command popup; Shift+Enter line feed fix)
 
 **Feature: add `/about` slash command showing version & copyright in a centered popup**
@@ -23,6 +34,8 @@
 
 
 ## Semantic Version Progression
+
+Latest patch: v0.4.50 ─► v0.4.51 (Scrollable chat history and Windows Terminal input)
 
 ```text
 v0.4.28 (Help organization and interrupted-chat resilience)

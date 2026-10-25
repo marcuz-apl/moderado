@@ -3,12 +3,12 @@
 Updated: 2026-10-25 18:32 UTC
 Branch: master
 Commit: see the commit containing this checkpoint (parent: 57ad6cd)
-Status: ready for review
+Status: release preparation
 
 ## Summary
 
 Checkpoint of Windows Terminal composer input handling and chat display updates.
-All pending changes are being committed and pushed at the owner's request.
+Version 0.4.51 release notes are prepared. Tag verification and publication are next.
 
 ## Completed
 
@@ -42,5 +42,4 @@ All pending changes are being committed and pushed at the owner's request.
 
 ## Next action
 
-1. Run the test suite with dependencies installed for the host platform, then
-   manually check Windows Terminal modified Enter and popup input behavior.
+1. Verify the v0.4.51 tag workflow, then dispatch Publish Moderado release for that tag.
