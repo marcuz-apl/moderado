@@ -192,18 +192,25 @@ whole config.
 
 ### Connecting to Moderado
 
-`/connect` → **Moderado** asks only what it cannot already know:
+A fresh install starts on the Gateway's two account-free default models; no key
+or sign-in is required. `/connect` → **Moderado** asks only what it cannot
+already know:
 
-1. **Deployment** — only when no Gateway URL is configured. `MODERADO_BASE_URL`
-   (or a saved connection) is reused as-is, so the Prod/Dev choice appears once.
-2. **Credential** — a saved `mrd_…` key is reused silently. Otherwise choose
-   **Sign in with browser** (loopback OAuth, returns automatically) or
-   **Paste an API key** for headless machines.
-3. **Model** — the live Gateway catalog.
+1. **Deployment** — resolved automatically, never asked on every connect.
+   `MODERADO_ENV`/`MODERADO_BASE_URL` or a custom saved Gateway URL pins it;
+   otherwise the CLI probes `http://127.0.0.1:4788/v1` first and falls back to
+   `https://modr.alfazen.org/v1`. To pin Production or Development explicitly,
+   choose **Change server** in the sign-in menu. The choice is saved with the
+   profile and skips the probe on later starts until changed again.
+2. **Credential** — **Use free models without an account** (the default), a
+   saved `mrd_…` key reused silently, **Sign in with browser** (loopback OAuth,
+   returns automatically), or **Paste an API key** for headless machines.
+3. **Model** — a keyless profile lists the Gateway's two pinned defaults for
+   selection; a keyed profile lists the live Gateway catalog.
 
 The base URL is never typed by hand: it comes from the environment, the saved
-connection, or the one-time deployment choice. Set `MODERADO_ENV=development`
-to target the local Gateway without any prompt.
+connection, an explicit **Change server** choice, or the probe. Set
+`MODERADO_ENV=development` to target the local Gateway without any probe.
 
 ### Coding skills
 

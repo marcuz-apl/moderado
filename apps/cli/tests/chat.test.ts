@@ -15,6 +15,7 @@ import {
   getProviderStatusName,
   handleChatSession,
   handleGenerationKeypress,
+  isKeylessGatewaySession,
   isBareExitCommand,
   isGenerationCancelKey,
   isLocalIdentityQuery,
@@ -165,6 +166,19 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
       id: 'openrouter',
       displayName: 'OpenRouter',
     })).toBe('OpenRouter');
+  });
+
+  it('treats keyless Moderado auto as a free Gateway route', () => {
+    const moderado = {
+      id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible' as const,
+      baseUrl: 'https://modr.alfazen.org/v1', defaultModel: 'auto',
+    };
+    expect(isKeylessGatewaySession(moderado)).toBe(true);
+    expect(isKeylessGatewaySession({ ...moderado, id: 'moderado-cloud' })).toBe(true);
+    expect(isKeylessGatewaySession({ ...moderado, apiKey: '   ' })).toBe(true);
+    expect(isKeylessGatewaySession({ ...moderado, apiKey: 'mrd_saved' })).toBe(false);
+    expect(isKeylessGatewaySession({ ...moderado, id: 'openrouter', displayName: 'OpenRouter' })).toBe(false);
+    expect(isKeylessGatewaySession(undefined)).toBe(false);
   });
 
   it('sends the saved Moderado key on inference while keeping keyless paid routes possible', async () => {

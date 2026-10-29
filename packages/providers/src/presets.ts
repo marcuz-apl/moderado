@@ -147,7 +147,7 @@ export const CONNECT_PROVIDER_PRESET_META: ProviderPresetMeta[] = [
   {
     id: 'moderado',
     label: 'Moderado',
-    description: 'Browse public Gateway routes; sign in with a website key for free routes.',
+    description: 'Use keyless free default models, or sign in for account routes.',
     kind: 'openai-compatible',
     baseUrl: MODERADO_BASE_URL,
     defaultModel: 'auto',

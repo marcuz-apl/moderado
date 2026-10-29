@@ -30,18 +30,23 @@ afterEach(() => {
   }
 });
 
-it('shows zero cost for a direct web-search-only session without model usage', async () => {
+it('shows zero cost for a search-assisted turn on keyless Gateway defaults', async () => {
   originalExitListeners = process.listeners('exit');
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-chat-search-'));
   homes.push(home);
   vi.spyOn(os, 'homedir').mockReturnValue(home);
   vi.spyOn(config, 'loadConfig').mockReturnValue({ webSearchEndpoint: 'http://127.0.0.1/search', webSearchProvider: 'custom' });
   vi.spyOn(config, 'resolveApiKey').mockReturnValue(undefined);
+  vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+    { id: 'vendor/free-default', object: 'model', owned_by: 'moderado', access: 'free' },
+  ]);
+  vi.spyOn(NvidiaAdapter.prototype, 'streamChat').mockImplementation(async function* () {
+    yield { contentDelta: 'Sunny in Calgary.' };
+    yield { usage: { promptTokens: 100, completionTokens: 12, totalTokens: 112 } };
+  });
   let output = '';
-  let duringSearch = '';
   vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => { output += String(chunk); return true; });
   vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => {
-    duringSearch = welcome.stripAnsi(output);
     return new Response(JSON.stringify({
       results: [{ title: 'Weather', url: 'https://example.test/weather', snippet: 'Sunny.' }],
     }), { status: 200, headers: { 'Content-Type': 'application/json' } });
@@ -56,8 +61,8 @@ it('shows zero cost for a direct web-search-only session without model usage', a
   await handleChatSession(parseCliArgs(['--workspace', home]), '0.3.4', controller.signal);
 
   const stored = new SessionStore(home).loadLatestSession(fs.realpathSync(home));
-  expect(stored?.usage).toMatchObject({ available: false, costKnown: true, costUsd: 0 });
-  expect(duringSearch).toContain('$0.00');
+  expect(stored?.usage).toMatchObject({ available: true, costKnown: true, costUsd: 0 });
+  expect(welcome.stripAnsi(output)).toContain('$0.00');
 });
 
 it('shows zero cost for estimated Moderado usage across a generically paid model', async () => {
@@ -106,11 +111,93 @@ it('shows zero cost for estimated Moderado usage across a generically paid model
   expect(stored?.usage.promptTokens).toBeGreaterThan(40);
 });
 
+it('prices an explicitly selected keyless Gateway default at zero', async () => {
+  originalExitListeners = process.listeners('exit');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-chat-stealth-'));
+  homes.push(home);
+  vi.spyOn(os, 'homedir').mockReturnValue(home);
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline test')));
+  vi.spyOn(config, 'loadConfig').mockReturnValue({
+    activeConnectionId: 'moderado',
+    connections: {
+      moderado: {
+        id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible',
+        baseUrl: 'https://modr.alfazen.org/v1',
+      },
+    },
+  });
+  vi.spyOn(config, 'resolveApiKey').mockReturnValue(undefined);
+  vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+    { id: 'stealth one', name: 'Stealth One', object: 'model', owned_by: 'moderado', access: 'paid', section: 'default' },
+  ]);
+  const controller = new AbortController();
+  let promptCount = 0;
+  vi.spyOn(composer, 'promptInteractiveTurn').mockImplementation(async () => {
+    promptCount++;
+    if (promptCount === 2) controller.abort();
+    return { text: promptCount === 1 ? 'Hello there.' : '', mode: 'Execute', autoApprove: false };
+  });
+  let output = '';
+  vi.spyOn(process.stdout, 'write').mockImplementation((chunk) => { output += String(chunk); return true; });
+  vi.spyOn(NvidiaAdapter.prototype, 'streamChat').mockImplementation(async function* () {
+    yield { contentDelta: 'Hi.' };
+    yield { usage: { promptTokens: 30, completionTokens: 5, totalTokens: 35 } };
+  });
+
+  await handleChatSession(parseCliArgs(['--workspace', home, '--model', 'stealth one']), '0.3.4', controller.signal);
+
+  const stored = new SessionStore(home).loadLatestSession(fs.realpathSync(home));
+  expect(stored?.modelId).toBe('stealth one');
+  expect(stored?.usage).toMatchObject({ available: true, costKnown: true, costUsd: 0, totalTokens: 35 });
+  expect(welcome.stripAnsi(output)).toContain('$0.00');
+});
+
+it('re-points a saved keyless production profile at the running development Gateway', async () => {
+  originalExitListeners = process.listeners('exit');
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-chat-reprobe-'));
+  homes.push(home);
+  vi.spyOn(os, 'homedir').mockReturnValue(home);
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(
+    new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'content-type': 'application/json' } }),
+  ));
+  vi.spyOn(config, 'loadConfig').mockReturnValue({
+    activeConnectionId: 'moderado',
+    connections: {
+      moderado: {
+        id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible',
+        baseUrl: 'https://modr.alfazen.org/v1', defaultModel: 'stealth one',
+      },
+    },
+  });
+  vi.spyOn(config, 'resolveApiKey').mockReturnValue(undefined);
+  vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+    { id: 'stealth one', object: 'model', owned_by: 'moderado', access: 'paid', section: 'default' },
+  ]);
+  let usedBaseUrl: string | undefined;
+  vi.spyOn(NvidiaAdapter.prototype, 'streamChat').mockImplementation(async function* (this: NvidiaAdapter) {
+    usedBaseUrl = (this as unknown as { baseUrl: string }).baseUrl;
+    yield { contentDelta: 'Hi.' };
+  });
+  const controller = new AbortController();
+  let promptCount = 0;
+  vi.spyOn(composer, 'promptInteractiveTurn').mockImplementation(async () => {
+    promptCount++;
+    if (promptCount === 2) controller.abort();
+    return { text: promptCount === 1 ? 'Hello there.' : '', mode: 'Execute', autoApprove: false };
+  });
+  vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+  await handleChatSession(parseCliArgs(['--workspace', home]), '0.4.51', controller.signal);
+
+  expect(usedBaseUrl).toBe(config.MODERADO_DEVELOPMENT_BASE_URL);
+});
+
 it('updates usage while the provider is streaming and adds reported counts across chat turns', async () => {
   originalExitListeners = process.listeners('exit');
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-chat-usage-'));
   homes.push(home);
   vi.spyOn(os, 'homedir').mockReturnValue(home);
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline test')));
   vi.spyOn(config, 'loadConfig').mockReturnValue({});
   vi.spyOn(config, 'resolveApiKey').mockReturnValue('test-key');
   vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([

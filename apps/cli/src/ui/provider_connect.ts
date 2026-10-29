@@ -1,4 +1,4 @@
-import { freeModelPolicyFor, resolveModeradoBaseUrl, type ConnectProvidersConfig, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
+import { freeModelPolicyFor, isAutomaticModeradoBaseUrl, resolveAutoModeradoBaseUrl, resolveModeradoBaseUrl, MODERADO_DEVELOPMENT_BASE_URL, MODERADO_PRODUCTION_BASE_URL, moderadoGatewayEnvironmentForUrl, moderadoGatewayUrlForEnvironment, type AutoModeradoGatewayOptions, type ConnectProvidersConfig, type ModeradoConfig, type ModeradoGatewayEnvironment, type ProviderConnection, type ConnectProviderPresetId } from '../config.js';
 import { isFreeModelOption } from '../model_pricing.js';
 import { askQuestion, askSecret, askSelect } from './prompt.js';
 import { renderBoxLines, selectListPopup } from './popup.js';
@@ -43,7 +43,7 @@ export interface ProviderPreset {
 }
 
 export const PROVIDER_PRESETS: ProviderPreset[] = [
-  { label: 'Moderado', value: 'moderado', tag: 'Free Models', description: 'Use browser sign-in, a saved key, a new key, or public access.' },
+  { label: 'Moderado', value: 'moderado', tag: 'Free Models', description: 'Use free models without an account, or sign in with a Moderado key.' },
   { label: 'NVIDIA NIM', value: 'nvidia-nim', tag: 'BYOK', displayName: 'NVIDIA NIM', baseUrl: 'https://integrate.api.nvidia.com/v1', description: 'Use NVIDIA NIM with automatic free-model routing.' },
   { label: 'OpenRouter', value: 'openrouter', tag: 'BYOK', displayName: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1', description: 'Connect your OpenRouter key to access models.' },
   { label: 'Ollama', value: 'ollama', tag: 'Local', displayName: 'Ollama', baseUrl: 'http://127.0.0.1:11434/v1', description: 'Use models served locally by Ollama.' },
@@ -178,24 +178,44 @@ function validateProviderBaseUrl(value: string): string {
 }
 
 /** Build a public paid-route profile or a keyed Gateway profile. */
-export function buildModeradoConnection(apiKey?: string, credentialExpiresAt?: number, gatewayUrl?: string): ProviderConnection {
+export function buildModeradoConnection(
+  apiKey?: string,
+  credentialExpiresAt?: number,
+  gatewayUrl?: string,
+  gatewayEnvironment?: ModeradoGatewayEnvironment,
+): ProviderConnection {
   const key = apiKey?.trim();
   if (key && !/^mrd_.+/.test(key)) throw new Error('Enter a Moderado key starting with mrd_.');
-  const connection = buildConnection({
-    kind: 'openai-compatible',
-    displayName: 'Moderado',
-    baseUrl: gatewayUrl ?? resolveModeradoBaseUrl(
-      process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV,
-      process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL,
-    ),
-    apiKey: key,
-    defaultModel: 'auto',
-  });
+  const connection: ProviderConnection = {
+    ...buildConnection({
+      kind: 'openai-compatible',
+      displayName: 'Moderado',
+      baseUrl: gatewayUrl ?? resolveModeradoBaseUrl(
+        process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV,
+        process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL,
+      ),
+      apiKey: key,
+      defaultModel: 'auto',
+    }),
+    ...(gatewayEnvironment ? { gatewayEnvironment } : {}),
+  };
   return credentialExpiresAt === undefined ? connection : { ...connection, credentialExpiresAt };
 }
 
 /** @deprecated Use buildModeradoConnection. */
 export const buildModeradoCloudConnection = buildModeradoConnection;
+
+/**
+ * The account-free default for a session with no provider configured. It is
+ * never written to config: the development Gateway may come and go, so the
+ * probe runs again on the next start.
+ */
+export async function resolveAutoModeradoConnection(
+  config: ModeradoConfig,
+  options: AutoModeradoGatewayOptions = {},
+): Promise<ProviderConnection> {
+  return buildModeradoConnection(undefined, undefined, await resolveAutoModeradoBaseUrl(config, options));
+}
 
 function openAuthorizationPage(url: string): void {
   const [program, args] = process.platform === 'win32'
@@ -318,6 +338,7 @@ async function chooseModeradoModel(connection: ProviderConnection, options: Popu
     providerId: connection.id,
     providerName: connection.displayName,
     currentModel: connection.defaultModel,
+    gatewayFreeOnly: !connection.apiKey,
     signal: options.signal,
     drawFrame: options.drawFrame,
   });
@@ -330,16 +351,20 @@ async function chooseModeradoModel(connection: ProviderConnection, options: Popu
  * the active connection before asking for a Prod/Dev choice at all.
  */
 function knownModeradoGatewayUrl(options: PopupConnectionOptions): string | undefined {
+  const envUrl = process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL;
+  if (envUrl?.trim()) return envUrl.trim();
   const active = options.activeConnection;
   const activeUrl = active && (active.id === 'moderado' || active.id === 'moderado-cloud') ? active.baseUrl : undefined;
-  const candidates = [
-    process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL,
+  // A keyless profile saved whichever built-in URL the probe picked; letting it
+  // win would freeze the deployment and hide a running development Gateway.
+  return [
     options.gatewayUrl,
     options.savedConnections?.moderado?.baseUrl,
     options.savedConnections?.['moderado-cloud']?.baseUrl,
     activeUrl,
-  ];
-  return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0)?.trim();
+  ]
+    .map((value) => value?.trim())
+    .find((value): value is string => Boolean(value) && !isAutomaticModeradoBaseUrl(value));
 }
 
 async function resolveModeradoGatewayUrl(options: PopupConnectionOptions): Promise<string | undefined> {
@@ -348,19 +373,49 @@ async function resolveModeradoGatewayUrl(options: PopupConnectionOptions): Promi
     try {
       return validateProviderBaseUrl(known);
     } catch {
-      // A malformed saved URL must not trap the user: fall through to the picker.
+      // A malformed saved URL must not trap the user: fall through to the probe.
     }
   }
-  const modes = [
-    { label: 'Prod Mode', value: 'production', description: 'https://modr.alfazen.org/v1' },
-    { label: 'Dev Mode', value: 'development', description: 'http://127.0.0.1:4788/v1' },
-  ];
-  if ((process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV) === 'development') modes.reverse();
-  const selectedMode = options.drawFrame
-    ? await selectListPopup('Moderado Gateway Mode', modes, { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
-    : (await askSelect('Moderado Gateway Mode', modes, 0, { signal: options.signal })).value;
-  if (!selectedMode || options.signal?.aborted) return undefined;
-  return resolveModeradoBaseUrl(selectedMode, undefined);
+  if (options.signal?.aborted) return undefined;
+  return resolveAutoModeradoBaseUrl({ connections: options.savedConnections }, { signal: options.signal });
+}
+
+/**
+ * A deployment the user picked with "Change server", from the same profile the
+ * URL resolver reads. A marker on a custom URL is meaningless and is ignored.
+ */
+function knownModeradoEnvironment(options: PopupConnectionOptions): ModeradoGatewayEnvironment | undefined {
+  const saved = options.savedConnections?.moderado ?? options.savedConnections?.['moderado-cloud'];
+  const source = saved ?? options.activeConnection;
+  if (!source?.gatewayEnvironment || !isAutomaticModeradoBaseUrl(source.baseUrl)) return undefined;
+  return source.gatewayEnvironment;
+}
+
+/** A pinned URL (environment override or custom Gateway) leaves no deployment to pick. */
+function moderadoDeploymentPinned(options: PopupConnectionOptions): boolean {
+  return knownModeradoGatewayUrl(options) !== undefined;
+}
+
+function deploymentName(environment: ModeradoGatewayEnvironment): string {
+  return environment === 'development' ? 'Development' : 'Production';
+}
+
+async function chooseModeradoGateway(
+  options: PopupConnectionOptions,
+  current: ModeradoGatewayEnvironment | undefined,
+): Promise<ModeradoGatewayEnvironment | undefined> {
+  if (!options.drawFrame) return current;
+  const value = await selectListPopup('Moderado Gateway', [
+    {
+      label: 'Production', value: 'production', tag: current === 'production' ? 'Current' : undefined,
+      description: `Cloud Gateway · ${MODERADO_PRODUCTION_BASE_URL}`,
+    },
+    {
+      label: 'Development', value: 'development', tag: current === 'development' ? 'Current' : undefined,
+      description: `Local Gateway · ${MODERADO_DEVELOPMENT_BASE_URL}`,
+    },
+  ], { drawFrame: options.drawFrame, signal: options.signal, initialValue: current, hint: '↑↓ choose · Enter continue · Esc back' });
+  return value === 'production' || value === 'development' ? value : undefined;
 }
 
 async function resolveSavedModeradoConnection(options: PopupConnectionOptions): Promise<ProviderConnection | undefined> {
@@ -376,13 +431,17 @@ async function resolveSavedModeradoConnection(options: PopupConnectionOptions): 
   }
 }
 
-async function askModeradoApiKey(baseUrl: string, options: PopupConnectionOptions): Promise<ProviderConnection | undefined> {
+async function askModeradoApiKey(
+  baseUrl: string,
+  options: PopupConnectionOptions,
+  gatewayEnvironment?: ModeradoGatewayEnvironment,
+): Promise<ProviderConnection | undefined> {
   let prompt = 'Moderado API key (mrd_…, optional for paid routes)';
   while (!options.signal?.aborted) {
     const apiKey = await askPopupText(prompt, options, true);
     if (apiKey === undefined) return undefined;
     try {
-      return chooseModeradoModel(buildModeradoConnection(apiKey || undefined, undefined, baseUrl), options);
+      return chooseModeradoModel(buildModeradoConnection(apiKey || undefined, undefined, baseUrl, gatewayEnvironment), options);
     } catch (error) {
       prompt = `Invalid key: ${error instanceof Error ? error.message : String(error)} Try again`;
     }
@@ -392,36 +451,70 @@ async function askModeradoApiKey(baseUrl: string, options: PopupConnectionOption
 
 /**
  * Connect to the Moderado Gateway. The flow asks only what it cannot know:
- * the deployment (once, when nothing is configured), the credential (reused
- * when saved, otherwise browser sign-in with a manual key as the fallback),
- * and the model. The base URL is never typed by hand.
+ * the credential (reused when saved, otherwise browser sign-in with a manual
+ * key as the fallback) and the model. The deployment is resolved automatically;
+ * the sign-in menu offers "Change server" so an explicit Production/Development
+ * choice is one keystroke away and is remembered for later sessions.
  */
 export async function loginModeradoInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
   if (options.signal?.aborted) return undefined;
-  const baseUrl = await resolveModeradoGatewayUrl(options);
+  let baseUrl = await resolveModeradoGatewayUrl(options);
   if (!baseUrl || options.signal?.aborted) return undefined;
+
+  let environment = knownModeradoEnvironment(options);
+  const canChangeServer = !moderadoDeploymentPinned(options);
+  const withEnvironment = (connection: ProviderConnection): ProviderConnection =>
+    environment ? { ...connection, gatewayEnvironment: environment } : connection;
 
   const saved = await resolveSavedModeradoConnection(options);
   if (saved?.apiKey) {
-    return chooseModeradoModel(buildModeradoConnection(saved.apiKey, saved.credentialExpiresAt, baseUrl), options);
+    return chooseModeradoModel(withEnvironment(buildModeradoConnection(saved.apiKey, saved.credentialExpiresAt, baseUrl)), options);
   }
 
-  // No reusable credential: sign in once instead of interrogating for a key.
-  const method = options.drawFrame
-    ? await selectListPopup('Moderado Sign-in', [
-        { label: 'Sign in with browser', value: 'browser', description: 'Opens mod.alfazen.org and returns here automatically' },
-        { label: 'Paste an API key', value: 'key', description: 'Use an mrd_… key from your Moderado account' },
-      ], { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
-    : 'key';
-  if (!method) return undefined;
+  while (!options.signal?.aborted) {
+    const current = environment ?? moderadoGatewayEnvironmentForUrl(baseUrl);
+    // No reusable credential: free defaults need no sign-in, so offer them first.
+    const method = options.drawFrame
+      ? await selectListPopup('Moderado Sign-in', [
+          { label: 'Use free models without an account', value: 'free', description: 'No key or sign-in; the Gateway routes to its free defaults' },
+          { label: 'Sign in with browser', value: 'browser', description: 'Opens mod.alfazen.org and returns here automatically' },
+          { label: 'Paste an API key', value: 'key', description: 'Use an mrd_… key from your Moderado account' },
+          ...(canChangeServer
+            ? [{
+                label: 'Change server',
+                value: 'server',
+                tag: current ? deploymentName(current) : undefined,
+                description: 'Pick the Production or Development Gateway',
+              }]
+            : []),
+        ], { drawFrame: options.drawFrame, signal: options.signal, hint: '↑↓ choose · Enter continue · Esc cancel' })
+      : 'key';
+    if (!method) return undefined;
 
-  if (method === 'browser') {
-    const auth = await authorizeModeradoInBrowser(options.signal, { drawFrame: options.drawFrame });
-    if (auth) return chooseModeradoModel(buildModeradoConnection(auth.accessToken, auth.expiresAt, baseUrl), options);
-    if (options.signal?.aborted) return undefined;
-    // Cancelled or unavailable browser flow: keep the manual key as a fallback.
+    if (method === 'server') {
+      const chosen = await chooseModeradoGateway(options, current);
+      if (!chosen) {
+        if (options.signal?.aborted) return undefined;
+        continue;
+      }
+      environment = chosen;
+      baseUrl = moderadoGatewayUrlForEnvironment(chosen);
+      continue;
+    }
+
+    // Account-free defaults are selected explicitly, so the session starts on a
+    // named Gateway model instead of the ambiguous `auto` route.
+    if (method === 'free') return chooseModeradoModel(withEnvironment(buildModeradoConnection(undefined, undefined, baseUrl)), options);
+
+    if (method === 'browser') {
+      const auth = await authorizeModeradoInBrowser(options.signal, { drawFrame: options.drawFrame });
+      if (auth) return chooseModeradoModel(withEnvironment(buildModeradoConnection(auth.accessToken, auth.expiresAt, baseUrl)), options);
+      if (options.signal?.aborted) return undefined;
+      // Cancelled or unavailable browser flow: keep the manual key as a fallback.
+    }
+    return askModeradoApiKey(baseUrl, options, environment);
   }
-  return askModeradoApiKey(baseUrl, options);
+  return undefined;
 }
 
 /** @deprecated Use loginModeradoInteractive. */

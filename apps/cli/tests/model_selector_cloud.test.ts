@@ -80,6 +80,60 @@ describe('Moderado model picker discovery', () => {
     await expect(selectCompatibleModelOverlay(pickerOptions())).resolves.toBe('auto');
   });
 
+  it('lists the Gateway default models for a keyless profile instead of auto', async () => {
+    responseBody = {
+      object: 'list',
+      data: [
+        { id: 'stealth one', name: 'Stealth One', access: 'paid', section: 'default' },
+        { id: 'stealth two', access: 'paid', section: 'default' },
+        { id: 'vendor/free', access: 'free', section: 'other' },
+      ],
+    };
+    pickerState.selected = 'model:stealth one';
+    const selected = await selectCompatibleModelOverlay({ ...pickerOptions(), gatewayFreeOnly: true });
+
+    expect(requestPath).toBe('/v1/models');
+    expect(authorization).toBeUndefined();
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        label: 'Stealth One', value: 'model:stealth one', tag: 'Free',
+        description: expect.stringContaining('No key'),
+      }),
+      expect.objectContaining({ label: 'stealth two', value: 'model:stealth two', tag: 'Free' }),
+      expect.objectContaining({ value: 'keep', tag: 'Gateway free defaults' }),
+    ]));
+    expect(pickerState.items.some((item) => item.value === 'model:auto')).toBe(false);
+    expect(pickerState.items.some((item) => item.value === 'model:vendor/free')).toBe(false);
+    expect(selected).toBe('stealth one');
+  });
+
+  it('explains when a keyless Gateway lists no default models instead of offering auto', async () => {
+    responseBody = { data: [{ id: 'vendor/free', access: 'free', section: 'other' }] };
+    pickerState.selected = 'cancel';
+    const selected = await selectCompatibleModelOverlay({ ...pickerOptions(), gatewayFreeOnly: true });
+
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'No account-free models listed' }),
+      expect.objectContaining({ label: 'Enter a model ID', value: 'custom' }),
+    ]));
+    expect(pickerState.items.some((item) => item.value === 'model:auto')).toBe(false);
+    expect(selected).toBe('auto');
+  });
+
+  it('shows a diagnostic when a keyless Gateway catalog is unavailable', async () => {
+    responseStatus = 401;
+    responseBody = { error: { code: 'unauthorized', message: 'must not be displayed' } };
+    pickerState.selected = 'cancel';
+
+    await selectCompatibleModelOverlay({ ...pickerOptions(), gatewayFreeOnly: true });
+
+    expect(pickerState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Model list unavailable' }),
+    ]));
+    expect(pickerState.items.some((item) => item.value === 'model:auto')).toBe(false);
+    expect(pickerState.items.some((item) => item.description?.includes('must not be displayed'))).toBe(false);
+  });
+
   it('labels Gateway paid and free routes from access metadata', async () => {
     responseBody = { data: [{ id: 'free-route', access: 'free' }, { id: 'paid-route', access: 'paid' }] };
     await selectCompatibleModelOverlay(pickerOptions());

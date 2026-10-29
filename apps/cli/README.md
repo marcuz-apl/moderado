@@ -156,12 +156,14 @@ Maintainers can install a verified release artifact directly with
 
 ### Connect to the Moderado Gateway
 
-In the current source build, run `/connect`, choose Moderado, and then
-choose public access or sign in.
-Browser authorization or a Moderado `mrd_` API key is optional for account
-features. `/model` lists configured Gateway routes: `auto` follows Gateway
-routing, while selecting a route pins requests to it. Existing BYOK and local
-provider profiles remain independent.
+A fresh install starts on the Gateway's two account-free default models, so no
+key or sign-in is required. Run `/connect`, choose Moderado, and then use the
+free defaults explicitly or sign in for account features. Browser authorization
+or a Moderado `mrd_` API key is optional. For a keyless profile, `/model` lists
+the two pinned defaults so you can select one; a keyed profile lists configured
+Gateway routes, where `auto` follows Gateway routing and selecting a route pins
+requests to it.
+Existing BYOK and local provider profiles remain independent.
 
 The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama,
 LM Studio, and custom OpenAI-compatible providers. Earlier releases used
@@ -177,7 +179,9 @@ Moderado connections use their configured Gateway URL. Loopback URLs such as
 NAS, VPS, or other remote host are used as configured. To set the URL before
 first login, define `MODERADO_BASE_URL`. Production defaults to
 `https://modr.alfazen.org/v1`; `MODERADO_ENV=development` selects the local
-server and `MODERADO_ENV=production` explicitly selects production. The legacy
+server and `MODERADO_ENV=production` explicitly selects production. When no URL
+is configured, the CLI probes the development server first and falls back to
+production. The legacy
 `MODERADO_CLOUD_ENV` and `MODERADO_CLOUD_BASE_URL` names remain fallbacks when
 their corresponding canonical variables are unset. For an environment-provided
 Moderado key, use `MODERADO_API_KEY`; `MODERADO_CLOUD_API_KEY` remains its
@@ -190,20 +194,20 @@ fallback when the canonical variable is unset.
 ### Log in and select a model in the TUI
 
 Run `moderado` to open the TUI immediately. A fresh installation does not require
-an API key or a preselected model. The welcome card shows **No model connected —
-use `/connect`** until you add one.
+an API key or a preselected model: it connects to the Gateway's account-free
+default models on start.
 
-Use `/connect` to choose the Gateway or another provider. The Gateway offers a
-route picker after connection; `/model` can change the route later. Moderado `auto`
-follows the Gateway's configured pool, while choosing a route pins subsequent
-requests to it.
+Use `/connect` to choose the Gateway explicitly, sign in, or add another
+provider. `/model` can change the route later; a keyless profile lists the two
+pinned defaults, while a keyed profile lists the configured Gateway routes.
 
 ### Sessions and usage
 
 Moderado stores sessions per workspace in `~/.moderado/sessions/`. Use
 `/session` to create, resume, export, or compact a local conversation. Session
 exports redact recognized API-key prefixes. The status line uses only
-provider-reported token usage. It shows `$0.00` for Moderado free routes,
+provider-reported token usage. It shows `$0.00` for the account-free Gateway
+defaults and other Moderado free routes,
 calculates cost when a model exposes prompt and completion prices, and shows
 **Cost unknown** when a metered model's pricing is unavailable.
 

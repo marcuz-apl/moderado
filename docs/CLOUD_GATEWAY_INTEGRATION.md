@@ -9,13 +9,33 @@ Let Moderado CLI use configured routes through the public Gateway, while preserv
 
 ## Existing support
 
-CLI lists Gateway routes without a key through `/v1/models`. Free-route inference through `/v1/chat/completions` requires a valid Moderado website API key; paid routes remain open. Browser authorization uses the website OAuth flow. `/connect` selects Moderado or a direct provider such as OpenRouter, NVIDIA NIM, Ollama Local, LM Studio, or a custom OpenAI-compatible endpoint.
+CLI lists Gateway routes without a key through `/v1/models`. The Gateway marks
+its pinned default routes with `section: 'default'` and returns them first; a
+keyless profile lists exactly those defaults for selection, under their stealth
+label when one is set. A keyless inference request that omits `model` still
+reaches the Gateway's pinned free defaults (the first configured default, with
+the second as fallback). Sending `auto`
+requests full Gateway routing, and free-route inference through
+`/v1/chat/completions` still requires a valid Moderado website API key on that
+path; paid routes remain open. Browser authorization uses the website OAuth
+flow. `/connect` selects Moderado or a direct provider such as OpenRouter,
+NVIDIA NIM, Ollama Local, LM Studio, or a custom OpenAI-compatible endpoint.
 
 ## CLI work
 
-1. Use `/connect` for the **Moderado** profile. Offer browser authorization or a manual `mrd_…` website key for free routes; a keyless profile may list routes and use paid routes. Production uses `https://modr.alfazen.org/v1`; local development uses `http://127.0.0.1:4788/v1`. Keep existing saved BYOK/local profiles independent.
+1. Use `/connect` for the **Moderado** profile. A fresh install connects to the
+   account-free defaults automatically; within `/connect`, offer
+   **Use free models without an account** first, then browser authorization or a
+   manual `mrd_…` website key for account routes. A keyless profile lists the
+   Gateway's pinned defaults in `/model`. Production uses
+   `https://modr.alfazen.org/v1`; local development uses
+   `http://127.0.0.1:4788/v1`, probed first when no Gateway URL is configured.
+   Do not prompt for a deployment on every `/connect`: offer **Change server**
+   in the sign-in menu, persist the choice as `gatewayEnvironment` on the saved
+   profile, and let it override the probe until the user changes it again.
+   Keep existing saved BYOK/local profiles independent.
 2. For browser auth, use `client_id=moderado-cli`, random state, PKCE S256, an exact loopback callback, then exchange at `https://mod.alfazen.org/oauth/token`. Verify state and bind the exact callback/client ID; reject redirects during token exchange. The exchanged access key expires in 30 days; there is no refresh token, so the Gateway path in `/connect` must allow reauthorization. Avoid logging or writing key material to plain config; use existing credential storage where available.
-3. Fetch the Gateway inventory from unauthenticated `GET /v1/models`. Preserve route IDs and `access` (`free` or `paid`) and let `/model` browse configured routes. Send the stored website key on Gateway inference. Send `auto` to the Gateway so it follows configured routing and may choose either access tier; a pinned route targets its selected route. Keep local/BYOK profiles independent.
+3. Fetch the Gateway inventory from unauthenticated `GET /v1/models`. Preserve route IDs, `name`, `section`, and `access` (`free` or `paid`) and let `/model` browse configured routes. A keyless profile lists only the routes marked `section: 'default'`; those defaults and other paid routes need no account key, so a keyless session reports `$0.00` for whatever it selects. A keyed profile keeps the full catalog. Send the stored website key on Gateway inference. A keyless `auto` request omits `model` so the Gateway applies its pinned free defaults; sending `auto` follows configured routing and may choose either access tier; a pinned route targets its selected route. Keep local/BYOK profiles independent.
 4. The current Gateway contract does not promise fallback status events; routing decisions happen in the Gateway and providers. Keep client request handling compatible with the published contract and surface typed errors without exposing upstream details.
 5. Forward supported OpenAI-compatible request fields to the selected provider; the Gateway rewrites only the public model ID. The provider/model determines accepted fields, payload sizes, and limits. The CLI executes tool calls.
 6. Keep provider discovery, OAuth, and error handling covered by offline fake-server tests. Tests must not make live provider calls.
@@ -29,4 +49,10 @@ CLI lists Gateway routes without a key through `/v1/models`. Free-route inferenc
 
 ## Implementation status
 
-The CLI integration supports public model listing, website-key authorization for free Gateway routes, and keyless access to paid routes. The Gateway runs locally with the website service on port `4788`; the public base URL is `https://modr.alfazen.org/v1`.
+The CLI integration supports account-free access to the Gateway's pinned free
+defaults, public model listing with a `section: 'default'` marker for those
+defaults, stealth-label selection in `/model`, website-key authorization for
+free Gateway routes, and keyless access to paid routes. The Gateway runs locally with the
+website service on port `4788`; the public base URL is
+`https://modr.alfazen.org/v1`. The CLI probes the local Gateway first only when
+no Gateway URL is configured; a saved profile or `MODERADO_BASE_URL` wins.

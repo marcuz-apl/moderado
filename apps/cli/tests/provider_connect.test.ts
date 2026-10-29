@@ -1,8 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { createServer } from 'node:http';
 import { GatewayError } from '@moderado/contracts';
-import { authorizeModeradoCloudInBrowser, authorizeModeradoInBrowser, buildConnection, buildModeradoCloudConnection, buildModeradoConnection, connectProviderInteractive, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, isModeradoOAuthConnection, loginModeradoCloudInteractive, loginModeradoInteractive, PROVIDER_PRESETS, renderConnectionPrompt } from '../src/ui/provider_connect.js';
+import { NvidiaAdapter } from '@moderado/providers';
+import { MODERADO_DEVELOPMENT_BASE_URL, MODERADO_PRODUCTION_BASE_URL } from '../src/config.js';
+import { authorizeModeradoCloudInBrowser, authorizeModeradoInBrowser, buildConnection, buildModeradoCloudConnection, buildModeradoConnection, connectProviderInteractive, findReusableConnection, isAuthenticationFailure, isModeradoCloudOAuthConnection, isModeradoOAuthConnection, loginModeradoCloudInteractive, loginModeradoInteractive, PROVIDER_PRESETS, renderConnectionPrompt, resolveAutoModeradoConnection } from '../src/ui/provider_connect.js';
 import { stripAnsi } from '../src/ui/welcome.js';
 
 /** Minimal fake stdin: the code only attaches a `keypress` listener to it. */
@@ -324,22 +326,225 @@ describe('Moderado login asks only what it cannot know', () => {
   it('reuses the active Gateway URL and offers sign-in instead of asking for a URL', async () => {
     const frames: string[] = [];
     let signInFrame = '';
-    const result = await loginModeradoInteractive({
-      activeConnection: buildModeradoConnection(),
-      drawFrame: (lines) => {
-        const frame = stripAnsi(lines.join('\n'));
-        frames.push(frame);
-        if (frame.includes('Moderado Sign-in')) {
-          signInFrame = frame;
-          setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
-        }
-      },
+    const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('offline test'));
+    try {
+      const result = await loginModeradoInteractive({
+        activeConnection: buildModeradoConnection(),
+        drawFrame: (lines) => {
+          const frame = stripAnsi(lines.join('\n'));
+          frames.push(frame);
+          if (frame.includes('Moderado Sign-in')) {
+            signInFrame = frame;
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'escape' }));
+          }
+        },
+      });
+      expect(result).toBeUndefined();
+      expect(frames.join('\n')).not.toContain('Base URL');
+      expect(frames.join('\n')).not.toContain('Gateway Mode');
+      expect(signInFrame).toContain('Sign in with browser');
+      expect(signInFrame).toContain('Paste an API key');
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('re-probes the development Gateway for a keyless saved production profile', async () => {
+    const discovery = vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+      { id: 'stealth/ocellaris:free', name: 'Stealth/Ocellaris:Free', object: 'model', owned_by: 'agnes', access: 'free', section: 'default' },
+    ]);
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [] }), { status: 200, headers: { 'content-type': 'application/json' } }),
+    );
+    try {
+      const saved = { ...buildModeradoConnection(), baseUrl: MODERADO_PRODUCTION_BASE_URL };
+      let picked = false;
+      const result = await loginModeradoInteractive({
+        activeConnection: saved,
+        savedConnections: { moderado: saved },
+        drawFrame: (lines) => {
+          const frame = stripAnsi(lines.join('\n'));
+          if (frame.includes('Moderado Sign-in')) {
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'return' }));
+          } else if (frame.includes('Moderado Free Models') && !picked) {
+            picked = true;
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'return' }));
+          }
+        },
+      });
+      expect(picked).toBe(true);
+      expect(result).toMatchObject({
+        baseUrl: MODERADO_DEVELOPMENT_BASE_URL,
+        apiKey: undefined,
+        defaultModel: 'stealth/ocellaris:free',
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      discovery.mockRestore();
+    }
+  });
+
+  it('lists the same stealth defaults when production is the reachable Gateway', async () => {
+    const discovery = vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+      { id: 'stealth/ocellaris:free', name: 'Stealth/Ocellaris:Free', object: 'model', owned_by: 'agnes', access: 'free', section: 'default' },
+      { id: 'stealth/ocevolex:free', name: 'Stealth/Ocevolex:Free', object: 'model', owned_by: 'nvidia', access: 'free', section: 'default' },
+    ]);
+    const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('dev Gateway unavailable'));
+    try {
+      const saved = { ...buildModeradoConnection(), baseUrl: MODERADO_PRODUCTION_BASE_URL };
+      let modelFrame = '';
+      const result = await loginModeradoInteractive({
+        activeConnection: saved,
+        savedConnections: { moderado: saved },
+        drawFrame: (lines) => {
+          const frame = stripAnsi(lines.join('\n'));
+          if (frame.includes('Moderado Sign-in')) {
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'return' }));
+          } else if (frame.includes('Moderado Free Models') && !modelFrame) {
+            modelFrame = frame;
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'return' }));
+          }
+        },
+      });
+      expect(modelFrame).toContain('Stealth/Ocellaris:Free');
+      expect(modelFrame).toContain('Stealth/Ocevolex:Free');
+      expect(result).toMatchObject({
+        baseUrl: MODERADO_PRODUCTION_BASE_URL,
+        defaultModel: 'stealth/ocellaris:free',
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      discovery.mockRestore();
+    }
+  });
+
+  it('offers the account-free defaults as selectable models after choosing the free option', async () => {
+    const frames: string[] = [];
+    let signInFrame = '';
+    let modelFrame = '';
+    const discovery = vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+      { id: 'stealth/ocellaris:free', name: 'Stealth/Ocellaris:Free', object: 'model', owned_by: 'agnes', access: 'free', section: 'default' },
+      { id: 'stealth/ocevolex:free', name: 'Stealth/Ocevolex:Free', object: 'model', owned_by: 'nvidia', access: 'free', section: 'default' },
+    ]);
+    try {
+      const result = await loginModeradoInteractive({
+        gatewayUrl: 'https://gateway.example/v1',
+        drawFrame: (lines) => {
+          const frame = stripAnsi(lines.join('\n'));
+          frames.push(frame);
+          if (frame.includes('Moderado Sign-in')) {
+            signInFrame = frame;
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'return' }));
+          } else if (frame.includes('Moderado Free Models') && !modelFrame) {
+            modelFrame = frame;
+            setImmediate(() => process.stdin.emit('keypress', undefined, { name: 'return' }));
+          }
+        },
+      });
+      expect(signInFrame).toContain('Use free models without an account');
+      expect(signInFrame.indexOf('Use free models without an account'))
+        .toBeLessThan(signInFrame.indexOf('Sign in with browser'));
+      expect(signInFrame).not.toContain('Change server');
+      expect(modelFrame).toContain('Stealth/Ocellaris:Free');
+      expect(modelFrame).toContain('Stealth/Ocevolex:Free');
+      expect(result).toMatchObject({ id: 'moderado', apiKey: undefined, defaultModel: 'stealth/ocellaris:free' });
+      expect(result?.baseUrl).toBe('https://gateway.example/v1');
+    } finally {
+      discovery.mockRestore();
+    }
+  });
+
+  it('switches deployments through the Change server row and remembers the choice', async () => {
+    const discovery = vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+      { id: 'stealth/ocellaris:free', name: 'Stealth/Ocellaris:Free', object: 'model', owned_by: 'agnes', access: 'free', section: 'default' },
+    ]);
+    const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('dev Gateway unavailable'));
+    const saved = { ...buildModeradoConnection(), baseUrl: MODERADO_PRODUCTION_BASE_URL };
+    const signInFrames: string[] = [];
+    let changeRequested = false;
+    let pickedChange = false;
+    let serverChanged = false;
+    let freeChosen = false;
+    let modelPicked = false;
+    try {
+      const result = await loginModeradoInteractive({
+        savedConnections: { moderado: saved },
+        drawFrame: (lines) => {
+          const frame = stripAnsi(lines.join('\n'));
+          if (frame.includes('Moderado Gateway') && !pickedChange) {
+            pickedChange = true;
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+              serverChanged = true;
+            });
+          } else if (frame.includes('Moderado Sign-in')) {
+            if (!serverChanged) {
+              if (changeRequested) return;
+              changeRequested = true;
+              signInFrames.push(frame);
+              setImmediate(() => {
+                for (let index = 0; index < 3; index++) process.stdin.emit('keypress', undefined, { name: 'down' });
+                process.stdin.emit('keypress', '\r', { name: 'return' });
+              });
+            } else if (!freeChosen) {
+              freeChosen = true;
+              signInFrames.push(frame);
+              setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+            }
+          } else if (frame.includes('Moderado Free Models') && freeChosen && !modelPicked) {
+            modelPicked = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          }
+        },
+      });
+      expect(modelPicked).toBe(true);
+      expect(signInFrames[0]).toContain('Change server');
+      expect(signInFrames[1]).toContain('Development');
+      expect(result).toMatchObject({
+        baseUrl: MODERADO_DEVELOPMENT_BASE_URL,
+        gatewayEnvironment: 'development',
+        apiKey: undefined,
+        defaultModel: 'stealth/ocellaris:free',
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      discovery.mockRestore();
+    }
+  });
+});
+
+describe('account-free automatic connection', () => {
+  it('builds a keyless Moderado connection from the first reachable Gateway', async () => {
+    const development = createServer((_request, response) => {
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ data: [] }));
     });
-    expect(result).toBeUndefined();
-    expect(frames.join('\n')).not.toContain('Base URL');
-    expect(frames.join('\n')).not.toContain('Gateway Mode');
-    expect(signInFrame).toContain('Sign in with browser');
-    expect(signInFrame).toContain('Paste an API key');
+    await new Promise<void>((resolve) => development.listen(0, '127.0.0.1', resolve));
+    const address = development.address();
+    if (!address || typeof address === 'string') throw new Error('Mock Gateway failed to start.');
+    const developmentUrl = `http://127.0.0.1:${address.port}/v1`;
+    const previousMode = process.env.MODERADO_ENV;
+    const previousUrl = process.env.MODERADO_BASE_URL;
+    delete process.env.MODERADO_ENV;
+    delete process.env.MODERADO_BASE_URL;
+    try {
+      await expect(resolveAutoModeradoConnection({}, { developmentUrl, productionUrl: 'https://production.example/v1' }))
+        .resolves.toEqual({
+          id: 'moderado',
+          displayName: 'Moderado',
+          kind: 'openai-compatible',
+          baseUrl: developmentUrl,
+          apiKey: undefined,
+          defaultModel: 'auto',
+        });
+    } finally {
+      if (previousMode === undefined) delete process.env.MODERADO_ENV;
+      else process.env.MODERADO_ENV = previousMode;
+      if (previousUrl === undefined) delete process.env.MODERADO_BASE_URL;
+      else process.env.MODERADO_BASE_URL = previousUrl;
+      await new Promise<void>((resolve, reject) => development.close((error) => error ? reject(error) : resolve()));
+    }
   });
 });
 
@@ -381,7 +586,7 @@ describe('unified provider connection', () => {
     }
   });
 
-  it('asks for the deployment once when no Gateway URL is known, then connects with a key', async () => {
+  it('probes for a Gateway instead of asking for a deployment, then connects with a key', async () => {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 5_000);
     const previousMode = process.env.MODERADO_ENV;
@@ -389,22 +594,18 @@ describe('unified provider connection', () => {
     delete process.env.MODERADO_ENV;
     delete process.env.MODERADO_BASE_URL;
     const frames: string[] = [];
-    let step = 'mode';
+    let step = 'signin';
+    const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValue(new Error('offline test'));
     try {
       const result = await loginModeradoInteractive({
         signal: controller.signal,
         drawFrame: (lines) => {
           const frame = stripAnsi(lines.join('\n'));
           frames.push(frame);
-          if (frame.includes('Moderado Gateway Mode') && step === 'mode') {
-            step = 'signin';
-            setImmediate(() => {
-              process.stdin.emit('keypress', undefined, { name: 'down' });
-              process.stdin.emit('keypress', '\r', { name: 'return' });
-            });
-          } else if (frame.includes('Moderado Sign-in') && step === 'signin') {
+          if (frame.includes('Moderado Sign-in') && step === 'signin') {
             step = 'key';
             setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
               process.stdin.emit('keypress', undefined, { name: 'down' });
               process.stdin.emit('keypress', '\r', { name: 'return' });
             });
@@ -421,12 +622,13 @@ describe('unified provider connection', () => {
         },
       });
       const visible = frames.join('\n');
-      expect(visible).toContain('https://modr.alfazen.org/v1');
-      expect(visible).toContain('http://127.0.0.1:4788/v1');
+      expect(visible).not.toContain('Gateway Mode');
       expect(visible).not.toContain('Base URL');
-      expect(result?.baseUrl).toBe('http://127.0.0.1:4788/v1');
+      // No development Gateway is listening in tests, so the probe lands on production.
+      expect(result?.baseUrl).toBe('https://modr.alfazen.org/v1');
       expect(result?.apiKey).toBe('mrd_dev-key');
     } finally {
+      fetchSpy.mockRestore();
       clearTimeout(timeout);
       if (previousMode === undefined) delete process.env.MODERADO_ENV;
       else process.env.MODERADO_ENV = previousMode;
@@ -463,6 +665,7 @@ describe('unified provider connection', () => {
           } else if (frame.includes('Moderado Sign-in') && !seen.has('signin')) {
             seen.add('signin');
             setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
               process.stdin.emit('keypress', undefined, { name: 'down' });
               process.stdin.emit('keypress', '\r', { name: 'return' });
             });

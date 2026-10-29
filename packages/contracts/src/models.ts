@@ -26,6 +26,10 @@ export const ModelInventoryEntrySchema = z.object({
   pricing: z.record(z.string(), z.string()).optional(),
   /** Gateway route access policy; absent for other OpenAI-compatible catalogs. */
   access: z.enum(['free', 'paid']).optional(),
+  /** Optional gateway-advertised display name; the public `id` stays canonical. */
+  name: z.string().optional(),
+  /** Gateway listing section: pinned defaults are selectable keylessly. */
+  section: z.enum(['default', 'other']).optional(),
   /** Optional provider-advertised request parameters, used for capability checks. */
   supported_parameters: z.array(z.string()).optional(),
 });

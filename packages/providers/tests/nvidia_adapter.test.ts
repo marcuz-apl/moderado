@@ -104,6 +104,42 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
 
   });
 
+  it('omits the model for a keyless Moderado auto request so the Gateway uses its free defaults', async () => {
+    let sentPayload: Record<string, any> | undefined;
+    nextHandler = (req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => { body += chunk; });
+      req.on('end', () => {
+        sentPayload = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      });
+    };
+    const gateway = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado' });
+    for await (const _ of gateway.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) {}
+    expect(sentPayload).not.toHaveProperty('model');
+  });
+
+  it('keeps the requested model for keyed Moderado and keyless explicit routes', async () => {
+    const payloads: Array<Record<string, any>> = [];
+    nextHandler = (req, res) => {
+      let body = '';
+      req.setEncoding('utf8');
+      req.on('data', (chunk: string) => { body += chunk; });
+      req.on('end', () => {
+        payloads.push(JSON.parse(body));
+        res.writeHead(200, { 'Content-Type': 'text/event-stream' });
+        res.end('data: [DONE]\n\n');
+      });
+    };
+    const keyed = new NvidiaAdapter({ apiKey: 'mrd_test', baseUrl: serverUrl, providerId: 'moderado' });
+    for await (const _ of keyed.streamChat({ modelId: 'auto', messages: [{ role: 'user', content: 'Hi' }] })) {}
+    const keyless = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado' });
+    for await (const _ of keyless.streamChat({ modelId: 'free-route', messages: [{ role: 'user', content: 'Hi' }] })) {}
+    expect(payloads.map((payload) => payload.model)).toEqual(['auto', 'free-route']);
+  });
+
   it('sends Moderado requests larger than the former 4096-byte combined limit unchanged', async () => {
     let sentPayload: Record<string, any> | undefined;
     nextHandler = (req, res) => {
@@ -260,6 +296,25 @@ describe('NvidiaAdapter (Offline Local Server)', () => {
     };
     const cachedModels = await adapter.discoverModels();
     expect(cachedModels.length).toBe(2);
+  });
+
+  it('preserves Gateway default markers and display names during discovery', async () => {
+    nextHandler = (_req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        object: 'list',
+        data: [
+          { id: 'stealth one', name: 'Stealth One', object: 'model', owned_by: 'moderado', access: 'paid', section: 'default' },
+          { id: 'vendor/other', name: 'vendor/other', object: 'model', owned_by: 'moderado', access: 'free', section: 'other' },
+        ],
+      }));
+    };
+
+    const adapter = new NvidiaAdapter({ baseUrl: serverUrl, providerId: 'moderado' });
+    const models = await adapter.discoverModels();
+
+    expect(models[0]).toMatchObject({ id: 'stealth one', name: 'Stealth One', access: 'paid', section: 'default' });
+    expect(models[1]).toMatchObject({ id: 'vendor/other', section: 'other' });
   });
 
   it('maps 401 error to AuthenticationError on discovery', async () => {

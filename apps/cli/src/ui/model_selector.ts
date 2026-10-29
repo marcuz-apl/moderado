@@ -42,12 +42,19 @@ export interface CompatibleModelSelectorOptions {
   currentModel?: string;
   signal?: AbortSignal;
   drawFrame: (popupLines: string[]) => void;
+  /**
+   * A keyless Gateway session reaches its pinned defaults without a key; list
+   * those instead of the full catalog, whose free routes require an account.
+   */
+  gatewayFreeOnly?: boolean;
 }
 
 export interface CompatibleModelEntry {
   id: string;
+  name?: string;
   pricing?: Record<string, string>;
   access?: 'free' | 'paid';
+  section?: 'default' | 'other';
 }
 
 let cachedInventory: { id: string }[] | null = null;
@@ -196,7 +203,7 @@ export async function selectCompatibleModelOverlay(
     layerPromptBox(drawFrame, `\x1b[36mQuerying ${providerName} model catalog...\x1b[0m`);
     const provider = new NvidiaAdapter({ apiKey, baseUrl, providerId, providerName });
     models = (await provider.discoverModels(signal))
-      .map((model) => ({ id: model.id, pricing: model.pricing, access: model.access }))
+      .map((model) => ({ id: model.id, name: model.name, pricing: model.pricing, access: model.access, section: model.section }))
       .sort((a, b) => a.id.localeCompare(b.id));
   } catch (error) {
     // Explicit model entry remains available when a provider does not expose /models.
@@ -208,6 +215,53 @@ export async function selectCompatibleModelOverlay(
     discoveryError = error instanceof ProviderError
       ? `Could not load the ${providerName} model list: ${error.message}${error.statusCode ? ` (HTTP ${error.statusCode})` : ''}`
       : `Could not load the ${providerName} model list: ${error instanceof Error ? error.message : String(error)}`;
+  }
+
+  if (options.gatewayFreeOnly && isModerado) {
+    // Only the Gateway's pinned defaults are reachable without an account; other
+    // free routes still require a website key, so they never appear here.
+    const defaults = models.filter((model) => model.section === 'default');
+    const items: PopupListItem[] = defaults.map((model) => ({
+      label: model.name ?? model.id,
+      value: `model:${model.id}`,
+      tag: 'Free',
+      description: `No key or sign-in required · ${providerName} default model`,
+    }));
+    if (discoveryError) {
+      items.push({ label: 'Model list unavailable', value: 'catalog-status', tag: 'Check connection', description: discoveryError });
+    } else if (defaults.length === 0) {
+      items.push({
+        label: 'No account-free models listed',
+        value: 'catalog-status',
+        tag: 'No defaults',
+        description: 'The Gateway has no pinned default models. Enter a model ID or use /connect to sign in.',
+      });
+    }
+    items.push({
+      label: 'Enter a model ID',
+      value: 'custom',
+      tag: 'Manual',
+      description: `Use any ${providerName} model ID, including one not returned by discovery.`,
+    });
+    if (currentModel) {
+      items.push({
+        label: 'Keep Current Model',
+        value: 'keep',
+        tag: currentModel === 'auto' ? 'Gateway free defaults' : currentModel,
+        description: 'Close the window without switching models.',
+      });
+    }
+    items.push({
+      label: 'Cancel & Close Window',
+      value: 'cancel',
+      description: 'Keep the current model selection.',
+    });
+    const picked = await selectListPopup(`${providerName} Free Models`, items, {
+      drawFrame, signal, pageSize: 8, hint: '↑↓ navigate · Enter select · Esc close',
+    });
+    if (picked?.startsWith('model:')) return picked.slice('model:'.length);
+    if (picked === 'custom') return askCompatibleModelId(providerName, currentModel, drawFrame, signal);
+    return currentModel;
   }
 
   const cloudRoutes = models.filter((model) => model.id !== 'auto');

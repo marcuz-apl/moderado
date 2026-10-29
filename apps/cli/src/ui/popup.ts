@@ -119,6 +119,8 @@ export interface ListPopupOptions {
   filterable?: boolean;
   /** Pre-filled filter text. */
   initialFilter?: string;
+  /** Value of the row highlighted when the popup opens. */
+  initialValue?: string;
   /** Number of visible list rows before scrolling (default 10). */
   pageSize?: number;
   /** Override the footer key-hint bar. */
@@ -149,7 +151,7 @@ export async function selectListPopup(
   const pageSize = Math.max(3, options.pageSize ?? 10);
 
   let filter = options.initialFilter ?? '';
-  let cursor = 0;
+  let cursor = Math.max(0, items.findIndex((item) => item.value === options.initialValue));
   let scroll = 0;
 
   const filteredItems = (): PopupListItem[] => {

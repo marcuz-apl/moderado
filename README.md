@@ -164,13 +164,14 @@ Maintainers can install a verified release artifact directly with
 
 ### Connect to the Moderado Gateway
 
-In the current source build, run `/connect` and choose Moderado. Sign in
-with the browser or enter a Moderado `mrd_` website API key to use free
-Gateway routes. The public Gateway option
-lists all routes and can use paid routes without a key. `/model` lists configured
-Gateway routes: `auto` follows Gateway routing and may select a free or paid
-route, while selecting a route pins requests to it. Existing BYOK and local
-provider profiles remain independent.
+A fresh install needs no key: the CLI starts on the Gateway's two account-free
+default models automatically. Run `/connect` and choose Moderado to use those
+same free defaults explicitly, or to sign in with the browser or an `mrd_`
+website key for account routes. For a keyless profile, `/model` lists the two
+pinned defaults so you can select one; a keyed profile lists the configured
+Gateway routes, where `auto` follows Gateway routing and selecting a route pins
+requests to it.
+Existing BYOK and local provider profiles remain independent.
 
 The same `/connect` menu offers OpenRouter, NVIDIA NIM, Ollama
 Local, LM Studio, and custom OpenAI-compatible providers. Earlier releases used
@@ -186,9 +187,10 @@ Moderado connections use their configured Gateway URL. Loopback URLs such as
 NAS, VPS, or other remote host are used as configured. To set the URL before
 first connection, define `MODERADO_BASE_URL`. Production defaults to
 `https://modr.alfazen.org/v1`. Later Gateway connections keep the saved URL
-unless an environment override is set. The Gateway picker shows the resolved
-Base URL before connecting. To force an environment for the current PowerShell
-session, set `MODERADO_ENV` before starting the CLI:
+unless an environment override is set. When no Gateway URL is configured yet,
+the CLI probes the development server first and falls back to production. To
+force an environment for the current PowerShell session, set `MODERADO_ENV`
+before starting the CLI:
 
 ```powershell
 $env:MODERADO_ENV = "development"
@@ -216,21 +218,19 @@ Run `moderado doctor` to inspect local setup without exposing secrets. Add
 ### Log in and select a model in the TUI
 
 Run `moderado` to open the TUI immediately. A fresh installation does not require
-an API key or a preselected model. The welcome card shows **No model connected —
-use `/connect`** until you add one.
-
-Use `/connect` to choose the Moderado Gateway or another provider. The Gateway
-offers a route picker after connection; `/model` can change the route later.
-Cloud `auto` follows the Gateway's configured pool, while choosing a route pins
-subsequent requests to it.
+an API key or a preselected model: it connects to the Gateway's account-free
+default models on start. Use `/connect` to choose the Moderado Gateway
+explicitly, sign in, or add another provider. `/model` can change the route
+later; a keyless profile lists the Gateway's two pinned defaults for selection.
 
 ### Sessions and usage
 
 Moderado stores sessions per workspace in `~/.moderado/sessions/`. Use
 `/session` to create, resume, export, or compact a local conversation. Session
 exports redact recognized API-key prefixes. The status line uses only
-provider-reported token usage. It shows the calculated cost when the selected
-model exposes prompt and completion prices, and **Cost unknown** otherwise.
+provider-reported token usage. It shows `$0.00` for the account-free Gateway
+defaults, calculates cost when the selected model exposes prompt and completion
+prices, and shows **Cost unknown** otherwise.
 
 Saved OpenAI-compatible profiles continue to support providers such as
 OpenRouter, Z.AI, DeepSeek, Moonshot, and Mistral. Compatibility depends on each

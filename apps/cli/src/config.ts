@@ -3,7 +3,7 @@ import { z } from 'zod';
 import path from 'node:path';
 import os from 'node:os';
 import { McpServerConfig, McpServerConfigSchema } from '@moderado/contracts';
-import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, resolveModeradoBaseUrl } from '@moderado/providers';
+import { CONNECT_PROVIDER_PRESET_IDS, isLoopbackBaseUrl, MODERADO_DEVELOPMENT_BASE_URL, MODERADO_PRODUCTION_BASE_URL, resolveModeradoBaseUrl } from '@moderado/providers';
 import type { ConnectProviderPresetId, ConnectProvidersConfig, ProviderConnectionKind } from '@moderado/providers';
 import { credentialReference, CredentialStore, resolveCredential } from './credentials.js';
 export { CONNECT_PROVIDER_PRESET_IDS, CONNECT_PROVIDER_PRESET_META, freeModelPolicyFor, findProviderPreset, isLocalProvider, isLoopbackBaseUrl, MODERADO_BASE_URL, MODERADO_DEVELOPMENT_BASE_URL, MODERADO_PRODUCTION_BASE_URL, MODERADO_CLOUD_BASE_URL, MODERADO_CLOUD_DEVELOPMENT_BASE_URL, MODERADO_CLOUD_PRODUCTION_BASE_URL, resolveModeradoBaseUrl, resolveModeradoCloudBaseUrl } from '@moderado/providers';
@@ -29,6 +29,8 @@ export interface ModeradoConfig {
   enabledSkills?: string[];
 }
 
+export type ModeradoGatewayEnvironment = 'production' | 'development';
+
 export interface ProviderConnection {
   id: string;
   displayName: string;
@@ -39,6 +41,8 @@ export interface ProviderConnection {
   credentialExpiresAt?: number;
   apiKey?: string;
   defaultModel?: string;
+  /** Deployment the user picked with "Change server"; unset means automatic. */
+  gatewayEnvironment?: ModeradoGatewayEnvironment;
 }
 
 const CONFIG_DIR_NAME = '.moderado';
@@ -161,6 +165,9 @@ function parseConnections(value: unknown): Record<string, ProviderConnection> {
       credentialExpiresAt: typeof item.credentialExpiresAt === 'number' && Number.isFinite(item.credentialExpiresAt) ? item.credentialExpiresAt : undefined,
       apiKey: typeof item.apiKey === 'string' ? item.apiKey : undefined,
       defaultModel: typeof item.defaultModel === 'string' ? item.defaultModel : undefined,
+      gatewayEnvironment: item.gatewayEnvironment === 'production' || item.gatewayEnvironment === 'development'
+        ? item.gatewayEnvironment
+        : undefined,
     };
   }
   return result;
@@ -217,6 +224,108 @@ export function getActiveConnection(config: ModeradoConfig): ProviderConnection 
     };
   }
   return undefined;
+}
+
+export interface AutoModeradoGatewayOptions {
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  developmentUrl?: string;
+  productionUrl?: string;
+}
+
+/** A Gateway is usable when its catalog answers 200; anything else keeps the other candidate. */
+export async function isModeradoGatewayAvailable(baseUrl: string, options: AutoModeradoGatewayOptions = {}): Promise<boolean> {
+  const doFetch = options.fetchImpl ?? fetch;
+  const timeout = AbortSignal.timeout(options.timeoutMs ?? 500);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
+  try {
+    const response = await doFetch(`${baseUrl.replace(/\/+$/, '')}/models`, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The built-in Gateway URLs are what the automatic probe picks, not a
+ * deployment the user chose. A keyless profile that saved one must not freeze
+ * it: probe again so a running development Gateway is found, with production as
+ * the fallback. Any other URL is an explicit choice.
+ */
+export function isAutomaticModeradoBaseUrl(baseUrl: string | undefined): boolean {
+  const value = baseUrl?.trim();
+  if (!value) return false;
+  const resolved = resolveModeradoBaseUrl(undefined, value);
+  return resolved === MODERADO_PRODUCTION_BASE_URL || resolved === MODERADO_DEVELOPMENT_BASE_URL;
+}
+
+/** The built-in deployment a URL belongs to, if any. */
+export function moderadoGatewayEnvironmentForUrl(baseUrl: string | undefined): ModeradoGatewayEnvironment | undefined {
+  const value = baseUrl?.trim();
+  if (!value) return undefined;
+  const resolved = resolveModeradoBaseUrl(undefined, value);
+  if (resolved === MODERADO_DEVELOPMENT_BASE_URL) return 'development';
+  if (resolved === MODERADO_PRODUCTION_BASE_URL) return 'production';
+  return undefined;
+}
+
+export function moderadoGatewayUrlForEnvironment(environment: ModeradoGatewayEnvironment): string {
+  return environment === 'development' ? MODERADO_DEVELOPMENT_BASE_URL : MODERADO_PRODUCTION_BASE_URL;
+}
+
+/**
+ * Pick the Gateway URL for an account-free session. Explicit environment settings
+ * and a custom saved URL are authoritative, then a deployment the user chose with
+ * "Change server", then a keyed account; otherwise the local development Gateway
+ * wins when it answers, and production is the fallback. The probe runs on every
+ * auto start because a development Gateway may come and go.
+ */
+export async function resolveAutoModeradoBaseUrl(config: ModeradoConfig, options: AutoModeradoGatewayOptions = {}): Promise<string> {
+  const mode = process.env.MODERADO_ENV ?? process.env.MODERADO_CLOUD_ENV;
+  const explicitUrl = process.env.MODERADO_BASE_URL ?? process.env.MODERADO_CLOUD_BASE_URL;
+  if (mode || explicitUrl) return resolveModeradoBaseUrl(mode, explicitUrl);
+
+  const savedConnection = config.connections?.moderado ?? config.connections?.[LEGACY_MODERADO_ID];
+  const saved = savedConnection?.baseUrl?.trim();
+  if (saved && !isAutomaticModeradoBaseUrl(saved)) {
+    return resolveModeradoBaseUrl(undefined, saved);
+  }
+  if (savedConnection?.gatewayEnvironment) {
+    return moderadoGatewayUrlForEnvironment(savedConnection.gatewayEnvironment);
+  }
+  if (saved && savedConnection?.apiKey?.trim()) {
+    return resolveModeradoBaseUrl(undefined, saved);
+  }
+
+  const developmentUrl = options.developmentUrl ?? MODERADO_DEVELOPMENT_BASE_URL;
+  const productionUrl = options.productionUrl ?? MODERADO_PRODUCTION_BASE_URL;
+  return await isModeradoGatewayAvailable(developmentUrl, options) ? developmentUrl : productionUrl;
+}
+
+/**
+ * Re-point a keyless Gateway profile at the Gateway the probe finds now. The
+ * switch is session-scoped: the saved profile is not rewritten, because a
+ * development Gateway may come and go.
+ */
+export async function resolveModeradoSessionConnection(
+  connection: ProviderConnection | undefined,
+  config: ModeradoConfig,
+  options: AutoModeradoGatewayOptions = {},
+): Promise<ProviderConnection | undefined> {
+  if (!connection) return connection;
+  const isGateway = connection.id === 'moderado' || connection.id === LEGACY_MODERADO_ID;
+  if (!isGateway || !isAutomaticModeradoBaseUrl(connection.baseUrl)) return connection;
+  if (connection.gatewayEnvironment) {
+    const baseUrl = moderadoGatewayUrlForEnvironment(connection.gatewayEnvironment);
+    return baseUrl === connection.baseUrl ? connection : { ...connection, baseUrl };
+  }
+  if (connection.apiKey?.trim()) return connection;
+  return { ...connection, baseUrl: await resolveAutoModeradoBaseUrl(config, options) };
 }
 
 /** Save a provider profile and select it for future chat sessions. */

@@ -251,6 +251,30 @@ describe('CLI Configuration Storage', () => {
     expect(await store.get('moderado/provider/moderado')).toBe('mrd_test-secret');
   });
 
+  it('round-trips an explicit Gateway deployment choice', () => {
+    saveConnection({
+      id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible',
+      baseUrl: 'http://127.0.0.1:4788/v1', gatewayEnvironment: 'development', defaultModel: 'auto',
+    }, tempDir);
+    expect(loadConfig(tempDir).connections?.moderado).toMatchObject({
+      baseUrl: 'http://127.0.0.1:4788/v1',
+      gatewayEnvironment: 'development',
+    });
+  });
+
+  it('drops an unknown Gateway deployment choice', () => {
+    fs.mkdirSync(path.dirname(getConfigPath(tempDir)), { recursive: true });
+    fs.writeFileSync(getConfigPath(tempDir), JSON.stringify({
+      connections: {
+        moderado: {
+          id: 'moderado', displayName: 'Moderado', kind: 'openai-compatible',
+          baseUrl: 'https://modr.alfazen.org/v1', gatewayEnvironment: 'staging', defaultModel: 'auto',
+        },
+      },
+    }));
+    expect(loadConfig(tempDir).connections?.moderado?.gatewayEnvironment).toBeUndefined();
+  });
+
   it('infers a local Gateway from a saved loopback URL', () => {
     saveConnection({
       id: 'moderado-cloud', displayName: 'Moderado Cloud', kind: 'openai-compatible',

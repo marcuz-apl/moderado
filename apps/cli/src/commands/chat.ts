@@ -7,12 +7,12 @@ import { createDefaultToolRegistry, ToolRegistry, canonicalizeRoot, createMcpToo
 import type { WebSearchToolOptions } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult, type UsageEvent } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
-import { freeModelPolicyFor, getActiveConnection, loadConfig, ProviderConnection, removeMcpServer, requiresCredentialReference, resolveApiKey, resolveConnectionCredential, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
+import { freeModelPolicyFor, getActiveConnection, loadConfig, ProviderConnection, removeMcpServer, requiresCredentialReference, resolveApiKey, resolveConnectionCredential, resolveModeradoSessionConnection, saveConnection, saveMcpServer, setMcpServerEnabled, storeConnectionCredential } from '../config.js';
 import { CredentialStore, MemoryCredentialStore } from '../credentials.js';
 import { WindowsCredentialStore } from '../windows_credentials.js';
 import { TerminalApprovalHandler } from '../ui/terminal_approval.js';
 import { selectCompatibleModelOverlay, selectModelOverlay, showModelConnectionRequired } from '../ui/model_selector.js';
-import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthConnection, loginModeradoInteractive, replaceProviderKeyInteractive } from '../ui/provider_connect.js';
+import { connectProviderInteractive, isAuthenticationFailure, isModeradoOAuthConnection, loginModeradoInteractive, replaceProviderKeyInteractive, resolveAutoModeradoConnection } from '../ui/provider_connect.js';
 import { initWorkspace } from './init.js';
 import { expandMentions, createWorkspaceFileSource } from '../ui/file_mentions.js';
 import { listFiles } from '@moderado/tools';
@@ -55,6 +55,16 @@ export function getProviderStatusName(connection?: Pick<ProviderConnection, 'id'
   return connection?.id === 'moderado' || connection?.id === 'moderado-cloud'
     ? 'Moderado'
     : connection?.displayName;
+}
+
+/**
+ * A keyless Moderado session reaches the Gateway's pinned defaults and paid
+ * routes without an account, so every model it selects costs the user nothing.
+ */
+export function isKeylessGatewaySession(connection: ProviderConnection | undefined): boolean {
+  return Boolean(connection
+    && (connection.id === 'moderado' || connection.id === 'moderado-cloud')
+    && !connection.apiKey?.trim());
 }
 
 export function formatSessionExitSummary(session: StoredSession, modelId?: string): string {
@@ -555,9 +565,19 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
   let config = loadConfig();
   let activeConnection = getActiveConnection(config);
   if (activeConnection) activeConnection = await resolveConnectionCredential(activeConnection, credentialStore);
+  // A keyless Gateway profile saved whichever URL the last probe picked. Probe
+  // again so /model reaches a running development Gateway instead of a stale
+  // production URL, while an explicit custom URL still wins.
+  activeConnection = await resolveModeradoSessionConnection(activeConnection, config, { signal });
   if (!activeConnection && resolveApiKey()) {
     activeConnection = { id: 'nvidia-nim', displayName: 'NVIDIA NIM', kind: 'nvidia-nim',
       baseUrl: 'https://integrate.api.nvidia.com/v1', apiKey: resolveApiKey(), defaultModel: config.defaultModel };
+  }
+  // A fresh install starts on the Gateway's account-free defaults so it can talk
+  // to a model without a key. Saved profiles that are merely not selected stay
+  // untouched; this connection is session-scoped, so the next start probes again.
+  if (!activeConnection && Object.keys(config.connections ?? {}).length === 0) {
+    activeConnection = await resolveAutoModeradoConnection(config, { signal });
   }
   let currentModel = args.model ?? activeConnection?.defaultModel ?? (activeConnection?.kind === 'nvidia-nim' ? 'auto' : undefined);
 
@@ -592,7 +612,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
     activeSession.usage.available &&
     !activeSession.usage.costKnown &&
     activeSession.providerId === activeConnection?.id &&
-    freeModelPolicyFor(activeConnection?.id)?.freeCatalog
+    (freeModelPolicyFor(activeConnection?.id)?.freeCatalog || isKeylessGatewaySession(activeConnection))
   ) {
     activeSession.usage.costKnown = true;
     activeSession.usage.costUsd = 0;
@@ -748,6 +768,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
             providerId: activeConnection.id,
             providerName: activeConnection.displayName,
             currentModel,
+            gatewayFreeOnly: activeConnection.id === 'moderado' && !activeConnection.apiKey,
             signal,
             drawFrame,
           });
@@ -1588,7 +1609,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
         const moderadoOAuth = isModeradoOAuthConnection(connection);
         const moderadoWithoutKey = connection.id === 'moderado' && !connection.apiKey;
         process.stdout.write(moderadoWithoutKey
-          ? '\nThis free Gateway route requires a Moderado website API key. Sign in or enter a key to retry once.\n'
+          ? '\nThe Gateway rejected the keyless free defaults. Sign in or enter a Moderado key to retry once.\n'
           : moderadoOAuth
           ? '\nModerado rejected this browser login. Sign in again to retry once.\n'
           : `\nThe saved ${connection.displayName} API key was rejected. Enter a replacement key to retry once.\n`);
@@ -1668,7 +1689,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
             : router.classifyModel(modelId, args.profile.includes('local')),
           freePolicy,
         ));
-        if (allModelsAreFree) pricing = { prompt: '0', completion: '0' };
+        if (allModelsAreFree || isKeylessGatewaySession(activeConnection)) pricing = { prompt: '0', completion: '0' };
         else if (!turnUsage.estimated && modelIds.size === 1) pricing = findModelPricing(inventory, result.selectedModel.id);
         recordTurnUsage(pricing);
       }

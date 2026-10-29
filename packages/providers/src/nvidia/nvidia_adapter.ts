@@ -139,8 +139,12 @@ export class NvidiaAdapter implements IProviderAdapter {
       };
     });
 
+    // A keyless Gateway session has no account key. `auto` then means the
+    // Gateway's pinned free defaults, which are reached by omitting `model`;
+    // sending `auto` would ask for full routing and fail the free-route key check.
+    const useGatewayDefaults = this.isModerado && !this.apiKey && options.modelId === 'auto';
     const payload: Record<string, unknown> = {
-      model: options.modelId,
+      ...(useGatewayDefaults ? {} : { model: options.modelId }),
       messages: wireMessages,
       stream: true,
       stream_options: { include_usage: true },
