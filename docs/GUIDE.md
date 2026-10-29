@@ -3,7 +3,7 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. This guide describes this checkout, where `0.4.53` is a release
+quick start. This guide describes this checkout, where `0.4.54` is a release
 candidate: features named here that are newer than `0.4.51` — currently
 `save_to_documents` — are not in the published release yet. Its `/connect` flow handles
 the Gateway and direct provider connections; earlier releases used `/login` for

@@ -1,6 +1,6 @@
 # Changelog
 
-### [v0.4.53] — 2026-10-29 (answers you can widen; visible and bounded web search)
+### [v0.4.54] — 2026-10-29 (answers you can widen; visible and bounded web search)
 
 **Feature: `/detail` switches the answer tone, and a slow search says what it is doing**
 
@@ -80,7 +80,7 @@
 
 ## Semantic Version Progression
 
-Latest patch: v0.4.52 ─► v0.4.53 (Deliverables saved to Documents; padded sent-question band)
+Latest patch: v0.4.53 ─► v0.4.54 (`/detail` answer tone; visible and bounded web search)
 
 ```text
 v0.4.28 (Help organization and interrupted-chat resilience)
@@ -107,6 +107,7 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                                                                     └─► v0.4.51 (Scrollable chat history; Windows Terminal key records)
                                                                            └─► v0.4.52 (Account-free Gateway defaults; explicit Change server)
                                                                                   └─► v0.4.53 (Save deliverables to Documents; padded #1a3838 sent-question band)
+                                                                                         └─► v0.4.54 (/detail concise or expanded answers; visible, bounded web search)
 ```
 
 ## Milestone Change Log Details

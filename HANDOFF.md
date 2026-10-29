@@ -1,9 +1,9 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-29 14:50 UTC
+Updated: 2026-10-29 14:55 UTC
 Branch: master
-Commit: HEAD `8ce95f8` (pushed) `v0.4.53+2610292 release(patch): ship save_to_documents and padded question band for 0.4.53`
-Status: cross-validation fixes applied in the working tree, uncommitted; release still untagged
+Commit: HEAD `e62fefb` (unpushed at the time of writing) `v0.4.54+2610294 feat(cli): add /detail answer tone, bound stalled tools, show web-search progress`
+Status: cross-validation fixes committed; release still untagged
 
 ## Summary
 
@@ -55,12 +55,15 @@ names, and symlink escapes are rejected), and returns the absolute path so the
 summary can name it. The system prompt routes user-facing deliverables to it;
 code, tests, and config still use `write_file`.
 
-Release prep for `v0.4.53` is complete and pushed as `8ce95f8`
-(`v0.4.53+2610292`); the follow-up Turn Summary fix is committed as `f5ab882`.
-The release is not tagged or published.
+Release prep for `v0.4.53` was pushed as `8ce95f8` (`v0.4.53+2610292`) and the
+Turn Summary fix as `f5ab882` (`v0.4.53+2610293`). The cross-validation and
+`/detail` batch is committed as `e62fefb`
+(`v0.4.54+2610294 feat(cli): add /detail answer tone, bound stalled tools, show
+web-search progress`), because a `feat:` commit advances `p`. No version is
+tagged or published.
 
 The cross-validation pass over the AI-authored code is implemented, not just
-recorded. In the working tree, uncommitted:
+recorded:
 
 - `save_to_documents` resolves Documents from the Windows registry when OneDrive
   redirects it, rejects reserved device names on Windows, hides the real path
@@ -91,7 +94,8 @@ recorded. In the working tree, uncommitted:
   and the footer shows `· detailed` only while expanded.
 - Documentation that contradicted the code was corrected (README, `docs/GUIDE.md`,
   `docs/SECURITY.md`, `docs/DISTRIBUTION.md`) and the dead `isNetworkCommand`
-  predicate was deleted. `0.4.52`/`0.4.53` are now described as unpublished and
+  predicate was deleted. `0.4.52`/`0.4.53`/`0.4.54` are now described as
+  unpublished and
   the install examples point at `v0.4.51`, the only published tag.
 
 ## Completed
@@ -188,13 +192,15 @@ recorded. In the working tree, uncommitted:
 
 ## In progress
 
-- Nothing is being written. The cross-validation fixes are complete and verified
-  in the working tree; commit, push, tag, publish and deploy all wait for
-  explicit owner instruction.
+- Nothing is being written. The cross-validation fixes and the `/detail` batch
+  are committed as `e62fefb`; tag, publish and deploy still wait for explicit
+  owner instruction.
 
-## Working tree
+## Committed changes
 
-- `moderado`: 29 modified files plus the new `vitest.setup.ts` and
+- `moderado`: `e62fefb` carries 35 files — 32 source, test and document paths
+  plus the `VERSION`, `apps/cli/package.json` and lockfile moved by the hooks —
+  including the new `vitest.setup.ts` and
   `apps/cli/src/answer_detail.ts` (with `apps/cli/tests/answer_detail.test.ts`) —
   the Documents tool (`packages/tools/src/tools/save_to_documents.ts`), the
   approval gate and prompt
@@ -212,7 +218,7 @@ recorded. In the working tree, uncommitted:
   guard (`vitest.config.ts`, `vitest.setup.ts`), tests, and docs
   (`README.md`, `CHANGELOG.md`, `docs/GUIDE.md`, `docs/SECURITY.md`,
   `docs/DISTRIBUTION.md`,
-  this handoff). `VERSION` is `v0.4.53+2610293` at `f5ab882`.
+  this handoff). `VERSION` is `v0.4.54+2610294` at `e62fefb`.
 - `moderado-gateway`: clean at `27565dd` (pushed to `master`).
 
 ## Checks
@@ -221,8 +227,8 @@ recorded. In the working tree, uncommitted:
 - `npm test` — PASS (75 files, 810 passed, 1 skipped)
 - `npm run typecheck` — PASS
 - Earlier in the session: `npm run verify:package` — PASS;
-  `apps/cli/moderado-0.4.53.tgz` verified, tag candidate `v0.4.53` matches the
-  package version. Re-run before tagging.
+  `apps/cli/moderado-0.4.53.tgz` verified against the then-current `v0.4.53`;
+  the candidate is now `v0.4.54`, so re-run before tagging.
 - Real-path check: `save_to_documents` wrote and removed
   `C:\Users\MZou\Documents\moderado-save-check.txt`.
 - Not verified in a real terminal this session: the live "Searching the web ·
@@ -321,8 +327,9 @@ recorded. In the working tree, uncommitted:
 
 ## Next action
 
-1. On owner instruction: commit the working tree as the `v0.4.53` fix batch, then
-   tag `v0.4.53` and push the tag so the read-only artifact workflow runs.
+1. On owner instruction: push `e62fefb`, then tag `v0.4.54` and push the tag so
+   the read-only artifact workflow runs; re-run `npm run verify:package` first,
+   because the tarball name and version moved from `0.4.53` to `0.4.54`.
    Publication stays a manual `publish.yml` dispatch with `confirm=PUBLISH`.
 2. Smoke-test in a live terminal, because unit tests cannot see the TUI: ask a
    current-information question and watch the `Searching the web · Ns` row tick;
