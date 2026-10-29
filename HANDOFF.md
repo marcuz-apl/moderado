@@ -1,9 +1,9 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-29 12:45 UTC
+Updated: 2026-10-29 12:50 UTC
 Branch: master
-Commit: HEAD `7cae817` (pushed); release candidate `v0.4.53` staged but uncommitted
-Status: release-ready — version bumped, docs updated, all pre-flight gates pass
+Commit: HEAD `8ce95f8` (pushed) `v0.4.53+2610292 release(patch): ship save_to_documents and padded question band for 0.4.53`
+Status: release commit pushed, untagged; one uncommitted Turn Summary fix
 
 ## Summary
 
@@ -12,7 +12,7 @@ with no API key. The Gateway now marks its two pinned defaults in `/v1/models`
 with `section: 'default'`, and keyless Moderado `/model` lists exactly those
 entries for explicit selection (by stealth label) instead of an `auto` row.
 Selecting one pins it, and every model in a keyless Moderado session is priced
-at `$0.00`. All changes are uncommitted in both repositories.
+at `$0.00`. The Gateway and CLI changes are committed and pushed.
 
 Built-in dev/prod URLs are treated as probe results, not explicit choices: a
 keyless profile that saved `https://modr.alfazen.org/v1` (or the dev URL) is
@@ -55,12 +55,14 @@ names, and symlink escapes are rejected), and returns the absolute path so the
 summary can name it. The system prompt routes user-facing deliverables to it;
 code, tests, and config still use `write_file`.
 
-Release prep for `v0.4.53` is complete locally. `npm run version:patch` moved
-`VERSION` to `v0.4.53+2610291` and staged `VERSION`, `apps/cli/package.json`,
-and `package-lock.json` together; the changelog now records both the unshipped
-`v0.4.52` Gateway work and this release; README, `docs/RELEASING.md`, and
-`docs/DISTRIBUTION.md` name `v0.4.53` as the candidate. No commit, tag, push,
-or publish has been performed.
+Release prep for `v0.4.53` is complete and pushed as `8ce95f8`
+(`v0.4.53+2610292`). The release is not tagged or published.
+
+A follow-up fix is uncommitted: `TurnRecorder` counted only `write_file`,
+`edit_file`, `apply_patch`, and commands, so a turn whose only action was
+`save_to_documents` reported no work and the Turn Summary was skipped. A
+successful save is now recorded by its absolute metadata path and appears under
+**Done**; `turn_summary.test.ts` covers the report.
 
 ## Completed
 
@@ -135,6 +137,10 @@ or publish has been performed.
 - `packages/core/src/agent.ts` — the system prompt tells the model to use
   `save_to_documents` for files the user wants to keep or download and to state
   the path; `write_file` stays for workspace files.
+- `apps/cli/src/turn_summary.ts` — `TurnRecorder` records a successful save by
+  its absolute metadata path (`created`), so the Turn Summary appears for a
+  save-only turn and lists the document under **Done**. Covered by the new case
+  in `apps/cli/tests/turn_summary.test.ts`.
 - Tests: `packages/tools/tests/save_document.test.ts` (write, subfolders,
   traversal rejection, absolute-path rejection, registry presence),
   `packages/tools/tests/tools.test.ts` (13 default tools), and
@@ -148,26 +154,24 @@ or publish has been performed.
   server) and extends the progression diagram; `README.md` version table and
   curl examples name 0.4.53; `docs/RELEASING.md` release context and
   `docs/DISTRIBUTION.md` now reference the `v0.4.53` candidate instead of
-  `v0.4.34`/`v0.4.46`. `VERSION` is `v0.4.53+2610291`.
+  `v0.4.34`/`v0.4.46`. `VERSION` is `v0.4.53+2610292` at `8ce95f8`.
 
 ## In progress
 
-- Nothing outstanding. `v0.4.53` is release-ready; commit/tag/push/publish wait
-  for explicit owner instruction.
+- The Turn Summary fix is uncommitted. Commit/push, tag, and publish wait for
+  explicit owner instruction.
 
 ## Working tree
 
-- `moderado`: staged `VERSION`, `apps/cli/package.json`, `package-lock.json`;
-  unstaged source, test, `AGENTS.md`, and docs changes listed above, plus
-  `CHANGELOG.md`, `README.md`, `docs/DISTRIBUTION.md`, `docs/RELEASING.md`, and
-  this handoff; untracked `packages/tools/src/tools/save_to_documents.ts` and
-  `packages/tools/tests/save_document.test.ts`.
+- `moderado`: uncommitted `apps/cli/src/turn_summary.ts`,
+  `apps/cli/tests/turn_summary.test.ts`, `CHANGELOG.md`, `docs/GUIDE.md`, and
+  this handoff. Everything from the release commit is pushed.
 - `moderado-gateway`: clean at `27565dd` (pushed to `master`).
 
 ## Checks
 
 - `npm run build` — PASS
-- `npm test` — PASS (74 files, 766 passed, 1 skipped)
+- `npm test` — PASS (74 files, 767 passed, 1 skipped)
 - `npm run typecheck` — PASS
 - `npm run verify:package` — PASS; `apps/cli/moderado-0.4.53.tgz` verified, tag
   candidate `v0.4.53` matches the package version.
@@ -225,6 +229,10 @@ or publish has been performed.
   It requires approval, and auto-approve covers it like every other local tool.
 - The tool carries the file content directly instead of copying a workspace file,
   so the model writes once and never needs a workspace staging copy.
+- The Turn Summary treats a saved document as work: `TurnRecorder` stores the
+  absolute path from the tool result metadata and lists it under **Done**. The
+  recorder stays event-driven; no model prose is involved, and the gate
+  (`hasWork`) keeps unanswered question turns summary-free.
 
 ## Blockers
 
@@ -232,14 +240,15 @@ or publish has been performed.
 
 ## Next action
 
-1. On owner instruction: commit the release (the staged version files must be
-   part of the commit), tag `v0.4.53`, and push the tag so the read-only
-   artifact workflow runs. Publication stays a manual `publish.yml` dispatch
-   with `confirm=PUBLISH`.
+1. On owner instruction: commit and push the Turn Summary fix (subject
+   `fix(cli): ...`, same SemVer), then tag `v0.4.53` and push the tag so the
+   read-only artifact workflow runs. Publication stays a manual `publish.yml`
+   dispatch with `confirm=PUBLISH`.
 2. Smoke-test in a live terminal: ask for a short note to download and confirm
-   it lands in `C:\Users\MZou\Documents` with the path named; confirm the
-   `#1a3838` three-row question band and composer pinning; test `/connect` ->
-   Moderado -> **Change server**.
+   it lands in `C:\Users\MZou\Documents`, the path is named, and the Turn
+   Summary appears with the file under **Done**; confirm the `#1a3838`
+   three-row question band and composer pinning; test `/connect` -> Moderado ->
+   **Change server**.
 3. Deploy Gateway `27565dd` to production and set `MODERADO_DEFAULT_MODEL` (or
    `operator_state.default_model`) to two published stealth routes.
 

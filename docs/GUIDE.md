@@ -111,10 +111,11 @@ to live in the workspace.
 
 ### Turn summary
 
-Every turn that changed files or ran commands ends with a report built from
-the agent's own event stream, not from model prose:
+Every turn that changed files, saved a document, or ran commands ends with a
+report built from the agent's own event stream, not from model prose:
 
-- **Done** lists the files the turn added and updated, plus the commands it ran.
+- **Done** lists the files the turn added and updated, the documents it saved
+  (by absolute path), plus the commands it ran.
 - **Checked** lists the verification commands (test, typecheck, lint, build) and their result.
 - **Left over** lists denied actions, failed commands, and edits that no verification command followed.
 - **Run it** appears when the change belongs to a web app: the exact start command and the URL to open. Moderado does not hold a server in the foreground, so it prints the command instead of leaving a dev server attached to your terminal. When the agent already started one, the live URL is reported.

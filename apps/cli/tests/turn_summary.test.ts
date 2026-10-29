@@ -58,6 +58,20 @@ describe('turn recorder', () => {
     expect(recorder.hasWork()).toBe(true);
   });
 
+  it('counts a saved document as work and lists its absolute path', () => {
+    const recorder = new TurnRecorder(workspace);
+    const saved = path.join(workspace, 'Documents', 'brief.md');
+
+    recorder.record(toolCall('1', 'save_to_documents', { name: 'brief.md', content: '# Brief' }));
+    recorder.record(toolResult('1', 'save_to_documents', 'success', `Saved 1 lines (7 bytes) to '${saved}'.`, { path: saved }));
+
+    expect(recorder.hasWork()).toBe(true);
+    const summary = recorder.build('completed', 2);
+    expect(summary.created).toEqual([saved]);
+    expect(summary.leftover).toEqual([]);
+    expect(formatTurnSummary(summary, 'chat')).toContain(`- Added \`${saved}\``);
+  });
+
   it('reports denied actions, failures, and unverified edits as leftover work', () => {
     const recorder = new TurnRecorder(workspace);
     recorder.record(toolCall('1', 'write_file', { path: 'src/app.ts', content: 'x' }));

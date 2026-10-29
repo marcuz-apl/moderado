@@ -158,6 +158,15 @@ export class TurnRecorder {
       return;
     }
 
+    if (call.toolName === 'save_to_documents') {
+      // The deliverable lives outside the jail, so its absolute path comes from
+      // the tool's metadata rather than a workspace-relative parameter.
+      const saved = typeof result.metadata?.path === 'string' ? result.metadata.path : undefined;
+      const target = saved ?? (typeof call.parameters.name === 'string' ? call.parameters.name : undefined);
+      if (target) this.created.add(target);
+      return;
+    }
+
     if (call.toolName === 'write_file' && typeof call.parameters.path === 'string') {
       (call.existed ? this.modified : this.created).add(call.parameters.path);
     } else if (call.toolName === 'edit_file' && typeof call.parameters.path === 'string') {
