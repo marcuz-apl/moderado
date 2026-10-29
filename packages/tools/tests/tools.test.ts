@@ -388,13 +388,14 @@ describe('Workspace Tools Suite', () => {
   });
 
   describe('ToolRegistry', () => {
-    it('registers all 11 tools and exports JSON schema declarations', () => {
+    it('registers every default tool and exports JSON schema declarations', () => {
       const registry = createDefaultToolRegistry();
       const tools = registry.list();
-      expect(tools.length).toBe(12);
+      expect(tools.length).toBe(13);
 
       expect(registry.get('read_file')).toBeDefined();
       expect(registry.get('write_file')).toBeDefined();
+      expect(registry.get('save_to_documents')).toBeDefined();
       expect(registry.get('edit_file')).toBeDefined();
       expect(registry.get('list_files')).toBeDefined();
       expect(registry.get('search_files')).toBeDefined();
@@ -406,7 +407,7 @@ describe('Workspace Tools Suite', () => {
       expect(registry.get('find_references')).toBeDefined();
 
       const declarations = registry.getDeclarations();
-      expect(declarations.length).toBe(12);
+      expect(declarations.length).toBe(13);
       expect(declarations.map((declaration) => declaration.name)).not.toContain('bash');
       expect(declarations.map((declaration) => declaration.name)).not.toContain('grep');
       expect(declarations.find((declaration) => declaration.name === 'run_command')?.description).toContain('shell alias');

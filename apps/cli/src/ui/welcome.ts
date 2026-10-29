@@ -400,13 +400,14 @@ export function windowChatAnswerAt(
  * of thing from the prose above it, rather than three more paragraphs.
  */
 export function renderAnswerLine(line: string, textWidth: number): string {
-  // Question rows get the same surface background as the input box so they stand
-  // out from the answer without altering their text colour.
+  // The question is a #1a3838 band, padded above and below by
+  // buildChatTranscriptRows, so a sent turn stands apart from both the answer and
+  // the gray input card it came from.
   if (line.startsWith(QUESTION_MARK)) {
     const text = line.slice(QUESTION_MARK.length);
     const clipped = truncateToWidth(text, textWidth);
     const padding = ' '.repeat(Math.max(0, textWidth - displayWidth(clipped)));
-    return `\x1b[48;5;24m${clipped}${padding}\x1b[0m`;
+    return `\x1b[48;2;26;56;56m${clipped}${padding}\x1b[0m`;
   }
   // Activity-log rows share the window with the answer but read as a record of
   // what happened: dim, no rail, no band. One function, two kinds of row.
@@ -957,6 +958,7 @@ export function describeActivity(status: string): string {
 const TOOL_VERBS: Record<string, string> = {
   read_file: 'Reading',
   write_file: 'Writing',
+  save_to_documents: 'Saving',
   edit_file: 'Editing',
   apply_patch: 'Editing',
   list_files: 'Listing',
@@ -1006,6 +1008,10 @@ export function describeToolActivity(toolName: string, parameters: Record<string
   }
   if (toolName === 'web_search') return 'Searching the web';
   if (toolName === 'git_diff') return 'Checking changes';
+  if (toolName === 'save_to_documents') {
+    const name = text('name');
+    return name ? `Saving ${name} to Documents` : 'Saving to Documents';
+  }
   const verb = TOOL_VERBS[toolName];
   const path = text('path');
   if (verb && path) return `${verb} ${path}`;
@@ -1124,11 +1130,19 @@ export function buildChatTranscriptRows(
   question = '',
 ): { rows: string[]; answerStart: number } {
   const rows: string[] = [];
+  // A sent question is a three-row band on the composer surface: blank padding,
+  // the wrapped question, blank padding. It matches the input card's height and
+  // colour instead of reading as one more line of prose.
+  const questionBand = (text: string): string[] => [
+    QUESTION_MARK,
+    ...wrapText(`❯ ${text}`, textWidth).map((line) => QUESTION_MARK + line),
+    QUESTION_MARK,
+  ];
   for (const turn of history) {
-    rows.push(...wrapText(`❯ ${turn.question}`, textWidth).map((line) => QUESTION_MARK + line));
+    rows.push(...questionBand(turn.question));
     rows.push(...wrapAnswerLines(turn.answer.trimEnd(), textWidth));
   }
-  if (question) rows.push(...wrapText(`❯ ${question}`, textWidth).map((line) => QUESTION_MARK + line));
+  if (question) rows.push(...questionBand(question));
   for (const entry of activity?.history ?? []) {
     rows.push(LOG_MARK + `${entry.glyph} ${entry.label}`);
   }

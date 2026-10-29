@@ -79,6 +79,13 @@ export const EditFileParamsSchema = z.object({
 });
 export type EditFileParams = z.infer<typeof EditFileParamsSchema>;
 
+/** A deliverable saved into the user's Documents folder, outside the workspace. */
+export const SaveDocumentParamsSchema = z.object({
+  name: z.string().min(1, 'File name cannot be empty'),
+  content: z.string(),
+});
+export type SaveDocumentParams = z.infer<typeof SaveDocumentParamsSchema>;
+
 export const ApplyPatchParamsSchema = z.object({
   edits: z.array(EditFileParamsSchema).min(1).max(20),
 });

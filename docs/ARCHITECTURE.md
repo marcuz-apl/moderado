@@ -74,6 +74,7 @@ Implements concrete provider adapters behind `IProviderAdapter`.
 Implements workspace manipulation and execution behind `IToolRegistry`.
 - **`WorkspaceJail`**: Realpath resolution, traversal prevention (`../`), symlink validation, and protected file blacklisting.
 - **`FilesystemTools`**: `read_file`, `write_file`, `edit_file`, `list_files`, `search_files`.
+- **`save_to_documents`**: The only write outside the workspace; saves a user-requested deliverable into their Documents folder using the same jail canonicalization.
 - **`ExecutionTools`**: `run_command` via `child_process.spawn` with `shell: false`, environment variable scrubbing, output truncation, and dev-server detection that backgrounds a started server.
 - **`GitTools`**: `git_diff` and `git status` using fixed CLI invocations without external diff drivers or user-supplied flags.
 - **`CheckpointStore`**: Byte-preserving snapshots taken immediately after a mutation is approved, used by `/workflow undo`.

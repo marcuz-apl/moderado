@@ -41,6 +41,8 @@ Moderado operates on the principle of least privilege and assumes that **reposit
 
 All filesystem tools (`read_file`, `write_file`, `edit_file`, `list_files`, `search_files`) must operate strictly within the bounds of the configured workspace.
 
+The single exception is `save_to_documents`, which exists so a file the user asked for (a note, report, or export) can be kept where they can find it. It writes only inside the user's Documents folder (`os.homedir()/Documents`) and reuses the same canonicalization below: absolute paths, `..`, protected names, and symlinked folders that resolve outside Documents are rejected. It requires approval like any other write.
+
 ### 2.1 Path Canonicalization Algorithm
 Before performing any filesystem I/O:
 1. Normalize and resolve the incoming path against `workspaceRoot`:

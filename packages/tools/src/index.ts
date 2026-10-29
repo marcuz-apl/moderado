@@ -6,6 +6,7 @@ export * from './checkpoints.js';
 export * from './registry.js';
 export * from './tools/read_file.js';
 export * from './tools/write_file.js';
+export * from './tools/save_to_documents.js';
 export * from './tools/edit_file.js';
 export * from './tools/apply_patch.js';
 export * from './tools/list_files.js';

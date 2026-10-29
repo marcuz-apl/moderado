@@ -67,6 +67,7 @@ AI agents must understand and respect Moderado's security boundaries:
 2. **Path Resolution & Jail Enforcement**:
    - All filesystem operations must resolve through `fs.realpathSync` against the canonical workspace directory.
    - Symlinks pointing outside the workspace boundary, directory traversal tokens (`../`), and access to protected metadata (`.git`, `.env`, credentials) must throw an actionable `SecurityViolationError`.
+   - The only write destination outside the workspace is the user's Documents folder, reached solely through the `save_to_documents` tool. It applies the same canonicalization and rejects traversal, absolute paths, and symlink escapes. Never widen that allowlist.
 3. **Command Execution Isolation**:
    - Commands must run via `child_process.spawn` with an argument array and `shell: false`.
    - Never invoke `shell: true` or pass unescaped string concatenations to system shells.
@@ -110,6 +111,10 @@ Follow the Red-Green-Refactor cycle:
 2. **Green**: Write the minimal code necessary to make the test pass.
 3. **Refactor**: Clean up the implementation following `ponytail` while maintaining green tests.
 4. **Automated Offline Testing**: Unit and integration tests must run offline using mock HTTP servers (`packages/providers/fake`); automated test runs must never make live external network calls or require real API keys.
+
+### 5.3 Generated Deliverables
+- When the user asks to generate and save a file (report, document, image, export), save it with the `save_to_documents` tool so it lands in the user's Documents folder, and state the absolute path in the final summary.
+- Source code, tests, and configuration stay in the repository as normal.
 
 ---
 

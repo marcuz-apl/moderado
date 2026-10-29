@@ -5,6 +5,7 @@ import {
 } from '@moderado/contracts';
 import { ReadFileTool } from './tools/read_file.js';
 import { WriteFileTool } from './tools/write_file.js';
+import { createSaveToDocumentsTool } from './tools/save_to_documents.js';
 import { EditFileTool } from './tools/edit_file.js';
 import { ListFilesTool } from './tools/list_files.js';
 import { SearchFilesTool } from './tools/search_files.js';
@@ -133,6 +134,7 @@ export function createDefaultToolRegistry(extraTools: IToolDefinition<any>[] = [
   const registry = new ToolRegistry();
   registry.register(ReadFileTool);
   registry.register(WriteFileTool);
+  registry.register(createSaveToDocumentsTool());
   registry.register(EditFileTool);
   registry.register(ListFilesTool);
   registry.register(SearchFilesTool);

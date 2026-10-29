@@ -454,6 +454,36 @@ describe('OpenCode-style Welcome TUI', () => {
     expect(composerRows[0].length).toBe(indent + cardWidth);
   });
 
+  it('renders the submitted question as a padded #1a3838 band', () => {
+    const width = 100;
+    const height = 24;
+    const layout = getChatLayout(width, height, 'Who are you?');
+    const cells = getChatTranscriptWidth(layout);
+    const indent = layout.area.indent;
+    const lines = renderChatScreen({
+      model: 'z-ai/glm-5.3-flash', tokens: 0, cost: '$0.00', workspace: '/repo',
+      mode: 'Execute', autoApprove: false, chatQuestion: 'Who are you?',
+      chatAnswer: 'I am Moderado.', chatThoughtTime: 1, width,
+    }, height).split('\n');
+
+    const questionRow = lines.findIndex((line) => line.includes('❯ Who are you?'));
+    expect(questionRow).toBeGreaterThan(0);
+    // The band is three rows tall: blank padding above and below the question.
+    for (const row of [questionRow - 1, questionRow, questionRow + 1]) {
+      expect(lines[row]).toContain('\x1b[48;2;26;56;56m');
+      expect(lines[row]).not.toContain('\x1b[48;5;236m');
+      expect(stripAnsi(lines[row]).length).toBe(indent + cells);
+    }
+    expect(stripAnsi(lines[questionRow - 1]).trim()).toBe('');
+    expect(stripAnsi(lines[questionRow + 1]).trim()).toBe('');
+
+    // The question band is #1a3838 while the input card keeps its gray surface.
+    const composerRow = lines.findIndex((line) => line.includes('Ask anything'));
+    expect(lines[composerRow]).toContain('\x1b[48;5;236m');
+    expect(lines[composerRow]).not.toContain('\x1b[48;2;26;56;56m');
+    expect(lines.join('\n')).not.toContain('\x1b[48;5;24m');
+  });
+
   it('windows a long answer inside the answer area instead of overwriting the composer', () => {
     const width = 100;
     const height = 24;
@@ -635,6 +665,7 @@ describe('OpenCode-style Welcome TUI', () => {
   it('names the file or command a tool is working on, not just the tool', () => {
     expect(describeToolActivity('read_file', { path: 'apps/cli/src/chat.ts' })).toBe('Reading apps/cli/src/chat.ts');
     expect(describeToolActivity('write_file', { path: 'src/new.ts' })).toBe('Writing src/new.ts');
+    expect(describeToolActivity('save_to_documents', { name: 'notes.md' })).toBe('Saving notes.md to Documents');
     expect(describeToolActivity('edit_file', { path: 'src/app.ts' })).toBe('Editing src/app.ts');
     expect(describeToolActivity('apply_patch', { edits: [{ path: 'a.ts' }] })).toBe('Editing a.ts');
     expect(describeToolActivity('apply_patch', { edits: [{ path: 'a.ts' }, { path: 'b.ts' }, { path: 'c.ts' }] }))
@@ -775,7 +806,10 @@ describe('OpenCode-style Welcome TUI', () => {
     const currentAnswer = visible.findIndex((line) => line.includes('Current answer'));
     expect(previousAnswer).toBeGreaterThan(0);
     expect(currentQuestion).toBeGreaterThan(previousAnswer);
-    expect(currentAnswer).toBe(currentQuestion + 1);
+    // The question band pads itself above and below, so its answer follows two rows later.
+    expect(currentAnswer).toBe(currentQuestion + 2);
+    expect(visible[currentQuestion - 1]).toBe(' '.repeat(40));
+    expect(visible[currentQuestion + 1]).toBe(' '.repeat(40));
   });
 
   it('places the current question after past exchanges inside the scrollable transcript', () => {
@@ -1745,7 +1779,8 @@ describe('token usage display', () => {
     expect(lines[modeRow]).toContain('Input ~100 | Output ~20 | Total … | 1500 tokens / $0.42');
     expect(lines[modeRow].length).toBeLessThanOrEqual(79);
     const questionRow = lines.findIndex(line => line.includes('❯ Hi'));
-    expect(lines[questionRow + 1]).toContain('Hello');
+    // The padded question band puts one blank band row between the text and the answer.
+    expect(lines[questionRow + 2]).toContain('Hello');
     expect(screen).not.toContain('Thought for');
   });
 });

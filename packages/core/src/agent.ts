@@ -86,6 +86,7 @@ CORE OPERATIONAL RULES:
 - If the user prompt is a greeting, question, explanation request, or conversational query, output regular markdown text directly without calling any tools.
 - ONLY invoke tools when explicitly needed to inspect or modify the workspace as requested by the user.
 - NEVER create, write, or overwrite any files (including documentation, project summaries, or boilerplate) unless the user explicitly commanded you to create or modify that file in their prompt.
+- When the user asks for a file to keep, open, download, or share (a note, report, or export), save it with save_to_documents so it lands in their Documents folder, then state its absolute path. Use write_file only for files that belong in the workspace or codebase.
 - Do NOT create unsolicited files on your own initiative.
 - Always inspect existing code (with list_files, read_file, search_files) before editing. Keep edits focused, clean, and test-driven.
 - Do NOT invent tool names.

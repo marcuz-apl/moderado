@@ -1,5 +1,33 @@
 # Changelog
 
+### [v0.4.53] — 2026-10-29 (deliverables saved to Documents; padded sent-question band)
+
+**Feature: user-requested files land in Documents, and a sent question reads as its own band**
+
+- **Type**: `feat` / `tools` / `cli` / `patch-level`
+- **Scope**: `packages/tools`, `packages/contracts`, `packages/core` system prompt, `apps/cli` chat transcript
+- **Key Deliverables**:
+  - **A real destination for deliverables.** Asking for a note, report, or export used to produce a file wherever the agent happened to write it — usually the workspace root, because `write_file` is jailed there. The new `save_to_documents` tool writes into the user's Documents folder (`%USERPROFILE%\Documents` on Windows, `~/Documents` elsewhere) and returns the absolute path so the answer can state exactly where the file is.
+  - **The jail is extended by one folder, not removed.** The tool reuses `canonicalizeRoot`/`resolveInJailFromRoot`, so absolute paths, `..`, protected names, and symlinked folders that resolve outside Documents are rejected. It requires approval like every other write, writes through a temporary file renamed into place, and creates missing subfolders. The checkpoint hooks stay inert because they key on `path`, not `name`.
+  - **The split is stated in the system prompt.** Deliverables the user wants to keep go through `save_to_documents`; `write_file` remains for files that belong in the workspace or codebase. The activity row reads `Saving <name> to Documents`.
+  - **A sent question is a three-row band.** `buildChatTranscriptRows` pads the question above and below and paints it on the composer surface in truecolor `#1a3838` (`48;2;26;56;56`), matching the input card's height instead of reading as one more line of prose. Wrapping still uses the transcript width, and the transcript's reserved scrollbar column is unchanged.
+  - **Coverage**: new `save_document.test.ts` (write, subfolders, traversal rejection, absolute-path rejection, registry presence and approval flag), registry count updated to 13, and `welcome.test.ts` asserts all three band rows carry the band colour while the composer keeps `48;5;236`. Full suite **74 files / 766 passed, 1 skipped**.
+  - **Docs**: `AGENTS.md`, `docs/GUIDE.md`, `docs/SECURITY.md`, `docs/TOOLS.md`, and `docs/ARCHITECTURE.md` describe the Documents allowlist and the tool.
+
+### [v0.4.52] — 2026-10-29 (account-free Gateway defaults and explicit server selection)
+
+**Feature: a fresh install works with no key, and the Gateway deployment is chosen deliberately**
+
+- **Type**: `feat` / `cli` / `patch-level`
+- **Scope**: `apps/cli` connect flow, config, model selector, usage display; `packages/providers` NVIDIA adapter; `packages/contracts` model shape
+- **Key Deliverables**:
+  - **The Gateway's pinned defaults are the account-free models.** `/v1/models` marks them with `section: 'default'`; a keyless profile lists exactly those in `/model`, under their stealth label when one is set, so pool masking is preserved.
+  - **Keyless requests omit `model`.** The Gateway then applies its pinned free defaults (first configured default, second as fallback). Sending `auto` still requests full Gateway routing, and free-route inference through `/v1/chat/completions` still requires a website key; only the pinned defaults are exempt, by contract.
+  - **`$0.00` for keyless Moderado sessions.** Whatever model a keyless session selects is priced at zero because the operator covers the launch cost; token usage still comes from the provider report.
+  - **A `Change server` row instead of a per-connect prompt.** The Moderado sign-in menu offers an explicit Production/Development choice, saved as `gatewayEnvironment` on the profile so it overrides the probe until changed again. The picker appears only from that row, so a user staying on one server is never asked repeatedly, and the single saved profile keeps its key across switches.
+  - **The probe stays automatic.** A keyless profile at a built-in URL without an explicit choice is re-probed dev-first on every start; a keyed profile, a custom URL, or an environment override is left alone. The probe result is never persisted, so a local Gateway starting or stopping does not strand the client.
+  - **Coverage**: `auto_gateway.test.ts` (239 lines), provider-connect, config, chat usage and model-selector tests, plus an NVIDIA-adapter test for the model-omitting request. No live provider or Gateway calls.
+
 ### [v0.4.51] — 2026-10-25 (scrollable chat history and Windows Terminal input)
 
 **Fix: keep earlier chat turns accessible and improve terminal input**
@@ -35,7 +63,7 @@
 
 ## Semantic Version Progression
 
-Latest patch: v0.4.50 ─► v0.4.51 (Scrollable chat history and Windows Terminal input)
+Latest patch: v0.4.52 ─► v0.4.53 (Deliverables saved to Documents; padded sent-question band)
 
 ```text
 v0.4.28 (Help organization and interrupted-chat resilience)
@@ -59,6 +87,9 @@ v0.4.28 (Help organization and interrupted-chat resilience)
                                                └─► v0.4.48 (Wire up XTMODKEYS Shift+Enter decoding; fix isLineFeed logic)
                                                       └─► v0.4.49 (Position MODERADO wordmark one row higher on first render)
                                                              └─► v0.4.50 (Add /about slash command popup; remove version from /help)
+                                                                    └─► v0.4.51 (Scrollable chat history; Windows Terminal key records)
+                                                                           └─► v0.4.52 (Account-free Gateway defaults; explicit Change server)
+                                                                                  └─► v0.4.53 (Save deliverables to Documents; padded #1a3838 sent-question band)
 ```
 
 ## Milestone Change Log Details

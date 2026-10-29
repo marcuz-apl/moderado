@@ -2,12 +2,14 @@
 
 Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
-Release context: the latest release tag in this checkout is `v0.4.34`; later
-CLI work is unreleased. This branch is preparing the `v0.4.46` patch candidate,
-including inline chart color gradients. `0.3.10` remains available as the
-earlier self-contained CLI. Windows installation uses npm and Scoop; the
-`winget` and AUR manifests are published as reviewable release attachments but
-are not submitted to those indexes.
+Release context: the latest published tag in this checkout is `v0.4.51`.
+`v0.4.52` bumped the connected version for the account-free Gateway defaults
+and **Change server** selection but was never tagged or published; this branch
+is preparing the `v0.4.53` patch candidate, which releases that work together
+with `save_to_documents` and the padded sent-question band. `0.3.10` remains
+available as the earlier self-contained CLI. Windows installation uses npm and
+Scoop; the `winget` and AUR manifests are published as reviewable release
+attachments but are not submitted to those indexes.
 
 ---
 
@@ -76,7 +78,7 @@ Pushing a `v*` tag automatically triggers the read-only verification workflow:
 
 Maintainers should download and smoke-test the generated tarball locally:
 ```bash
-npm install -g ./moderado-0.4.33.tgz
+npm install -g ./moderado-0.4.53.tgz
 moderado --help
 ```
 
@@ -90,7 +92,7 @@ Public publication requires explicit maintainer confirmation through the manual 
 - **Trigger**: Manual `workflow_dispatch` only (never runs on push).
 - **Required Inputs**:
   - `confirm`: Must enter string `PUBLISH` (exact match required).
-  - `tag`: The verified release tag to publish (for example, `v0.4.46`).
+  - `tag`: The verified release tag to publish (for example, `v0.4.53`).
 - **Permissions**:
   - `id-token: write` for npm OIDC Provenance.
   - `contents: write` for GitHub Release creation.

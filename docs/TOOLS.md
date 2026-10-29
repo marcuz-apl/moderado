@@ -41,7 +41,7 @@ export interface ToolResult {
 ## 2. Tool Inventory
 
 Sections 3.1–3.7 below carry the full schema for the core workspace tools.
-Five further registered tools, two core-owned tools, and dynamic MCP tools
+Six further registered tools, two core-owned tools, and dynamic MCP tools
 complete the set. `createDefaultToolRegistry` in
 `packages/tools/src/registry.ts` is the source of truth.
 
@@ -49,6 +49,7 @@ complete the set. `createDefaultToolRegistry` in
 |---|---|---|---|
 | `read_file` | Auto (read) | core | §2.1 |
 | `write_file` | **Required** | core | §2.2 |
+| `save_to_documents` | **Required** | 0.4.53 | `packages/tools/src/tools/save_to_documents.ts` |
 | `edit_file` | **Required** | core | §2.3 |
 | `list_files` | Auto (read) | core | §2.4 |
 | `search_files` | Auto (read) | core | §2.5 |
