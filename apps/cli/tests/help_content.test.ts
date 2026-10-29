@@ -7,6 +7,7 @@ describe('organized help commands', () => {
       'Configuration',
       '  /budget      - Set a per-task token limit (/budget 5000, /budget off)',
       '  /connect     - Choose a Gateway, hosted, or local provider',
+      '  /detail      - Toggle answer length: concise (default) or expanded',
       '  /model       - Switch active AI model',
       '  /mcp         - Manage local MCP servers',
       '  /skills      - List skills; use /skills on|off NAME|PATTERN (* for all)',

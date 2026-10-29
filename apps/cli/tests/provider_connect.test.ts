@@ -512,6 +512,65 @@ describe('Moderado login asks only what it cannot know', () => {
       discovery.mockRestore();
     }
   });
+
+  it('offers Change server again when a saved key already exists', async () => {
+    const discovery = vi.spyOn(NvidiaAdapter.prototype, 'discoverModels').mockResolvedValue([
+      { id: 'stealth/ocellaris:free', name: 'Stealth/Ocellaris:Free', object: 'model', owned_by: 'agnes', access: 'free', section: 'default' },
+    ]);
+    // The reported case: Production connected, so the key is stored, and now the
+    // user wants Development.
+    const saved = {
+      ...buildModeradoConnection('mrd_saved-secret'),
+      baseUrl: MODERADO_PRODUCTION_BASE_URL,
+      gatewayEnvironment: 'production' as const,
+    };
+    const menus: string[] = [];
+    let choseServer = false;
+    let pickedDevelopment = false;
+    let confirmedConnection = false;
+    let modelConfirmed = false;
+    try {
+      const result = await loginModeradoInteractive({
+        savedConnections: { moderado: saved },
+        resolveSavedConnection: async (connection) => connection,
+        drawFrame: (lines) => {
+          if (modelConfirmed) return;
+          const frame = stripAnsi(lines.join('\n'));
+          if (frame.includes('Moderado Connection') && !choseServer) {
+            choseServer = true;
+            menus.push(frame);
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          } else if (frame.includes('Moderado Gateway') && choseServer && !pickedDevelopment) {
+            pickedDevelopment = true;
+            setImmediate(() => {
+              process.stdin.emit('keypress', undefined, { name: 'down' });
+              process.stdin.emit('keypress', '\r', { name: 'return' });
+            });
+          } else if (frame.includes('Moderado Connection') && pickedDevelopment && !confirmedConnection) {
+            confirmedConnection = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          } else if (confirmedConnection) {
+            // The model overlay: take whatever it highlights first.
+            modelConfirmed = true;
+            setImmediate(() => process.stdin.emit('keypress', '\r', { name: 'return' }));
+          }
+        },
+      });
+      expect(choseServer).toBe(true);
+      expect(menus[0]).toContain('Change server');
+      expect(menus[0]).toContain('Connect to Production');
+      expect(result).toMatchObject({
+        baseUrl: MODERADO_DEVELOPMENT_BASE_URL,
+        gatewayEnvironment: 'development',
+        apiKey: 'mrd_saved-secret',
+      });
+    } finally {
+      discovery.mockRestore();
+    }
+  });
 });
 
 describe('account-free automatic connection', () => {

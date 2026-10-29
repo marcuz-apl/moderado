@@ -3,7 +3,9 @@
 Feature highlights, repository documentation map, workspace layout, and the
 in-depth TUI capability guides. This content previously lived in the root
 README and was moved here to keep the README focused on installation and
-quick start. This guide reflects the current release. Its `/connect` flow handles
+quick start. This guide describes this checkout, where `0.4.53` is a release
+candidate: features named here that are newer than `0.4.51` — currently
+`save_to_documents` — are not in the published release yet. Its `/connect` flow handles
 the Gateway and direct provider connections; earlier releases used `/login` for
 the Gateway. The earlier v0.3.10 release
 is self-contained and does not require the Gateway. Every release from 0.4.32
@@ -17,7 +19,7 @@ installs the `moderado` command with `modr` as a short alias.
 - **Provider-Independent Core**: Core agent loops, tool dispatching, and routing depend on pure contracts (`packages/contracts`) using Dependency Injection.
 - **Dynamic NVIDIA Discovery**: Queries live `/v1/models` from NVIDIA NIM hosted catalog or local NIM instances; never relies on stale static lists.
 - **Free-First AUTO Routing**: Intelligently ranks and selects verified free/trial tool-capable models before any paid endpoints. Paid models and unverified pricing require explicit user opt-in.
-- **Approval Boundary**: Reads never prompt. Interactive chat starts with auto-approve on and toggles with `Shift+Tab`; `moderado run` prompts for every mutation unless you pass `-y`. Network commands and MCP tools always prompt, and non-interactive sessions fail closed.
+- **Approval Boundary**: Reads never prompt. Interactive chat starts with auto-approve on and toggles with `Shift+Tab`; `moderado run` prompts for every mutation unless you pass `-y`. MCP tools and `save_to_documents` always prompt, and non-interactive sessions fail closed.
 - **Minimalist & Bloat-Free (`ponytail`)**: Follows the Decision Ladder: YAGNI, standard library first (native Node `fetch`, `AbortController`, `child_process.spawn`), and zero unnecessary dependencies.
 - **Alfazen Versioning (`versioning-alfazen`)**: SemVer 2.0.0 with high-traceability connected UTC build prefixes (`v<m.n.p>+<yymmddc>`) and mandatory owner advisory gates for major releases.
 
@@ -32,11 +34,11 @@ installs the `moderado` command with `modr` as a short alias.
 - **`moderado run` prompts by default.** Pass `-y`/`--auto-approve` for an
   unattended task. Without a terminal, a mutation is denied with an actionable
   message instead of waiting on stdin.
-- **Network commands always prompt.** `run_command` invocations containing
-  `curl`, `wget`, or an `http(s)://` URL ask for approval even when auto-approve
-  is on.
 - **MCP tools always prompt.** Every `mcp.<server>.<tool>` call needs its own
-  approval.
+  approval — it is third-party code you never reviewed.
+- **`save_to_documents` always prompts.** It is the one write that leaves the
+  workspace, straight into your Documents folder, so auto-approve never covers
+  it. The prompt names the exact Documents path and shows the content.
 - **Non-interactive and read-only fail closed.** `--non-interactive` denies any
   call that would need approval, and `--read-only` blocks every mutation and
   command before the prompt.
@@ -145,6 +147,23 @@ pushing the card off the bottom of the terminal. The frame always ends one row
 above the viewport bottom, which is what keeps the input, mode, and workspace
 rows stable while a turn streams.
 
+### Answer length
+
+Answers are concise by default: one or two sentences, no headers, no preamble.
+That is a system-prompt directive, not a truncation, so nothing is cut after the
+fact.
+
+- `/detail` switches the same session between **concise** and **expanded**;
+  `/detail expanded` or `/detail concise` sets one directly. The footer shows
+  `· detailed` next to the model only while expanded, so the concise default
+  leaves the frame unchanged.
+- Expanded answers carry the reasoning, the trade-offs, and what was actually
+  verified, and use headers, lists, tables, and code blocks where they read
+  better.
+- Greetings, sign-offs, and restating the question stay banned in both modes.
+- Set `"answerDetail": "expanded"` in `~/.moderado/config.json` to start every
+  new session expanded. The toggle is per session; it does not write config.
+
 ### Inline charts
 
 Ask for a bar chart to compare categories or a line chart for ordered values.
@@ -211,11 +230,12 @@ already know:
    `MODERADO_ENV`/`MODERADO_BASE_URL` or a custom saved Gateway URL pins it;
    otherwise the CLI probes `http://127.0.0.1:4788/v1` first and falls back to
    `https://modr.alfazen.org/v1`. To pin Production or Development explicitly,
-   choose **Change server** in the sign-in menu. The choice is saved with the
+   choose **Change server** — in the **Moderado Connection** menu when a key is
+   already saved, otherwise in the sign-in menu. The choice is saved with the
    profile and skips the probe on later starts until changed again.
 2. **Credential** — **Use free models without an account** (the default), a
-   saved `mrd_…` key reused silently, **Sign in with browser** (loopback OAuth,
-   returns automatically), or **Paste an API key** for headless machines.
+   saved `mrd_…` key reused with one Enter, **Sign in with browser** (loopback
+   OAuth, returns automatically), or **Paste an API key** for headless machines.
 3. **Model** — a keyless profile lists the Gateway's two pinned defaults for
    selection; a keyed profile lists the live Gateway catalog.
 

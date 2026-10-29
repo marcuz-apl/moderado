@@ -458,16 +458,52 @@ async function askModeradoApiKey(
  */
 export async function loginModeradoInteractive(options: PopupConnectionOptions = {}): Promise<ProviderConnection | undefined> {
   if (options.signal?.aborted) return undefined;
-  let baseUrl = await resolveModeradoGatewayUrl(options);
-  if (!baseUrl || options.signal?.aborted) return undefined;
-
   let environment = knownModeradoEnvironment(options);
+  // An explicit "Change server" choice outranks the dev-first probe: re-probing
+  // here would silently move a saved Production connection onto Development.
+  let baseUrl = environment
+    ? moderadoGatewayUrlForEnvironment(environment)
+    : await resolveModeradoGatewayUrl(options);
+  if (!baseUrl || options.signal?.aborted) return undefined;
   const canChangeServer = !moderadoDeploymentPinned(options);
   const withEnvironment = (connection: ProviderConnection): ProviderConnection =>
     environment ? { ...connection, gatewayEnvironment: environment } : connection;
 
   const saved = await resolveSavedModeradoConnection(options);
   if (saved?.apiKey) {
+    // A stored credential used to connect silently, which made the deployment
+    // unswitchable: "Change server" lived on a menu this path never reached.
+    // One keystroke reconnects; the row to move servers is on the same menu.
+    if (canChangeServer && options.drawFrame) {
+      let reconnect = false;
+      while (!options.signal?.aborted && !reconnect) {
+        // `canChangeServer` means nothing pinned the deployment, so `baseUrl` is
+        // a built-in the probe or the marker chose and therefore names one.
+        const current = environment ?? moderadoGatewayEnvironmentForUrl(baseUrl);
+        if (!current) return undefined;
+        const choice = await selectListPopup('Moderado Connection', [
+          {
+            label: `Connect to ${deploymentName(current)}`, value: 'connect', tag: 'Saved key',
+            description: baseUrl,
+          },
+          { label: 'Change server', value: 'server', description: 'Pick the Production or Development Gateway' },
+          { label: 'Sign in again', value: 'signin', description: 'Replace the saved credential' },
+        ], { drawFrame: options.drawFrame, signal: options.signal, initialValue: 'connect', hint: '↑↓ choose · Enter continue · Esc cancel' });
+        if (!choice) return undefined;
+        if (choice === 'signin') break;
+        if (choice === 'server') {
+          const chosen = await chooseModeradoGateway(options, current);
+          if (!chosen) {
+            if (options.signal?.aborted) return undefined;
+            continue;
+          }
+          environment = chosen;
+          baseUrl = moderadoGatewayUrlForEnvironment(chosen);
+          continue;
+        }
+        reconnect = true;
+      }
+    }
     return chooseModeradoModel(withEnvironment(buildModeradoConnection(saved.apiKey, saved.credentialExpiresAt, baseUrl)), options);
   }
 

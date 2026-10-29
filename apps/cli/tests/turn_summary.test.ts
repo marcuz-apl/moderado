@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { TurnRecorder, detectWebApp, formatTurnSummary } from '../src/turn_summary.js';
+import { TurnRecorder, appendSummaryToHistory, detectWebApp, formatTurnSummary } from '../src/turn_summary.js';
 import type { AgentEvent } from '@moderado/contracts';
 
 let workspace: string;
@@ -58,7 +58,8 @@ describe('turn recorder', () => {
     expect(recorder.hasWork()).toBe(true);
   });
 
-  it('counts a saved document as work and lists its absolute path', () => {
+  it('counts a saved document as work without calling it a workspace change', () => {
+    writePackage('.', { scripts: { dev: 'vite' }, devDependencies: { vite: '^5' } });
     const recorder = new TurnRecorder(workspace);
     const saved = path.join(workspace, 'Documents', 'brief.md');
 
@@ -67,9 +68,14 @@ describe('turn recorder', () => {
 
     expect(recorder.hasWork()).toBe(true);
     const summary = recorder.build('completed', 2);
-    expect(summary.created).toEqual([saved]);
+    // A deliverable outside the jail is not a code change. Listed with the
+    // workspace files it made the report offer to run the web app, and a saved
+    // `notes.py` made it demand a test command for code nobody edited.
+    expect(summary.saved).toEqual([saved]);
+    expect(summary.created).toEqual([]);
+    expect(summary.webApp).toBeUndefined();
     expect(summary.leftover).toEqual([]);
-    expect(formatTurnSummary(summary, 'chat')).toContain(`- Added \`${saved}\``);
+    expect(formatTurnSummary(summary, 'chat')).toContain(`- Saved \`${saved}\` to Documents`);
   });
 
   it('reports denied actions, failures, and unverified edits as leftover work', () => {
@@ -105,6 +111,27 @@ describe('turn recorder', () => {
       url: 'http://localhost:5173/',
       live: true,
     });
+  });
+});
+
+describe('turn summary persistence', () => {
+  it('adds the report to the saved exchange so a transcript keeps what was shown', () => {
+    const history = [
+      { role: 'user' as const, content: 'Build it' },
+      { role: 'assistant' as const, content: 'Done.' },
+    ];
+
+    // The report is painted under the answer, so the saved turn has to carry it
+    // too; an export used to stop where the prose ended.
+    expect(appendSummaryToHistory(history, 'Done.', '```summary\n# COMPLETED!\n```')).toEqual([
+      { role: 'user', content: 'Build it' },
+      { role: 'assistant', content: 'Done.\n\n```summary\n# COMPLETED!\n```' },
+    ]);
+  });
+
+  it('leaves the history alone when that answer was never stored', () => {
+    const history = [{ role: 'user' as const, content: 'Build it' }];
+    expect(appendSummaryToHistory(history, 'Done.', 'report')).toBe(history);
   });
 });
 
@@ -152,6 +179,7 @@ describe('turn summary formatting', () => {
     steps: 3,
     created: ['src/new.ts'],
     modified: ['src/app.ts'],
+    saved: [],
     commands: [{ command: 'npm test', ok: true, exitCode: 0 }],
     checks: [{ name: 'npm test', ok: true }],
     leftover: ['Review the diff before committing.'],
@@ -189,5 +217,17 @@ describe('turn summary formatting', () => {
   it('says nothing is outstanding when the turn was clean', () => {
     const rendered = formatTurnSummary({ ...summary, leftover: [] }, 'chat');
     expect(rendered).toContain('- Nothing outstanding.');
+  });
+
+  it.each([
+    ['completed', '# COMPLETED!'],
+    ['step_limit_reached', '# NOT FINISHED'],
+    ['cancelled', '# STOPPED'],
+    ['failed', '# FAILED'],
+  ] as const)('heads a %s turn with the status it actually ended in', (status, title) => {
+    // The heading used to be a constant, so a stopped or failed turn still read
+    // COMPLETED! at the top of the one block the user trusts.
+    const rendered = formatTurnSummary({ ...summary, status }, 'chat');
+    expect(rendered.split('\n')[1]).toBe(title);
   });
 });

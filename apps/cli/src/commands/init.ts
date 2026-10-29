@@ -153,7 +153,10 @@ export async function initWorkspace(
       requestId: `init_agents_${Date.now()}`,
       toolName: 'write_file',
       actionSummary: `Scaffold AGENTS.md for ${scan.name}`,
-      exactPayload: { targetFile: targetPath, contentPreview: content },
+      exactPayload: {
+        targetFile: targetPath,
+        diffPreview: content.split('\n').map((line) => `+${line}`).join('\n'),
+      },
       timestamp: Date.now(),
     };
 

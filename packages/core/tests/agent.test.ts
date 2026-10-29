@@ -6,8 +6,9 @@ import { AgentLoop, cleanConversationalFiller, DEFAULT_MAX_OUTPUT_TOKENS } from 
 import { PolicyManager } from '../src/policy.js';
 import { Router } from '../src/router.js';
 import { FakeProviderAdapter } from '@moderado/providers';
-import { createDefaultToolRegistry } from '@moderado/tools';
-import { AgentEvent, HostEventEnvelope, IApprovalHandler, ModelUnavailableError } from '@moderado/contracts';
+import { createDefaultToolRegistry, createSaveToDocumentsTool } from '@moderado/tools';
+import { AgentEvent, ApprovalRequest, HostEventEnvelope, IApprovalHandler, ModelUnavailableError } from '@moderado/contracts';
+import { z } from 'zod';
 
 describe('AgentLoop (Core Execution Engine)', () => {
   let tempDir: string;
@@ -349,6 +350,78 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(approvalRequested).toBe(true);
     expect(result.status).toBe('completed');
     expect(fs.readFileSync(path.join(tempDir, 'output.txt'), 'utf8')).toBe('new output');
+  });
+
+  it('asks approval with the Documents destination the tool will write', async () => {
+    const documents = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-approval-documents-'));
+    // The default registry points at the real home folder; a test must not.
+    tools.register(createSaveToDocumentsTool(documents));
+    provider.queueToolCallResponse('save_to_documents', { name: 'notes.md', content: '# Notes' });
+    provider.queueTextResponse('Saved the note.');
+
+    let request: ApprovalRequest | undefined;
+    const result = await loop.run('Save a note', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: {
+        async requestApproval(req) {
+          request = req;
+          return { requestId: req.requestId, status: 'approved' };
+        },
+      },
+      eventListener: (e) => events.push(e),
+    });
+
+    // `save_to_documents` has no `path` argument, so a payload built from
+    // `path` alone left the person approving a blind write outside the jail.
+    expect(request?.exactPayload.targetFile).toBe('notes.md');
+    expect(request?.exactPayload.diffPreview).toContain(path.join(fs.realpathSync(documents), 'notes.md'));
+    expect(request?.exactPayload.diffPreview).toContain('+# Notes');
+    expect(result.status).toBe('completed');
+
+    fs.rmSync(documents, { recursive: true, force: true });
+  });
+
+  it('stops a tool call that goes silent past the stall budget', async () => {
+    // A fetch that never answers is the failure the operator reported: the turn
+    // sat with no output until the terminal was closed.
+    tools.register({
+      name: 'web_search',
+      description: 'A search that never answers.',
+      requiresApproval: false,
+      parametersSchema: z.object({ query: z.string() }),
+      async execute(_params, context) {
+        await new Promise<void>((resolve, reject) => {
+          const hang = setTimeout(resolve, 60_000);
+          context.abortSignal?.addEventListener('abort', () => {
+            clearTimeout(hang);
+            reject(new Error('aborted'));
+          });
+        });
+        return { toolName: 'web_search', status: 'success', output: 'never reached' };
+      },
+    });
+    provider.queueToolCallResponse('web_search', { query: 'weather in Berlin' });
+    provider.queueTextResponse('The search could not be completed.');
+
+    const result = await loop.run('Weather in Berlin?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      eventListener: (e) => events.push(e),
+      toolStallMs: 25,
+    });
+
+    const toolResult = events.find((event) => event.type === 'tool_result');
+    expect(toolResult?.type).toBe('tool_result');
+    if (toolResult?.type !== 'tool_result') return;
+    expect(toolResult.result.status).toBe('error');
+    expect(toolResult.result.output).toContain('no response');
+    expect(toolResult.result.metadata?.stalled).toBe(true);
+    // The turn survives: the model gets the stall as evidence and answers.
+    expect(result.status).toBe('completed');
   });
 
   it('handles interactive approval denial gracefully', async () => {
@@ -701,6 +774,26 @@ describe('AgentLoop (Core Execution Engine)', () => {
     expect(systemMessage?.content).toContain('Answer in 1 to 2 short sentences or under 35 words');
     expect(systemMessage?.content).toContain('Keep thinking concise by default');
     expect(systemMessage?.content).toContain('unless the user asks for more detail');
+  });
+
+  it('switches the tone directive when the session asks for expanded answers', async () => {
+    provider.queueTextResponse('A thorough response.');
+
+    await loop.run('Why does this fail?', {
+      workspaceRoot: tempDir,
+      provider,
+      tools,
+      approvalHandler: autoApproveHandler,
+      answerDetail: 'expanded',
+    });
+
+    const systemMessage = provider.recordedCalls[0].messages.find((m) => m.role === 'system');
+    expect(systemMessage?.content).toContain('ANSWER IN DETAIL');
+    expect(systemMessage?.content).not.toContain('EXTREME BREVITY');
+    // Detail is about depth, not manners: the filler ban is not the thing being
+    // traded away, so it must survive the switch.
+    expect(systemMessage?.content).toContain('Zero conversational filler');
+    expect(systemMessage?.content).toContain('You are Moderado');
   });
 
   it('bounds output tokens via maxTokens (Layer 3) with default or custom cap', async () => {

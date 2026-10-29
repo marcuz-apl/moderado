@@ -2,8 +2,9 @@ import path from 'node:path';
 import fs from 'node:fs';
 import readline from 'node:readline';
 import { AgentLoop, PolicyManager, Router, cleanConversationalFiller, DEFAULT_MAX_OUTPUT_TOKENS } from '@moderado/core';
+import type { AnswerDetail } from '@moderado/core';
 import { NvidiaAdapter } from '@moderado/providers';
-import { createDefaultToolRegistry, ToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, WorkspaceCheckpointStore, WriteFileTool } from '@moderado/tools';
+import { createDefaultToolRegistry, ToolRegistry, canonicalizeRoot, createMcpTools, createWebSearchTool, discoverMcpServers, WorkspaceCheckpointStore, WriteFileTool, OUT_OF_WORKSPACE_TOOLS } from '@moderado/tools';
 import type { WebSearchToolOptions } from '@moderado/tools';
 import { ApprovalDecision, ApprovalRequest, ChatMessage, IApprovalHandler, IToolRegistry, McpServerConfig, McpServerConfigSchema, ToolResult, type UsageEvent } from '@moderado/contracts';
 import { CliParsedArgs } from '../args.js';
@@ -20,7 +21,7 @@ import { exitCleanly, renderChatTranscriptWindow, renderChatTranscriptHeader, re
 import type { ActivityEntry, ChatActivityBlock, ChatHistoryTurn } from '../ui/welcome.js';
 import type { WelcomeLayoutOptions } from '../ui/welcome.js';
 import { promptInteractiveTurn } from '../ui/composer.js';
-import { TurnRecorder, formatTurnSummary } from '../turn_summary.js';
+import { TurnRecorder, appendSummaryToHistory, formatTurnSummary } from '../turn_summary.js';
 import { writeDiagnosticLog } from '../diagnostic_log.js';
 import { writeTranscript } from '../transcript.js';
 import { accumulateSessionUsage, compactSessionMessages, createSession, exportSessionMarkdown, formatSessionCost, SessionStore, StoredSession } from '../sessions.js';
@@ -30,6 +31,7 @@ import { findModelPricing, isFreeModelOption } from '../model_pricing.js';
 import { inspectGitWorkspace, readGitDiff } from '@moderado/tools';
 import { buildWorkspaceMap } from '../repo_map.js';
 import { evaluateTokenBudget, parseBudgetCommand } from '../budget.js';
+import { parseDetailCommand } from '../answer_detail.js';
 import { discoverSkills, formatSkillContext, formatSkillsList, getEnabledSkillNames, selectEnabledSkills, setSkillEnabled, UserSkill } from '../skills.js';
 import { getHelpCommandLines } from '../ui/help_content.js';
 import { forceExit } from '../http_shutdown.js';
@@ -39,7 +41,7 @@ import { forceExit } from '../http_shutdown.js';
 // import surface for callers and tests.
 import { findSlashCommandAdvice } from './chat_slash.js';
 import { resolveLocalMetaQuery } from './chat_meta.js';
-import { buildSearchAnswerTask, formatDirectWebSearchAnswer, replaceEvidenceTurn, resolveWebSearchOptions, shouldFastRouteWebSearch } from './chat_search.js';
+import { buildSearchAnswerTask, formatDirectWebSearchAnswer, replaceEvidenceTurn, resolveWebSearchOptions, runPreTurnWebSearch, shouldFastRouteWebSearch } from './chat_search.js';
 import { isBareExitCommand, isGenerationCancelKey, resolveSessionSharePath, resolveTurnAssistantAnswer, saveFailedTurnPrompt, turnFailedAuthentication } from './chat_outcome.js';
 
 export * from './chat_slash.js';
@@ -291,9 +293,11 @@ export async function decideApproval(
   // Auto-approve is an explicit, session-wide opt-in and it covers every local
   // tool — `run_command` included. It used to exempt commands that reach the
   // network, which is why `npx …` and `curl …` still raised a prompt while the
-  // status bar said "Auto-approve enabled". MCP tools stay gated: they are
-  // third-party code the user never reviewed.
-  if (options.autoApprove && !request.toolName.startsWith('mcp.')) {
+  // status bar said "Auto-approve enabled". Two things stay gated: MCP tools,
+  // because they are third-party code the user never reviewed, and the tool
+  // that writes outside the workspace, because auto-approve is a bet about the
+  // jail and that write is outside it.
+  if (options.autoApprove && !request.toolName.startsWith('mcp.') && !OUT_OF_WORKSPACE_TOOLS.has(request.toolName)) {
     return { requestId: request.requestId, status: 'approved' };
   }
   return options.requestInteractiveApproval(request, signal);
@@ -598,6 +602,7 @@ export async function handleChatSession(args: CliParsedArgs, version: string, si
 
   let activeMode: 'Plan' | 'Execute' = args.readOnly ? 'Plan' : 'Execute';
   let activeAutoApprove = !args.nonInteractive;
+  let activeAnswerDetail: AnswerDetail = config.answerDetail ?? 'concise';
   let tokenBudget: number | undefined;
   const sessionStore = new SessionStore();
   let activeSession: StoredSession = sessionStore.loadLatestSession(canonicalWorkspace) ??
@@ -698,6 +703,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
     workspace: canonicalWorkspace,
     mode: activeMode,
     autoApprove: activeAutoApprove,
+    answerDetail: activeAnswerDetail,
     chatQuestion: lastQuestion,
     chatAnswer: lastAnswer,
     chatHistory: getPriorChatTurns(conversationHistory, lastQuestion, lastAnswer),
@@ -737,7 +743,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
       const turn = await promptInteractiveTurn({
         getProviderName: () => getProviderStatusName(activeConnection),
         model: currentModel ?? 'No model connected — use /connect', tokens: Math.round(sessionTokens), cost: costLabel(), workspace: canonicalWorkspace, version,
-        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatHistory: getPriorChatTurns(conversationHistory, lastQuestion, lastAnswer), chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
+        usageAvailable: activeSession.usage.available, usageEstimated: activeSession.usage.estimated, initialMode: activeMode, initialAutoApprove: activeAutoApprove, answerDetail: activeAnswerDetail, isFirstTurn: isFirst, signal, chatQuestion: lastQuestion || undefined, chatAnswer: lastAnswer || undefined, chatHistory: getPriorChatTurns(conversationHistory, lastQuestion, lastAnswer), chatThoughtTime: lastThoughtTime, chatTaskDone: lastTurnDone, outputTokenRate: lastOutputTokenRate, tokenUsage: lastTokenUsage,
         queuedCommands: commandQueue.items,
         takeAutoContinuePrompt: () => {
           if (!autoContinueRequested) return undefined;
@@ -1046,6 +1052,16 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
       paintStaticChatFrame();
       continue;
     }
+    if (trimmed === '/detail' || trimmed.startsWith('/detail ')) {
+      const detail = parseDetailCommand(trimmed, activeAnswerDetail);
+      activeAnswerDetail = detail.detail;
+      lastQuestion = trimmed;
+      lastAnswer = detail.message;
+      lastThoughtTime = 0.001;
+      lastOutputTokenRate = undefined; lastTokenUsage = undefined;
+      paintStaticChatFrame();
+      continue;
+    }
     if (trimmed === '/map') {
       lastQuestion = trimmed;
       lastAnswer = await buildWorkspaceMap(canonicalWorkspace);
@@ -1183,7 +1199,6 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
     let liveSearch: ToolResult | undefined;
     const liveSearchTool = tools.get('web_search');
     if (shouldFastRouteWebSearch(trimmed) && liveSearchTool) {
-      const searchStartedAt = Date.now();
       if (!provider && activeSession.usage.totalTokens === 0) {
         activeSession.usage.costKnown = true;
         activeSession.usage.costUsd = 0;
@@ -1194,16 +1209,26 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
       lastOutputTokenRate = undefined; lastTokenUsage = undefined;
       paintStaticChatFrame({ model: currentModel ?? 'Web search' });
 
-      const searchResult = await liveSearchTool.execute(
-        { query: trimmed, maxResults: 5 },
-        { workspaceRoot: canonicalWorkspace, abortSignal: signal },
-      );
+      // The turn has not started, so no activity ticker paints this row: without
+      // these ticks the screen looks frozen for the whole search.
+      let searchFrame = 0;
+      const { result: searchResult, elapsedMs: searchElapsed } = await runPreTurnWebSearch(liveSearchTool, {
+        query: trimmed,
+        maxResults: 5,
+        workspaceRoot: canonicalWorkspace,
+        signal,
+        onProgress: (elapsedMs) => process.stdout.write(renderChatThoughtTimeUpdate(
+          elapsedMs / 1000,
+          process.stdout.columns,
+          { glyph: ACTIVITY_SPINNER_FRAMES[searchFrame++ % ACTIVITY_SPINNER_FRAMES.length], label: 'Searching the web' },
+        )),
+      });
 
       if (provider) {
         liveSearch = searchResult;
       } else {
         lastAnswer = formatDirectWebSearchAnswer(searchResult);
-        lastThoughtTime = Math.max(0.001, (Date.now() - searchStartedAt) / 1000);
+        lastThoughtTime = Math.max(0.001, searchElapsed / 1000);
         conversationHistory = [...conversationHistory, { role: 'user', content: effectivePrompt }, { role: 'assistant', content: lastAnswer }];
         activeSession.messages = conversationHistory;
         activeSession.providerId = activeConnection?.id;
@@ -1508,6 +1533,7 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
       const runAgent = () => loop.run(isReview ? createReviewTask(reviewFiles) : evidenceTask ?? createAgentTask(effectivePrompt, activeMode), {
         workspaceRoot: canonicalWorkspace, provider: provider!, tools: isReview ? createReviewToolRegistry() : tools, approvalHandler, router, policy,
         maxOutputTokens: args.maxTokens ?? config.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
+        answerDetail: activeAnswerDetail,
         skillContext: skillContext(effectivePrompt), skills,
         routeOptions: { pinnedModelId: currentModel === 'auto' ? undefined : currentModel, allowPaid: config.allowPaid ?? args.allowPaid, allowUnknown: config.allowUnknown ?? args.allowUnknown, isLocalProfile: args.profile.includes('local') },
         eventListener: (event) => {
@@ -1538,6 +1564,13 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
               const status = event.result.status;
               settled.tone = status === 'success' ? 'done' : 'failed';
               settled.glyph = status === 'success' ? '✔' : status === 'denied' ? '⊘' : '✖';
+              // A stalled call says why on its own line: the row would otherwise
+              // show a bare cross and the turn would look like it gave up.
+              if (event.result.metadata?.stalled) {
+                const reason = (event.result.output.split('\n')[0] ?? '').slice(0, 120);
+                activityHistory.push({ glyph: '⏱', label: reason, tone: 'failed' });
+                if (activityHistory.length > 20) activityHistory.splice(0, activityHistory.length - 20);
+              }
             }
             if (!thinkingTimer) startActivity();
             // `startActivity` clears the label; a result means the agent is about
@@ -1762,9 +1795,17 @@ When the user explicitly asks for a bar or line graph, output it as a fenced cha
       // event stream rather than from model prose. It is appended after the
       // plan is captured so a plan never contains its own summary.
       if (recorder.hasWork()) {
-        lastAnswer = [lastAnswer, formatTurnSummary(recorder.build(result.status, result.totalSteps), 'chat')]
-          .filter((part) => part && part.trim().length > 0)
-          .join('\n\n');
+        const answer = lastAnswer;
+        const report = formatTurnSummary(recorder.build(result.status, result.totalSteps), 'chat');
+        lastAnswer = [answer, report].filter((part) => part && part.trim().length > 0).join('\n\n');
+        // Persist it with the exchange: what the person read is what a transcript
+        // export and a resumed session must show.
+        const savedTurn = appendSummaryToHistory(conversationHistory, answer, report);
+        if (savedTurn !== conversationHistory) {
+          conversationHistory = savedTurn;
+          activeSession.messages = conversationHistory;
+          sessionStore.save(activeSession);
+        }
       }
       lastTurnDone = result.status === 'completed' && !budgetStopped && !resolution.isError;
       lastQuestion = trimmed;

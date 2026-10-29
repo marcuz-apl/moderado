@@ -6,7 +6,7 @@
  * Split out of `chat.ts`, which had grown to carry command routing, turn
  * execution, usage accounting and rendering at once.
  */
-import type { ChatMessage, ToolResult } from '@moderado/contracts';
+import type { ChatMessage, IToolDefinition, ToolResult, WebSearchParams } from '@moderado/contracts';
 import type { WebSearchProviderName, WebSearchToolOptions } from '@moderado/tools';
 import type { ModeradoConfig } from '../config.js';
 
@@ -47,6 +47,82 @@ export function formatDirectWebSearchAnswer(result: ToolResult, modelConnected =
   const excerpt = lines.slice(0, 10).join('\n');
   return `${excerpt}\n\n${modelConnected ? 'Live web search excerpt.' : 'Live web search excerpt. Connect a model for a summary.'}`;
 }
+
+/** Longest the pre-turn search lane waits on a provider that has gone quiet. */
+export const PRE_TURN_SEARCH_STALL_MS = 120_000;
+/** How often the status row is refreshed while the search is still outstanding. */
+const SEARCH_PROGRESS_TICK_MS = 200;
+
+export interface PreTurnSearchOptions {
+  query: string;
+  maxResults?: number;
+  workspaceRoot: string;
+  /** Cancels the turn; the lane adds its own stall deadline on top of it. */
+  signal?: AbortSignal;
+  stallMs?: number;
+  /** Called on every tick with how long the search has been outstanding. */
+  onProgress?: (elapsedMs: number) => void;
+}
+
+export interface PreTurnSearchOutcome {
+  result: ToolResult;
+  stalled: boolean;
+  elapsedMs: number;
+}
+
+/**
+ * Run the current-information search the turn is built on, visibly and bounded.
+ *
+ * This lane answers before the model is involved, so the turn clock and the
+ * activity row are not running yet: without a ticker of its own the screen just
+ * said "Searching the web..." and stopped moving. The deadline matches the
+ * agent loop's tool stall budget, because a provider that has not answered in
+ * two minutes is not going to.
+ */
+export async function runPreTurnWebSearch(
+  tool: Pick<IToolDefinition<WebSearchParams>, 'execute'>,
+  options: PreTurnSearchOptions,
+): Promise<PreTurnSearchOutcome> {
+  const stallMs = options.stallMs ?? PRE_TURN_SEARCH_STALL_MS;
+  const startedAt = Date.now();
+  const guard = new AbortController();
+  let stalled = false;
+  const stallTimer = setTimeout(() => {
+    stalled = true;
+    guard.abort();
+  }, stallMs);
+  const ticker = options.onProgress
+    ? setInterval(() => options.onProgress?.(Date.now() - startedAt), SEARCH_PROGRESS_TICK_MS)
+    : undefined;
+  const abortSignal = options.signal ? AbortSignal.any([options.signal, guard.signal]) : guard.signal;
+  try {
+    const result = await tool.execute(
+      { query: options.query, maxResults: options.maxResults ?? 5 },
+      { workspaceRoot: options.workspaceRoot, abortSignal },
+    );
+    const elapsedMs = Date.now() - startedAt;
+    if (stalled) return { result: stallResult(elapsedMs), stalled: true, elapsedMs };
+    return { result, stalled: false, elapsedMs };
+  } catch (error) {
+    const elapsedMs = Date.now() - startedAt;
+    if (!stalled) throw error;
+    return { result: stallResult(elapsedMs), stalled: true, elapsedMs };
+  } finally {
+    clearTimeout(stallTimer);
+    if (ticker) clearInterval(ticker);
+  }
+}
+
+function stallResult(elapsedMs: number): ToolResult {
+  const seconds = Math.max(1, Math.round(elapsedMs / 1000));
+  return {
+    toolName: 'web_search',
+    status: 'error',
+    output: `no response after ${seconds}s — the search was stopped.`,
+    metadata: { stalled: true },
+  };
+}
+
 /** Environment configuration overrides the persistent search provider preference. */
 export function resolveWebSearchProvider(config: ModeradoConfig): WebSearchProviderName | undefined {
   const value = (process.env.MODERADO_WEB_SEARCH_PROVIDER?.trim() || config.webSearchProvider)?.toLowerCase();

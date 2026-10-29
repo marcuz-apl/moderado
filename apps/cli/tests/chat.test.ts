@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -21,12 +21,12 @@ import {
   isLocalIdentityQuery,
   isLocalModelQuery,
   isLocalProviderQuery,
-  isNetworkCommand,
   replaceEvidenceTurn,
   resolveLocalMetaQuery,
   resolveSessionSharePath,
   resolveWebSearchEndpoint,
   resolveWebSearchProvider,
+  runPreTurnWebSearch,
   shouldFastRouteWebSearch,
   TurnCommandQueue,
   findSlashCommandAdvice,
@@ -103,9 +103,13 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-chat-test-'));
     origKey = process.env.NVIDIA_API_KEY;
     process.env.NVIDIA_API_KEY = 'nvapi-test-dummy';
+    // Sessions, config, and Gateway probes all root in the home folder. A chat
+    // test that reads the developer's real ~/.moderado is not a test.
+    vi.spyOn(os, 'homedir').mockReturnValue(fs.mkdtempSync(path.join(os.tmpdir(), 'moderado-chat-home-')));
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     if (origKey !== undefined) {
       process.env.NVIDIA_API_KEY = origKey;
     } else {
@@ -363,11 +367,6 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(resolution).toEqual({ answer: 'Partial answer\n\nTask stopped.', isError: true });
   });
 
-  it('detects network commands', () => {
-    expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['curl', 'https://example.com'] } } as any)).toBe(true);
-    expect(isNetworkCommand({ toolName: 'run_command', exactPayload: { command: ['git', 'status'] } } as any)).toBe(false);
-  });
-
   it('fast-routes current-information questions but leaves ordinary questions to the model', () => {
     expect(shouldFastRouteWebSearch("What's the weather today?")).toBe(true);
     expect(shouldFastRouteWebSearch('What is the temperature in Berlin right now?')).toBe(true);
@@ -379,6 +378,43 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(shouldFastRouteWebSearch('please write a weather webapp using React.JS and Tailwind CSS')).toBe(false);
     expect(shouldFastRouteWebSearch('create a weather widget component in react')).toBe(false);
     expect(shouldFastRouteWebSearch('build a stock portfolio tracker app')).toBe(false);
+  });
+
+  it('ticks a progress clock while a fast-route web search is outstanding', async () => {
+    const ticks: number[] = [];
+    const outcome = await runPreTurnWebSearch({
+      async execute(_params, _context) {
+        await new Promise((resolve) => setTimeout(resolve, 450));
+        return { toolName: 'web_search', status: 'success', output: 'Clear sky.' };
+      },
+    }, { query: 'weather in Berlin', workspaceRoot: 'ws', onProgress: (elapsedMs) => ticks.push(elapsedMs) });
+    expect(ticks.length).toBeGreaterThanOrEqual(2);
+    expect(ticks[1]).toBeGreaterThan(ticks[0]);
+    expect(outcome.stalled).toBe(false);
+    expect(outcome.result.status).toBe('success');
+    expect(outcome.elapsedMs).toBeGreaterThanOrEqual(400);
+  });
+
+  it('stops a fast-route web search that never answers', async () => {
+    let aborted = false;
+    const outcome = await runPreTurnWebSearch({
+      async execute(_params, context) {
+        await new Promise<void>((resolve) => {
+          const timer = setTimeout(resolve, 5_000);
+          context.abortSignal?.addEventListener('abort', () => {
+            aborted = true;
+            clearTimeout(timer);
+            resolve();
+          });
+        });
+        return { toolName: 'web_search', status: 'success', output: 'far too late' };
+      },
+    }, { query: 'weather in Berlin', workspaceRoot: 'ws', stallMs: 25 });
+    expect(aborted).toBe(true);
+    expect(outcome.stalled).toBe(true);
+    expect(outcome.result.status).toBe('error');
+    expect(outcome.result.output).toContain('no response');
+    expect(formatDirectWebSearchAnswer(outcome.result)).toContain('Web search failed');
   });
 
   it('prefers an explicit web-search endpoint environment setting', () => {
@@ -473,6 +509,22 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
 
     expect(prompted).toBe(false);
     expect(decision).toEqual({ requestId: 'network-approval', status: 'approved' });
+  });
+
+  it('still prompts for a write that leaves the workspace when auto-approve is on', async () => {
+    // Auto-approve is a bet on the jail: every tool it covers writes inside the
+    // workspace. Documents is the one destination outside it, so it keeps asking.
+    let prompted = false;
+    const decision = await decideApproval(
+      { requestId: 'documents-approval', toolName: 'save_to_documents', exactPayload: { targetFile: 'notes.md' } } as ApprovalRequest,
+      {
+        autoApprove: true,
+        requestInteractiveApproval: async () => { prompted = true; return { requestId: 'documents-approval', status: 'approved' }; },
+      }
+    );
+
+    expect(prompted).toBe(true);
+    expect(decision).toEqual({ requestId: 'documents-approval', status: 'approved' });
   });
 
   it('still prompts for a network command when auto-approve is off', async () => {
@@ -839,6 +891,11 @@ describe('Chat Terminal REPL Session (OpenCode / Cline Experience)', () => {
     expect(findSlashCommandAdvice('/queue')).toEqual({ isSlashCommand: true, isValid: true });
     expect(findSlashCommandAdvice('/queue list')).toEqual({ isSlashCommand: true, isValid: true });
     expect(findSlashCommandAdvice('/queue add do something')).toEqual({ isSlashCommand: true, isValid: true });
+  });
+
+  it('recognizes /detail as a valid standard slash command', () => {
+    expect(findSlashCommandAdvice('/detail')).toEqual({ isSlashCommand: true, isValid: true });
+    expect(findSlashCommandAdvice('/detail expanded')).toEqual({ isSlashCommand: true, isValid: true });
   });
 
   it('accepts only /skills as the skills slash command', () => {

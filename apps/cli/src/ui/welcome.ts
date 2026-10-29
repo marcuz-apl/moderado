@@ -17,6 +17,8 @@ export interface WelcomeLayoutOptions {
   workspace: string;
   mode: 'Plan' | 'Execute';
   autoApprove: boolean;
+  /** Answer tone; the footer only labels it when it is not the concise default. */
+  answerDetail?: 'concise' | 'expanded';
   input?: string;
   inputCaret?: number;
   width?: number;
@@ -532,11 +534,12 @@ export function renderWelcomeCard(options: WelcomeLayoutOptions): string {
   const providerSpace = Math.max(1, modelSpace - 6);
   const shortProvider = provider.length > providerSpace ? provider.slice(0, providerSpace - 1) + '…' : provider;
   const prefix = shortProvider ? `${shortProvider} | ` : '';
-  const availableModelSpace = modelSpace - prefix.length;
+  const detailSuffix = options.answerDetail === 'expanded' ? ' · detailed' : '';
+  const availableModelSpace = Math.max(0, modelSpace - prefix.length - detailSuffix.length);
   const shortModel = options.model.length > availableModelSpace
     ? availableModelSpace > 3 ? '...' + options.model.slice(-(availableModelSpace - 3)) : options.model.slice(-availableModelSpace)
     : options.model;
-  const modelText = prefix + shortModel;
+  const modelText = prefix + shortModel + detailSuffix;
   const workspaceSpace = Math.max(3, width - approvalLabelRaw.length - modelText.length - 2);
   const shortWs =
     options.workspace.length > workspaceSpace
@@ -603,6 +606,7 @@ export interface SlashCommand {
 
 export const SLASH_COMMANDS: SlashCommand[] = [
   { name: '/connect', desc: 'Choose a Gateway, hosted, or local provider' },
+  { name: '/detail', desc: 'Toggle concise or expanded answers' },
   { name: '/model', desc: 'Switch active AI model' },
   { name: '/init', desc: 'Scaffold AGENTS.md from workspace scan' },
   { name: '/btw', desc: 'Ask an ephemeral side question (no session pollution)' },

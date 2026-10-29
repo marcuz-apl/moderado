@@ -383,6 +383,13 @@ describe('CLI Configuration Storage', () => {
     expect(loadConfig(tempDir).webSearchProvider).toBe('parallel');
   });
 
+  it('loads the answer detail default and ignores an unknown tone', () => {
+    saveConfig({ answerDetail: 'expanded' }, tempDir);
+    expect(loadConfig(tempDir).answerDetail).toBe('expanded');
+    fs.writeFileSync(getConfigPath(tempDir), JSON.stringify({ answerDetail: 'verbose' }));
+    expect(loadConfig(tempDir).answerDetail).toBeUndefined();
+  });
+
 
 
   it('migrates legacy plaintext credentials only after every secure write succeeds', async () => {

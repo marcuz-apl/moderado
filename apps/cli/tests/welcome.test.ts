@@ -341,6 +341,22 @@ describe('OpenCode-style Welcome TUI', () => {
     });
   });
 
+  it('shows the expanded answer tone only when it differs from the concise default', () => {
+    const concise = stripAnsi(renderWelcomeCard({
+      model: 'model-tag', tokens: 0, cost: '$0', workspace: '.',
+      mode: 'Execute', autoApprove: true, width: 80, chatQuestion: 'Task',
+    }).split('\n')[4]);
+    expect(concise).not.toContain('detailed');
+
+    const expanded = stripAnsi(renderWelcomeCard({
+      model: 'model-tag', tokens: 0, cost: '$0', workspace: '.',
+      mode: 'Execute', autoApprove: true, width: 80, chatQuestion: 'Task',
+      answerDetail: 'expanded',
+    }).split('\n')[4]);
+    expect(expanded).toContain('detailed');
+    expect(expanded.length).toBeLessThanOrEqual(79);
+  });
+
   it('offers /review in slash suggestions', () => {
     expect(getMatchingCommands('/rev').map(command => command.name)).toContain('/review');
   });
@@ -351,6 +367,10 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('offers /budget in slash suggestions', () => {
     expect(getMatchingCommands('/budget').map(command => command.name)).toContain('/budget');
+  });
+
+  it('offers /detail in slash suggestions', () => {
+    expect(getMatchingCommands('/detail').map(command => command.name)).toContain('/detail');
   });
 
   it('renders the full welcome screen correctly', () => {
@@ -1447,7 +1467,7 @@ describe('OpenCode-style Welcome TUI', () => {
 
   it('selects and completes slash command candidates by index', () => {
     expect(selectCommandCandidate('/se', 0, 0)?.name).toBe('/session');
-    expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/model');
+    expect(selectCommandCandidate('/', 0, 1)?.name).toBe('/detail');
     expect(selectCommandCandidate('/', 0, -1)?.name).toBe('/exit');
   });
 

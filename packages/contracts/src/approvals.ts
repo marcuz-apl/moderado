@@ -6,7 +6,6 @@ export type ApprovalStatus = z.infer<typeof ApprovalStatusSchema>;
 export const ApprovalPayloadSchema = z.object({
   targetFile: z.string().optional(),
   diffPreview: z.string().optional(),
-  contentPreview: z.string().optional(),
   command: z.array(z.string()).optional(),
   cwd: z.string().optional(),
 });

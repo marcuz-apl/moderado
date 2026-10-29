@@ -89,6 +89,8 @@ export interface PromptInteractiveTurnOptions {
   version?: string;
   initialMode?: 'Plan' | 'Execute';
   initialAutoApprove?: boolean;
+  /** Current answer tone, shown in the footer when it is not the concise default. */
+  answerDetail?: 'concise' | 'expanded';
   isFirstTurn?: boolean;
   signal?: AbortSignal;
   /** Previous turn's question/answer — when question is set, render the full chat window (no logo). */
@@ -253,6 +255,7 @@ export async function promptInteractiveTurn(
     workspace: options.workspace,
     mode: currentMode,
     autoApprove: currentAutoApprove,
+    answerDetail: options.answerDetail,
     input,
     inputCaret: caret,
     commandSelection,

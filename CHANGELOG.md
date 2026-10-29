@@ -1,5 +1,21 @@
 # Changelog
 
+### [v0.4.53] — 2026-10-29 (answers you can widen; visible and bounded web search)
+
+**Feature: `/detail` switches the answer tone, and a slow search says what it is doing**
+
+- **Type**: `feat` / `core` / `cli` / `patch-level`
+- **Scope**: `packages/core` system prompt and tool dispatch, `apps/cli` chat loop, composer footer, config
+- **Key Deliverables**:
+  - **`/detail` toggles concise and expanded answers.** Concise is still the default and is the same directive the CLI has always sent. The expanded tone asks for the reasoning, the trade-offs, the assumptions, and what was verified, and permits headers, lists, tables, and explained code. Filler and question-restating stay banned in both. The tone is a system-prompt directive rebuilt on every turn, so a toggle takes effect on the next answer in the same session.
+  - **The setting is a run option, not a token budget.** `AgentRunOptions.answerDetail` selects the directive; output caps, step bounds, and approval policy are untouched. `"answerDetail"` in `~/.moderado/config.json` sets the starting tone; the toggle itself stays per session.
+  - **The footer names the non-default tone.** An expanded session shows `· detailed` beside the model; a concise session shows nothing new, and the reserved model width absorbs the suffix so the row still fits.
+  - **A slow web search is visible.** The fast-route search lane paints `Searching the web · Ns` with the activity spinner, so an outstanding fetch no longer looks like a frozen CLI.
+  - **A silent tool is stopped, not waited for.** The agent loop gives each tool call a two-minute stall budget (`DEFAULT_TOOL_STALL_MS`, `AbortSignal.any`), and a cut-off call returns an error result marked `metadata.stalled` that tells the model to report the timeout instead of retrying silently. The chat activity row shows a `⏱` entry with the reason.
+  - **`Change server` is reachable after sign-in.** A saved Gateway key now lands on a **Moderado Connection** menu with Connect / Change server / Sign in again, instead of skipping straight to the model picker and hiding the deployment switch.
+  - **Coverage**: core tone-directive and stall-watchdog tests, CLI parse/footer/suggestion/help tests, fast-route progress-tick and timeout tests, connection-menu test with a stubbed home. No live provider, Gateway, or network calls. Full suite **75 files / 810 passed, 1 skipped**.
+  - **Docs**: `docs/GUIDE.md` gains *Answer length*; `README.md` and `docs/SECURITY.md` cover the stall budget and the visible search row.
+
 ### [v0.4.53] — 2026-10-29 (deliverables saved to Documents; padded sent-question band)
 
 **Feature: user-requested files land in Documents, and a sent question reads as its own band**

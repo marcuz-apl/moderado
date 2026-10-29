@@ -1,9 +1,9 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-29 12:50 UTC
+Updated: 2026-10-29 14:50 UTC
 Branch: master
 Commit: HEAD `8ce95f8` (pushed) `v0.4.53+2610292 release(patch): ship save_to_documents and padded question band for 0.4.53`
-Status: release commit pushed, untagged; one uncommitted Turn Summary fix
+Status: cross-validation fixes applied in the working tree, uncommitted; release still untagged
 
 ## Summary
 
@@ -56,13 +56,43 @@ summary can name it. The system prompt routes user-facing deliverables to it;
 code, tests, and config still use `write_file`.
 
 Release prep for `v0.4.53` is complete and pushed as `8ce95f8`
-(`v0.4.53+2610292`). The release is not tagged or published.
+(`v0.4.53+2610292`); the follow-up Turn Summary fix is committed as `f5ab882`.
+The release is not tagged or published.
 
-A follow-up fix is uncommitted: `TurnRecorder` counted only `write_file`,
-`edit_file`, `apply_patch`, and commands, so a turn whose only action was
-`save_to_documents` reported no work and the Turn Summary was skipped. A
-successful save is now recorded by its absolute metadata path and appears under
-**Done**; `turn_summary.test.ts` covers the report.
+The cross-validation pass over the AI-authored code is implemented, not just
+recorded. In the working tree, uncommitted:
+
+- `save_to_documents` resolves Documents from the Windows registry when OneDrive
+  redirects it, rejects reserved device names on Windows, hides the real path
+  from the model after a save, and shows the destination plus the content in the
+  approval prompt. `save_to_documents` is gated like MCP tools: auto-approve
+  never covers a write that leaves the workspace.
+- The Turn Summary heading reports the real outcome (`COMPLETED!`, `NOT
+  FINISHED`, `STOPPED`, `FAILED`), saved documents are listed separately from
+  workspace edits, a saved document no longer triggers a "start the web app"
+  hint, and the summary is persisted into the session and the transcript.
+- Web search is visible and bounded: the pre-turn lane ticks the elapsed time on
+  the status row and stops at two minutes, and the agent loop aborts any tool
+  call that goes silent past `DEFAULT_TOOL_STALL_MS` (two minutes), tells the
+  user on the activity row, and lets the turn continue.
+- **Change server** is reachable again after signing in: a saved key now opens a
+  **Moderado Connection** menu (Connect to <server> / Change server / Sign in
+  again) instead of connecting silently, and a saved `gatewayEnvironment` marker
+  outranks the dev-first probe.
+- The suite is hermetic: `vitest.setup.ts` refuses any non-loopback `fetch`, so
+  a test that quietly reaches a real service fails instead of passing until that
+  service misbehaves.
+- Answers are no longer locked to one length. `/detail` toggles the session
+  between `concise` (still the default) and `expanded`, and
+  `AgentRunOptions.answerDetail` selects the tone block in the system prompt that
+  the loop already rebuilds each turn, so the next answer changes shape and
+  nothing else moves: output caps, step bounds, and approval policy are
+  untouched. `"answerDetail"` in `~/.moderado/config.json` sets the starting tone
+  and the footer shows `· detailed` only while expanded.
+- Documentation that contradicted the code was corrected (README, `docs/GUIDE.md`,
+  `docs/SECURITY.md`, `docs/DISTRIBUTION.md`) and the dead `isNetworkCommand`
+  predicate was deleted. `0.4.52`/`0.4.53` are now described as unpublished and
+  the install examples point at `v0.4.51`, the only published tag.
 
 ## Completed
 
@@ -158,31 +188,54 @@ successful save is now recorded by its absolute metadata path and appears under
 
 ## In progress
 
-- The Turn Summary fix is uncommitted. Commit/push, tag, and publish wait for
+- Nothing is being written. The cross-validation fixes are complete and verified
+  in the working tree; commit, push, tag, publish and deploy all wait for
   explicit owner instruction.
 
 ## Working tree
 
-- `moderado`: uncommitted `apps/cli/src/turn_summary.ts`,
-  `apps/cli/tests/turn_summary.test.ts`, `CHANGELOG.md`, `docs/GUIDE.md`, and
-  this handoff. Everything from the release commit is pushed.
+- `moderado`: 29 modified files plus the new `vitest.setup.ts` and
+  `apps/cli/src/answer_detail.ts` (with `apps/cli/tests/answer_detail.test.ts`) —
+  the Documents tool (`packages/tools/src/tools/save_to_documents.ts`), the
+  approval gate and prompt
+  (`packages/core/src/agent.ts`, `apps/cli/src/commands/chat.ts`,
+  `apps/cli/src/commands/init.ts`), the answer-tone directive and
+  `AgentRunOptions.answerDetail` (`packages/core/src/agent.ts`), the
+  `/detail` command, footer tag, and slash suggestions
+  (`apps/cli/src/commands/chat.ts`, `chat_slash.ts`, `ui/welcome.ts`,
+  `ui/composer.ts`, `ui/help_content.ts`, `src/config.ts`), the turn summary
+  (`apps/cli/src/turn_summary.ts`), the tool-stall watchdog
+  (`packages/core/src/agent.ts`, `apps/cli/src/commands/chat_search.ts`), the
+  Gateway server menu (`apps/cli/src/ui/provider_connect.ts`), the dead
+  `isNetworkCommand` removal (`apps/cli/src/commands/chat_meta.ts`), the
+  contracts key cleanup (`packages/contracts/src/approvals.ts`), the offline
+  guard (`vitest.config.ts`, `vitest.setup.ts`), tests, and docs
+  (`README.md`, `CHANGELOG.md`, `docs/GUIDE.md`, `docs/SECURITY.md`,
+  `docs/DISTRIBUTION.md`,
+  this handoff). `VERSION` is `v0.4.53+2610293` at `f5ab882`.
 - `moderado-gateway`: clean at `27565dd` (pushed to `master`).
 
 ## Checks
 
-- `npm run build` — PASS
-- `npm test` — PASS (74 files, 767 passed, 1 skipped)
+- `npm run build` — PASS (exit 0)
+- `npm test` — PASS (75 files, 810 passed, 1 skipped)
 - `npm run typecheck` — PASS
-- `npm run verify:package` — PASS; `apps/cli/moderado-0.4.53.tgz` verified, tag
-  candidate `v0.4.53` matches the package version.
+- Earlier in the session: `npm run verify:package` — PASS;
+  `apps/cli/moderado-0.4.53.tgz` verified, tag candidate `v0.4.53` matches the
+  package version. Re-run before tagging.
 - Real-path check: `save_to_documents` wrote and removed
   `C:\Users\MZou\Documents\moderado-save-check.txt`.
+- Not verified in a real terminal this session: the live "Searching the web ·
+  12s" row, the two-minute stall message, the new **Moderado Connection**
+  menu, and the `/detail` toggle (the `· detailed` footer tag and a visibly
+  longer answer). These are covered by unit tests only; the TUI was not driven
+  manually.
 - `moderado-gateway` `npm test` — 226 pass, 1 skip, 1 fail; the failure is the
   pre-existing "clearing low-TPS benchmark results" test (`9 !== 8`), reproduced
   at HEAD and unrelated to these changes. New test: keyless pinned-default
   inference returns 200 while a non-default free route still returns 401.
-- No live provider or Gateway calls are made by either suite; Gateway probes in
-  tests use local mock servers and stubbed `fetch`.
+- No live provider or Gateway calls are made by either suite; `vitest.setup.ts`
+  now refuses any non-loopback `fetch`, so an accidental live call fails loudly.
 - Live check: the dev Gateway (`127.0.0.1:4788`) was stopped during
   verification, so the resolver correctly fell back to production; prod's
   catalog currently returns no `section: 'default'` entries (not deployed yet).
@@ -226,7 +279,35 @@ successful save is now recorded by its absolute metadata path and appears under
 - Documents is the only destination outside the workspace, and only through
   `save_to_documents`. The tool reuses `resolveInJailFromRoot`, so it inherits
   traversal, symlink, and protected-name rejection; the allowlist must not widen.
-  It requires approval, and auto-approve covers it like every other local tool.
+  Auto-approve does **not** cover it: `OUT_OF_WORKSPACE_TOOLS` is the one
+  exception to the session toggle, next to MCP tools, because a write that leaves
+  the jail is a decision the operator makes each time. The prompt names the
+  canonical Documents path and shows the content, and the tool result reports the
+  path as `Documents/<name>` so the real home directory never enters model
+  context. On Windows the folder is read from the registry first, because OneDrive
+  redirection makes `homedir()/Documents` the wrong guess.
+- A tool call that stops answering is ended, not waited on. The loop budget is
+  `DEFAULT_TOOL_STALL_MS` (two minutes, injectable as `toolStallMs`) and the
+  pre-turn search lane uses the same deadline; both report the stall to the user
+  instead of leaving a silent screen. The budget lives in `packages/core` because
+  it bounds the engine, and the CLI passes nothing — the default is the policy.
+- The `gatewayEnvironment` marker outranks the dev-first probe. A saved
+  Production choice that got re-probed onto a local Development Gateway was
+  silently changing servers; only an unmarked profile may be probed.
+- A saved key no longer connects with zero keystrokes. It opens the **Moderado
+  Connection** menu, because the alternative was a `Change server` row that
+  became unreachable exactly when the user needed it. One Enter still connects.
+- Answer length is a prompt directive, not a budget. `buildSystemPrompt` carries
+  two tone blocks and `answerDetail` picks one; `maxOutputTokens`, step bounds and
+  approval policy are unchanged, because cutting tokens mid-answer produces
+  truncation rather than a shorter, well-formed reply. Concise stays the default
+  so existing behavior and every current test premise hold.
+- Banned filler is not part of the trade. The greeting, sign-off, and
+  restating-the-question bans live in a block shared by both tones, so expanding
+  an answer buys substance, not padding.
+- `/detail` does not write config. The toggle is session state like Plan/Execute
+  and auto-approve; `~/.moderado/config.json` `answerDetail` is the way to change
+  the default permanently.
 - The tool carries the file content directly instead of copying a workspace file,
   so the model writes once and never needs a workspace staging copy.
 - The Turn Summary treats a saved document as work: `TurnRecorder` stores the
@@ -240,15 +321,19 @@ successful save is now recorded by its absolute metadata path and appears under
 
 ## Next action
 
-1. On owner instruction: commit and push the Turn Summary fix (subject
-   `fix(cli): ...`, same SemVer), then tag `v0.4.53` and push the tag so the
-   read-only artifact workflow runs. Publication stays a manual `publish.yml`
-   dispatch with `confirm=PUBLISH`.
-2. Smoke-test in a live terminal: ask for a short note to download and confirm
-   it lands in `C:\Users\MZou\Documents`, the path is named, and the Turn
-   Summary appears with the file under **Done**; confirm the `#1a3838`
-   three-row question band and composer pinning; test `/connect` -> Moderado ->
-   **Change server**.
+1. On owner instruction: commit the working tree as the `v0.4.53` fix batch, then
+   tag `v0.4.53` and push the tag so the read-only artifact workflow runs.
+   Publication stays a manual `publish.yml` dispatch with `confirm=PUBLISH`.
+2. Smoke-test in a live terminal, because unit tests cannot see the TUI: ask a
+   current-information question and watch the `Searching the web · Ns` row tick;
+   stop the search backend (or point `MODERADO_WEB_SEARCH_ENDPOINT` at a black
+   hole) and confirm the two-minute stop is reported; `/connect` -> **Moderado**
+   with a saved key and confirm **Connect to Production / Change server / Sign in
+   again**, then move to Development; type `/detail` and confirm the footer gains
+   `· detailed`, the next answer explains itself instead of answering in one line,
+   and `/detail` alone returns to concise; ask for a downloadable note and confirm the
+   prompt names the Documents path, the save lands in `C:\Users\MZou\Documents`,
+   and the Turn Summary lists it under **Done**.
 3. Deploy Gateway `27565dd` to production and set `MODERADO_DEFAULT_MODEL` (or
    `operator_state.default_model`) to two published stealth routes.
 

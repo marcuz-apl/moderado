@@ -8,6 +8,7 @@
 
 export const STANDARD_SLASH_COMMANDS = [
   '/connect',
+  '/detail',
   '/model',
   '/init',
   '/btw',

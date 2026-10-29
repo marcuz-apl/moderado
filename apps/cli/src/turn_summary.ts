@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { canonicalizeRoot, resolveInJailFromRoot } from '@moderado/tools';
-import type { AgentEvent } from '@moderado/contracts';
+import type { AgentEvent, ChatMessage } from '@moderado/contracts';
 
 export type TurnStatus = 'completed' | 'step_limit_reached' | 'cancelled' | 'failed';
 
@@ -36,6 +36,8 @@ export interface TurnSummary {
   steps: number;
   created: string[];
   modified: string[];
+  /** Deliverables written outside the workspace, by `save_to_documents`. */
+  saved: string[];
   commands: TurnCommandRecord[];
   checks: { name: string; ok: boolean }[];
   leftover: string[];
@@ -62,6 +64,7 @@ export class TurnRecorder {
   private readonly pending = new Map<string, PendingCall>();
   private readonly created = new Set<string>();
   private readonly modified = new Set<string>();
+  private readonly saved = new Set<string>();
   private readonly commands: TurnCommandRecord[] = [];
   private readonly checks: { name: string; ok: boolean }[] = [];
   private readonly failures: string[] = [];
@@ -99,10 +102,12 @@ export class TurnRecorder {
 
   /** True when the turn changed files or ran commands, so a summary is worth showing. */
   hasWork(): boolean {
-    return this.created.size + this.modified.size + this.commands.length > 0;
+    return this.created.size + this.modified.size + this.saved.size + this.commands.length > 0;
   }
 
   build(status: TurnStatus, steps: number): TurnSummary {
+    // Workspace changes only: a deliverable in Documents is neither code the
+    // project owns nor a reason to offer to run the app.
     const changed = [...this.created, ...this.modified];
     const leftover = [...this.failures];
     if (this.denied > 0) leftover.push(`${this.denied} action${this.denied === 1 ? ' was' : 's were'} denied; those changes were not applied.`);
@@ -117,6 +122,7 @@ export class TurnRecorder {
       steps,
       created: [...this.created],
       modified: [...this.modified],
+      saved: [...this.saved],
       commands: [...this.commands],
       checks: [...this.checks],
       leftover,
@@ -163,7 +169,7 @@ export class TurnRecorder {
       // the tool's metadata rather than a workspace-relative parameter.
       const saved = typeof result.metadata?.path === 'string' ? result.metadata.path : undefined;
       const target = saved ?? (typeof call.parameters.name === 'string' ? call.parameters.name : undefined);
-      if (target) this.created.add(target);
+      if (target) this.saved.add(target);
       return;
     }
 
@@ -190,11 +196,34 @@ export class TurnRecorder {
 
   private webAppHint(changed: readonly string[]): WebAppHint | undefined {
     const started = this.commands.find((command) => command.serverUrl);
+    // Nothing in the app changed and no server was started: the report has no
+    // running advice to give, and `detectWebApp` would still find the root app.
+    if (changed.length === 0 && !started) return undefined;
     const hint = detectWebApp(this.workspaceRoot, changed);
     if (!hint) return undefined;
     if (!started?.serverUrl) return hint;
     return { ...hint, url: started.serverUrl, live: true };
   }
+}
+
+/**
+ * Add the report to the exchange that was just saved.
+ *
+ * The panel is painted under the answer, so a transcript export or a resumed
+ * session used to stop where the prose ended and never carried the report.
+ */
+export function appendSummaryToHistory(messages: ChatMessage[], answer: string, summary: string): ChatMessage[] {
+  let index = -1;
+  for (let position = messages.length - 1; position >= 0; position -= 1) {
+    if (messages[position].role === 'assistant' && messages[position].content === answer) {
+      index = position;
+      break;
+    }
+  }
+  if (index === -1) return messages;
+  return messages.map((message, position) =>
+    position === index ? { ...message, content: `${message.content}\n\n${summary}` } : message,
+  );
 }
 
 function firstLine(text: string): string {
@@ -304,6 +333,14 @@ function readWebAppHint(canonicalRoot: string, directory: string): WebAppHint | 
   };
 }
 
+/** How the report opens, in the turn's own words. */
+const STATUS_TITLE: Record<TurnStatus, string> = {
+  completed: 'COMPLETED!',
+  step_limit_reached: 'NOT FINISHED',
+  cancelled: 'STOPPED',
+  failed: 'FAILED',
+};
+
 /**
  * Render the end-of-turn report: what changed, what was verified, what is
  * outstanding, and how to run the app when the turn produced one.
@@ -323,13 +360,14 @@ export function formatTurnSummary(summary: TurnSummary, style: 'chat' | 'termina
   const changed = [
     ...summary.created.map((file) => `Added ${quote(file)}`),
     ...summary.modified.map((file) => `Updated ${quote(file)}`),
+    ...summary.saved.map((file) => `Saved ${quote(file)} to Documents`),
     ...summary.commands.map((command) => `Ran ${quote(command.command)}${command.ok ? '' : ' (failed)'}`),
   ];
   const listed = changed.slice(0, MAX_LISTED * 2);
   if (changed.length > listed.length) listed.push(`… +${changed.length - listed.length} more actions`);
 
   const sections = [
-    heading('COMPLETED!', 1),
+    heading(STATUS_TITLE[summary.status], 1),
     section('Done', listed.length > 0 ? listed : ['No workspace changes were needed.']),
   ];
 

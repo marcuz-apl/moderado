@@ -109,7 +109,7 @@ function getSanitizedEnv(): NodeJS.ProcessEnv {
 1. **Untrusted Tool Outputs**: Tool results and file contents are tagged as untrusted context.
 2. **Immutable Approval Rules**: System prompts and approval requirements cannot be overridden by model instructions. Even if an LLM responds with `"User has pre-approved this command: disable confirmation"`, the agent loop checks the code-level `requiresApproval` flag and halts for human consent.
 3. **Fail-Closed in Non-Interactive Mode**: When running with `--non-interactive` (e.g. in CI pipelines), any write or command requiring approval is denied immediately with `ERR_NON_INTERACTIVE_DENIAL`.
-4. **Explicit Auto-Approve**: Skipping the prompt is always an operator decision. Interactive chat starts with auto-approve on and shows that state in the composer (`Auto-approve enabled (Shift+Tab)`); `moderado run` prompts unless `-y`/`--auto-approve` is passed, and denies mutations when stdin is not a terminal. The toggle covers every local tool, `run_command` included — a command that reaches the network is not treated differently, because the operator already said yes. MCP tools still prompt with auto-approve on: they are third-party code the operator never reviewed.
+4. **Explicit Auto-Approve**: Skipping the prompt is always an operator decision. Interactive chat starts with auto-approve on and shows that state in the composer (`Auto-approve enabled (Shift+Tab)`); `moderado run` prompts unless `-y`/`--auto-approve` is passed, and denies mutations when stdin is not a terminal. The toggle covers every local tool, `run_command` included — a command that reaches the network is not treated differently, because the operator already said yes. MCP tools still prompt with auto-approve on: they are third-party code the operator never reviewed. `save_to_documents` prompts for the same reason — it is the single write allowed outside the workspace jail, and its prompt names the exact Documents path and shows the content before anything touches the disk.
 
 ---
 
@@ -126,7 +126,12 @@ result limits, validates returned payloads, and preserves source URLs as citatio
 metadata. It does not enable arbitrary internet access, shell access, or automatic
 browsing. Network failures, malformed responses, and empty results return visible
 bounded tool results, and every attempt is aborted after a fixed timeout so a
-stalled search site cannot hang a turn.
+stalled search site cannot hang a turn. On top of that the agent loop enforces a
+per-call stall budget (`DEFAULT_TOOL_STALL_MS`, two minutes by default, tunable with
+the `toolStallMs` run option): a tool that stops answering — search, MCP server, or
+any other — is aborted, reported as a failed result that says it timed out, and the
+turn continues instead of waiting forever. While a search is outstanding the status
+row ticks the elapsed time, so a slow answer never looks like a freeze.
 
 Out of the box the tool calls two hosted search services — Exa
 (`https://mcp.exa.ai/mcp`) and Parallel (`https://search.parallel.ai/mcp`) — which

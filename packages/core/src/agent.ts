@@ -30,6 +30,22 @@ import { ThinkTagStreamFilter } from './think_filter.js';
 
 export const DEFAULT_MAX_OUTPUT_TOKENS = 4096;
 
+/**
+ * How long one tool call may take without answering before the loop ends it.
+ *
+ * A search or an MCP call that never replies used to hold the whole turn open:
+ * no output, no way out but closing the terminal. Two minutes is long enough for
+ * a slow-but-working call and short enough that a dead one stops on its own.
+ */
+export const DEFAULT_TOOL_STALL_MS = 120_000;
+
+/** `90s`, `2m 00s` — the budget as a person would read it in an error line. */
+function formatStallDuration(ms: number): string {
+  const total = Math.max(1, Math.round(ms / 1000));
+  if (total < 60) return `${total}s`;
+  return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
+}
+
 function isModeradoProvider(providerId: string): boolean {
   return providerId === 'moderado' || providerId === 'moderado-cloud';
 }
@@ -58,6 +74,13 @@ export interface AgentRunOptions {
   /** Validated skill bodies exposed only through the read-only load_skill tool. */
   skills?: readonly { name: string; body: string }[];
   retryDelaysMs?: number[];
+  /**
+   * Longest a single tool call may run without answering before the loop cuts
+   * it off. Defaults to DEFAULT_TOOL_STALL_MS (two minutes).
+   */
+  toolStallMs?: number;
+  /** Answer tone for this run. Defaults to `concise`; the CLI `/detail` toggle switches it. */
+  answerDetail?: AnswerDetail;
 }
 
 export interface AgentRunResult {
@@ -69,16 +92,29 @@ export interface AgentRunResult {
   usage?: ChatUsage;
 }
 
-export const DEFAULT_SYSTEM_PROMPT = `CRITICAL DIRECTIVE — EXTREME BREVITY (DEFAULT MODE):
+/** How much one answer holds. `concise` is the default; `/detail` switches it. */
+export type AnswerDetail = 'concise' | 'expanded';
+
+const CONCISE_TONE = `CRITICAL DIRECTIVE — EXTREME BREVITY (DEFAULT MODE):
 - Answer in 1 to 2 short sentences or under 35 words by default; provide more detail when the user asks for it.
 - Keep thinking concise by default; do not elaborate unless the user asks for more detail.
-- Zero conversational filler: Never output greetings, pleasantries, preambles ("Sure", "Here is", "Certainly", "I'd be happy to"), or sign-offs ("Hope this helps", "Let me know").
-- Never restate, rephrase, or echo the user's question before answering. Start immediately with the direct answer.
 - Zero markdown headers (no ## or ###), no bullet lists unless specifically requested, no conclusion sections.
 - For code, commands, or file edits: Output ONLY the raw code or command block. Do NOT explain what it does or how it works.
-- State only direct, factual answers. Do NOT provide unsolicited background, tips, or commentary.
+- State only direct, factual answers. Do NOT provide unsolicited background, tips, or commentary.`;
 
-You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
+const EXPANDED_TONE = `CRITICAL DIRECTIVE — ANSWER IN DETAIL (EXPANDED MODE):
+- Answer completely: the result, the reasoning behind it, and the trade-offs that shaped it.
+- Use headers, bullet lists, tables, and code blocks whenever they make the answer clearer to read.
+- State the assumptions, the edge cases, and what you actually verified; name what is still unknown instead of guessing.
+- For code, give the change and then explain what it does and why this shape is right.
+- Be thorough, not padded: every sentence must carry information the question asked for.`;
+
+/** Manners are not the thing being traded: filler stays banned in both modes. */
+const ANSWER_MANNERS = `
+- Zero conversational filler: Never output greetings, pleasantries, preambles ("Sure", "Here is", "Certainly", "I'd be happy to"), or sign-offs ("Hope this helps", "Let me know").
+- Never restate, rephrase, or echo the user's question before answering. Start immediately with the direct answer.`;
+
+const SYSTEM_BODY = `You are Moderado, a lightweight, pragmatic, bloat-free AI coding agent.
 You follow the Ponytail Decision Ladder: YAGNI, standard library first, zero unnecessary dependencies, and minimal code.
 Use the provided workspace tools to inspect, read, search, modify, and test files within the workspace.
 
@@ -92,8 +128,19 @@ CORE OPERATIONAL RULES:
 - Do NOT invent tool names.
 - For anything that changes over time (weather, news, scores, prices, schedules, releases), call the web_search tool immediately with a clear query. Never fetch this with run_command, and never ask the user to look it up themselves. Answer with the facts and values only, in the fewest readable lines, without listing sources or URLs.`;
 
-export function buildSystemPrompt(modelId: string, workspaceRoot: string, skillContext?: string): string {
-  return `${DEFAULT_SYSTEM_PROMPT}
+export function answerDetailDirective(detail: AnswerDetail): string {
+  return `${detail === 'expanded' ? EXPANDED_TONE : CONCISE_TONE}${ANSWER_MANNERS}`;
+}
+
+export function buildSystemPrompt(
+  modelId: string,
+  workspaceRoot: string,
+  skillContext?: string,
+  detail: AnswerDetail = 'concise',
+): string {
+  return `${answerDetailDirective(detail)}
+
+${SYSTEM_BODY}
 
 SYSTEM RUNTIME CONTEXT:
 - Active Model: ${modelId}
@@ -270,7 +317,7 @@ export class AgentLoop {
     // 2. Initialize Conversation Context
     const systemPromptMessage: ChatMessage = {
       role: 'system',
-      content: buildSystemPrompt(currentModel.id, options.workspaceRoot, options.skillContext),
+      content: buildSystemPrompt(currentModel.id, options.workspaceRoot, options.skillContext, options.answerDetail),
     };
 
     let baseHistory = options.conversationHistory ? [...options.conversationHistory] : [];
@@ -819,7 +866,9 @@ export class AgentLoop {
             toolName: call.name,
             actionSummary: `Execute ${call.name} with ${JSON.stringify(call.arguments)}`,
             exactPayload: {
-              targetFile: (call.arguments as any).path,
+              // `path` names the target for the workspace tools; the one tool
+              // that writes outside the workspace names its file `name`.
+              targetFile: (call.arguments as any).path ?? (call.arguments as any).name,
               diffPreview,
               command: (call.arguments as any).command
                 ? [(call.arguments as any).command, ...((call.arguments as any).args ?? [])]
@@ -878,17 +927,37 @@ export class AgentLoop {
 
         // Execute tool inside workspace
         let result: ToolResult;
+        // A call that never answers must not hold the turn open forever.
+        const stallMs = options.toolStallMs ?? DEFAULT_TOOL_STALL_MS;
+        const stallGuard = new AbortController();
+        let stalled = false;
+        const stallTimer = setTimeout(() => {
+          stalled = true;
+          stallGuard.abort();
+        }, stallMs);
         try {
           result = await tool.execute(parseResult.data, {
             workspaceRoot: options.workspaceRoot,
-            abortSignal: signal,
+            abortSignal: signal ? AbortSignal.any([signal, stallGuard.signal]) : stallGuard.signal,
           });
+          // A tool that ignored the abort and answered late still counts as
+          // stalled: the loop already decided to stop waiting.
+          if (stalled) throw new Error('stalled');
         } catch (err: any) {
-          result = {
-            toolName: call.name,
-            status: 'error',
-            output: `Tool execution failed: ${err.message}`,
-          };
+          result = stalled
+            ? {
+              toolName: call.name,
+              status: 'error',
+              output: `Tool '${call.name}' was stopped: no response after ${formatStallDuration(stallMs)}. Tell the user this call timed out instead of retrying it silently.`,
+              metadata: { stalled: true, stallMs },
+            }
+            : {
+              toolName: call.name,
+              status: 'error',
+              output: `Tool execution failed: ${err.message}`,
+            };
+        } finally {
+          clearTimeout(stallTimer);
         }
 
         if (tool.requiresApproval && result.status === 'success' && options.onMutationCompleted) {

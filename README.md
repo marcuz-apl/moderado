@@ -52,7 +52,8 @@ moderado run "Analyze security boundaries" --read-only
   for every write, edit, patch, and command.
 - `moderado run` prompts for each mutation unless you pass `-y`/`--auto-approve`.
   A run without a terminal denies the request instead of waiting on stdin.
-- Network commands and MCP tools always prompt, even when auto-approve is on.
+- MCP tools and `save_to_documents` always prompt, even when auto-approve is on:
+  one is third-party code, the other writes outside the workspace.
 - `--non-interactive` and `--read-only` deny mutating calls before any prompt.
 
 ---
@@ -63,9 +64,9 @@ moderado run "Analyze security boundaries" --read-only
 
 | Version | Status | How it works |
 |---|---|---|
-| **0.4.53** | Current release | Saves user-requested deliverables (notes, reports, exports) into your Documents folder with the new `save_to_documents` tool, and renders a sent question as a padded `#1a3838` band at the input card's height. |
-| **0.4.52** | Previous release | A fresh install runs on the Gateway's account-free default models and reports `$0.00`; `/connect` gains a **Change server** row so Production or Development is chosen once and saved instead of probed on every connect. |
-| **0.4.51** | Previous release | Scrollable chronological chat history with a workspace scrollbar, clearer turn styling, synchronized redraws, and Windows Terminal key-record input support. |
+| **0.4.53** | In preparation | Saves user-requested deliverables (notes, reports, exports) into your Documents folder with the new `save_to_documents` tool, renders a sent question as a padded `#1a3838` band at the input card's height, ticks a `Searching the web · Ns` row during a slow web search and stops a tool that goes silent for two minutes instead of waiting forever, and adds `/detail` to switch answers between concise (the default) and expanded. Not published yet — the install channels below still serve 0.4.51. |
+| **0.4.52** | Merged into 0.4.53 | A fresh install runs on the Gateway's account-free default models and reports `$0.00`; `/connect` gains a **Change server** row so Production or Development is chosen once and saved instead of probed on every connect. Never tagged; it ships with 0.4.53. |
+| **0.4.51** | Current release | Scrollable chronological chat history with a workspace scrollbar, clearer turn styling, synchronized redraws, and Windows Terminal key-record input support. |
 | **0.4.50** | Previous release | Adds `/about` slash command showing version and copyright info in a centered popup; removes version from `/help`; positions the MODERADO wordmark one row higher on first render; wires up XTMODKEYS Shift+Enter decoding so Shift+Enter reliably inserts a line feed instead of submitting. |
 | **0.4.46** | Previous release | Responsive chat workspace with a scrollable activity and answer transcript, improved local model selection, popups that adapt to terminal resizing, and colorized inline charts. Also includes safer approvals, clearer turn reports, and a more direct Moderado Gateway connection flow. |
 | **0.4.34** | Previous release | Frozen-CLI fix: Ctrl+C always has a way out — popups cancel on the first press, a stalled turn escapes on the second press, and hard exits drain undici safely so Node 24 never hits the libuv `UV_HANDLE_CLOSING` assertion. |
@@ -93,7 +94,7 @@ npm install -g moderado
 ```bash
 # One-line installer (x64): verifies SHA-256 against the .sha256 sidecar
 # and manifest.json before installing to ~/.local/bin; pin with --version vX.Y.Z
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.53
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.51
 
 ```
 
@@ -104,7 +105,7 @@ curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/
 brew tap marcuz-apl/moderado && brew install moderado
 
 # curl installer (arm64), same checksum verification as Linux
-curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.53
+curl -fsSL https://raw.githubusercontent.com/marcuz-apl/moderado/master/scripts/install.sh | bash -s -- --version v0.4.51
 
 ```
 
