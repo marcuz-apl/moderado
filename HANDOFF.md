@@ -1,12 +1,12 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-29 16:55 UTC
+Updated: 2026-10-29 17:26 UTC
 Branch: master
-Commit: prior HEAD `64379d4` (`v0.4.54+2610295`), pushed; this fix commit follows it
-Status: `v0.4.54` is tagged and pushed, but the tag's read-only artifact
-verification failed on the Linux and macOS runners. The platform-dependent
-Documents resolution is fixed in this commit, so the tag has to move here before
-`publish.yml` can run.
+Commit: prior HEAD `3ebdf48` (`v0.4.54+2610296`), pushed and tagged
+Status: `v0.4.54` is PUBLISHED — npm `latest` is `0.4.54` with OIDC provenance,
+and the GitHub Release `v0.4.54` carries the three binaries, checksums,
+`manifest.json` (`v0.4.54+2610296`), and the Scoop/Homebrew/winget/AUR manifests.
+This commit only moves the docs from "release candidate" to "published".
 
 ## Summary
 
@@ -248,6 +248,19 @@ recorded:
   the CI message `expected 'C:\Users\marcuz/Documents' to be
   'D:\OneDrive\Documents'` while the fixed module returned the redirected
   folder; the scratch files are deleted.
+- Tag verification on `v0.4.54` -> `3ebdf48`: run `40896104020` GREEN —
+  `verify-package`, `binary-package` (windows, ubuntu, macos), `binary-metadata`,
+  `distribution-manifests` all pass. The first attempt's macOS job never
+  started ("job was not acquired by Runner of type hosted", a capacity
+  failure); `gh run rerun --failed` cleared it.
+- Publication: `publish.yml` run `40899975763` GREEN, `+ moderado@0.4.54` with
+  provenance (sigstore log index 3570184265), GitHub Release published
+  2026-10-29T15:18:16Z.
+- Registry: `npm view moderado version` = `0.4.54`. The tarball 404'd for about
+  six minutes after publish (npm CDN propagation) while `dist-tags` already
+  pointed at it.
+- Install smoke: `npm install -g --prefix <temp>` of `moderado@0.4.54` from the
+  registry, then `moderado --version` -> `v0.4.54` and `moderado --help` renders.
 - Real-path check: `save_to_documents` wrote and removed
   `C:\Users\MZou\Documents\moderado-save-check.txt`.
 - Not verified in a real terminal this session: the live "Searching the web ·
@@ -346,12 +359,12 @@ recorded:
 
 ## Next action
 
-1. Move the `v0.4.54` tag to the platform-fix commit (`git tag -f` plus a forced
-   tag push, or delete and re-push), let the read-only artifact workflow go
-   green on all three platforms, then dispatch `publish.yml` with
-   `confirm=PUBLISH` and `tag=v0.4.54`. The tag already pushed points at
-   `64379d4`, which still contains the failing test; no GitHub Release or npm
-   version exists for it yet.
+1. `v0.4.54` is published; nothing in the release procedure is outstanding.
+   The community channels still point at the previous release: copying
+   `distribution/homebrew/moderado.rb` into `marcuz-apl/homebrew-moderado` and
+   `distribution/scoop/moderado.json` into `marcuz-apl/scoop-moderado` means
+   pushing to two other repositories, so it waits for explicit owner
+   instruction. Verify each binary against its `.sha256` sidecar first.
 2. Smoke-test in a live terminal, because unit tests cannot see the TUI: ask a
    current-information question and watch the `Searching the web · Ns` row tick;
    stop the search backend (or point `MODERADO_WEB_SEARCH_ENDPOINT` at a black

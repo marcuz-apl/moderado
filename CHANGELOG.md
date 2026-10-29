@@ -15,6 +15,8 @@
   - **`Change server` is reachable after sign-in.** A saved Gateway key now lands on a **Moderado Connection** menu with Connect / Change server / Sign in again, instead of skipping straight to the model picker and hiding the deployment switch.
   - **Coverage**: core tone-directive and stall-watchdog tests, CLI parse/footer/suggestion/help tests, fast-route progress-tick and timeout tests, connection-menu test with a stubbed home. No live provider, Gateway, or network calls. Full suite **75 files / 810 passed, 1 skipped**.
   - **Docs**: `docs/GUIDE.md` gains *Answer length*; `README.md` and `docs/SECURITY.md` cover the stall budget and the visible search row.
+  - **Documents folder, resolved per platform.** `documentsDirectory()` used the host's `path`, so on a Linux or macOS runner `path.isAbsolute` rejected the Windows registry value and the OneDrive-redirected folder was replaced by a posix-joined fallback. It now selects `path.win32` / `path.posix` from the declared platform; caught by the `v0.4.54` tag verification, fixed in `3ebdf48`, and the tag was re-pointed before publication.
+  - **Published**: npm `moderado@0.4.54` with OIDC provenance and the GitHub Release `v0.4.54` (three binaries, checksums, `manifest.json` at `v0.4.54+2610296`, Scoop/Homebrew/winget/AUR manifests), verified by a fresh registry install reporting `v0.4.54`.
 
 ### [v0.4.53] — 2026-10-29 (deliverables saved to Documents; padded sent-question band)
 

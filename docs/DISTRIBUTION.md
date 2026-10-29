@@ -1,20 +1,20 @@
 # Community Distribution Runbook (everything except Chocolatey)
 
-The published release is `moderado@0.4.51`; `0.4.54` is the release candidate
-prepared here and is not on npm or GitHub Releases yet. Its unified `/connect` flow
+The published release is `moderado@0.4.54`, published on 2026-10-29 together with
+the GitHub Release `v0.4.54`. Its unified `/connect` flow
 supports the Gateway and direct provider connections; `/login` is no longer
 offered. The `0.3.10` release is self-contained and does not require the
 Gateway. This release installs the `moderado` command with `modr` as a short
 alias. Install the current version with
 `npm install -g moderado`; pin `moderado@0.3.10` to keep the self-contained CLI.
 
-The GitHub Release `v0.4.54` does not exist yet; when it is published it will
-include binaries, checksum sidecars, a
-`manifest.json`, and reviewable distribution manifests. The Homebrew tap
+The GitHub Release `v0.4.54` carries the binaries, checksum sidecars, a
+`manifest.json` (`v0.4.54+2610296`), and the reviewable distribution manifests.
+The Homebrew tap
 ([homebrew-moderado](https://github.com/marcuz-apl/homebrew-moderado)) and
 Scoop bucket ([scoop-moderado](https://github.com/marcuz-apl/scoop-moderado))
-still point at the published release and
-will be updated to **v0.4.54** after verifying every binary checksum against
+still point at the previous release and
+need **v0.4.54** once every binary checksum is verified against
 its `.sha256` sidecar. Windows installation is supported through npm and Scoop.
 Chocolatey is out of scope.
 

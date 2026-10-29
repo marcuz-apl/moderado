@@ -2,13 +2,13 @@
 
 Moderado adheres to **M7.3 Guarded Public Release Workflow**: all releases to npm and GitHub Releases are explicit, reviewable maintainer actions protected by multi-stage verification gates and npm OIDC trusted publishing. Storing long-lived `NPM_TOKEN` secrets in repository settings is prohibited.
 
-Release context: the latest published tag in this checkout is `v0.4.51`.
-`v0.4.52` bumped the connected version for the account-free Gateway defaults
-and **Change server** selection but was never tagged or published; this branch
-is preparing the `v0.4.54` patch candidate, which releases that work together
-with `save_to_documents`, the padded sent-question band, and the `/detail`
-answer-tone toggle with its visible, bounded web search. `v0.4.53` was reached
-by the per-commit version bump and is likewise untagged. `0.3.10` remains
+Release context: the latest published tag is `v0.4.54`, published on 2026-10-29
+to npm (`moderado@0.4.54`, OIDC provenance) and to GitHub Releases with
+binaries, checksum sidecars, and the distribution manifests. It carries the
+account-free Gateway defaults and **Change server** selection first staged as
+the never-tagged `v0.4.52`, the `save_to_documents` tool and the padded
+sent-question band from `v0.4.53`, and the `/detail` answer-tone toggle with its
+visible, bounded web search. `0.3.10` remains
 available as the earlier self-contained CLI. Windows installation uses npm and
 Scoop; the `winget` and AUR manifests are published as reviewable release
 attachments but are not submitted to those indexes.
