@@ -206,7 +206,9 @@ describe('documentsDirectory', () => {
       readPersonalFolder: () => undefined,
     });
 
-    expect(root).toBe(path.join('C:\\Users\\marcuz', 'Documents'));
+    // Asserted as a literal, not through the host's `path.join`: the folder is
+    // a Windows folder even when the test runs on a Linux or macOS runner.
+    expect(root).toBe('C:\\Users\\marcuz\\Documents');
   });
 
   it('ignores the registry on POSIX', () => {
@@ -220,7 +222,7 @@ describe('documentsDirectory', () => {
       },
     });
 
-    expect(root).toBe(path.join('/home/marcuz', 'Documents'));
+    expect(root).toBe('/home/marcuz/Documents');
     expect(called).toBe(false);
   });
 });

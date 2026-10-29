@@ -1,9 +1,12 @@
 # Moderado Project Handoff
 
-Updated: 2026-10-29 14:55 UTC
+Updated: 2026-10-29 16:55 UTC
 Branch: master
-Commit: HEAD `e62fefb` (unpushed at the time of writing) `v0.4.54+2610294 feat(cli): add /detail answer tone, bound stalled tools, show web-search progress`
-Status: cross-validation fixes committed; release still untagged
+Commit: prior HEAD `64379d4` (`v0.4.54+2610295`), pushed; this fix commit follows it
+Status: `v0.4.54` is tagged and pushed, but the tag's read-only artifact
+verification failed on the Linux and macOS runners. The platform-dependent
+Documents resolution is fixed in this commit, so the tag has to move here before
+`publish.yml` can run.
 
 ## Summary
 
@@ -193,8 +196,9 @@ recorded:
 ## In progress
 
 - Nothing is being written. The cross-validation fixes and the `/detail` batch
-  are committed as `e62fefb`; tag, publish and deploy still wait for explicit
-  owner instruction.
+  are committed as `e62fefb`. This branch now carries one more commit: the
+  `documentsDirectory` platform fix that unblocks the `v0.4.54` artifact
+  verification. Publish and deploy still wait for explicit owner instruction.
 
 ## Committed changes
 
@@ -218,7 +222,15 @@ recorded:
   guard (`vitest.config.ts`, `vitest.setup.ts`), tests, and docs
   (`README.md`, `CHANGELOG.md`, `docs/GUIDE.md`, `docs/SECURITY.md`,
   `docs/DISTRIBUTION.md`,
-  this handoff). `VERSION` is `v0.4.54+2610294` at `e62fefb`.
+  this handoff). `VERSION` is `v0.4.54+2610295` at `64379d4`.
+- The release-blocking platform bug: `documentsDirectory()` resolved the
+  declared Windows folder through the host's `path`, so on a Linux or macOS
+  runner `path.isAbsolute('D:\OneDrive\Documents')` was false and the
+  redirected folder was dropped for the posix-joined fallback. Fixed by
+  selecting `path.win32` / `path.posix` from the declared `platform`
+  (`packages/tools/src/tools/save_to_documents.ts`) and by making the two
+  tautological `path.join` assertions in
+  `packages/tools/tests/save_document.test.ts` host-independent literals.
 - `moderado-gateway`: clean at `27565dd` (pushed to `master`).
 
 ## Checks
@@ -226,9 +238,16 @@ recorded:
 - `npm run build` — PASS (exit 0)
 - `npm test` — PASS (75 files, 810 passed, 1 skipped)
 - `npm run typecheck` — PASS
-- Earlier in the session: `npm run verify:package` — PASS;
-  `apps/cli/moderado-0.4.53.tgz` verified against the then-current `v0.4.53`;
-  the candidate is now `v0.4.54`, so re-run before tagging.
+- `npm run verify:package` — PASS: `Verified moderado-0.4.54.tgz`
+- `v0.4.54` tag verification run `40893379089` — FAIL on `verify-package`,
+  `binary-package (ubuntu-latest)` and `binary-package (macos-latest)` at
+  `Run npm test`: 2 failed / 809 passed, both in `documentsDirectory`.
+  `windows-latest` passed.
+- Red/green evidence for the platform fix: a scratch suite mocked `node:path` to
+  posix (a POSIX runner on this Windows host) and the pre-fix module reproduced
+  the CI message `expected 'C:\Users\marcuz/Documents' to be
+  'D:\OneDrive\Documents'` while the fixed module returned the redirected
+  folder; the scratch files are deleted.
 - Real-path check: `save_to_documents` wrote and removed
   `C:\Users\MZou\Documents\moderado-save-check.txt`.
 - Not verified in a real terminal this session: the live "Searching the web ·
@@ -327,10 +346,12 @@ recorded:
 
 ## Next action
 
-1. On owner instruction: push `e62fefb`, then tag `v0.4.54` and push the tag so
-   the read-only artifact workflow runs; re-run `npm run verify:package` first,
-   because the tarball name and version moved from `0.4.53` to `0.4.54`.
-   Publication stays a manual `publish.yml` dispatch with `confirm=PUBLISH`.
+1. Move the `v0.4.54` tag to the platform-fix commit (`git tag -f` plus a forced
+   tag push, or delete and re-push), let the read-only artifact workflow go
+   green on all three platforms, then dispatch `publish.yml` with
+   `confirm=PUBLISH` and `tag=v0.4.54`. The tag already pushed points at
+   `64379d4`, which still contains the failing test; no GitHub Release or npm
+   version exists for it yet.
 2. Smoke-test in a live terminal, because unit tests cannot see the TUI: ask a
    current-information question and watch the `Searching the web · Ns` row tick;
    stop the search backend (or point `MODERADO_WEB_SEARCH_ENDPOINT` at a black

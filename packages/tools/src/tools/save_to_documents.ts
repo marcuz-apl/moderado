@@ -74,7 +74,12 @@ export function documentsDirectory(options: DocumentsDirectoryOptions = {}): str
   if (cachedOnly && cachedDocumentsRoot) return cachedDocumentsRoot;
 
   const platform = options.platform ?? process.platform;
-  const fallback = path.join((options.homedir ?? os.homedir)(), 'Documents');
+  // The declared platform owns the separator and absoluteness rules. Reading
+  // the folder through the host's `path` made a Windows result fail
+  // `isAbsolute` on a Linux or macOS runner, so the redirected folder was
+  // silently discarded exactly where nobody could see it.
+  const platformPath = platform === 'win32' ? path.win32 : path.posix;
+  const fallback = platformPath.join((options.homedir ?? os.homedir)(), 'Documents');
   let root = fallback;
 
   if (platform === 'win32') {
@@ -83,7 +88,7 @@ export function documentsDirectory(options: DocumentsDirectoryOptions = {}): str
       const expanded = expandEnvironmentVars(personal, options.env ?? process.env);
       // A redirected folder is the destination even before it exists locally:
       // Explorer shows it, and the save creates it on the way through.
-      if (path.isAbsolute(expanded) && !expanded.includes('%')) root = expanded;
+      if (platformPath.isAbsolute(expanded) && !expanded.includes('%')) root = expanded;
     }
   }
 

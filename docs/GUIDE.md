@@ -105,7 +105,8 @@ Install `typescript-language-server` yourself, then set `typescriptLanguageServe
 
 When you ask for a file to keep, open, download, or share (a note, report, or
 export), Moderado saves it with the `save_to_documents` tool into your Documents
-folder (`%USERPROFILE%\Documents` on Windows, `~/Documents` elsewhere) and
+folder — on Windows the folder Explorer shows, so a OneDrive-redirected
+Documents is honored; `~/Documents` elsewhere — and
 reports the absolute path. This is the only write Moderado performs outside the
 workspace, it still requires approval, and it rejects absolute paths, `..`, and
 symlinks that resolve outside Documents. Code, tests, and configuration continue
